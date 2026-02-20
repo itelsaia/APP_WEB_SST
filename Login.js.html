@@ -1,0 +1,91 @@
+<script>
+    /**
+     * LOGIN.JS.HTML
+     * Maneja la interacción del formulario de inicio de sesión.
+     */
+
+    function togglePassword() {
+        const passInput = document.getElementById('password');
+        const eyeIcon = document.getElementById('eye-icon');
+        if (passInput.type === 'password') {
+            passInput.type = 'text';
+            eyeIcon.textContent = 'visibility';
+        } else {
+            passInput.type = 'password';
+            eyeIcon.textContent = 'visibility_off';
+        }
+    }
+
+    document.getElementById('login-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        const btn = document.getElementById('btn-login');
+        const spinner = document.getElementById('login-spinner');
+        const btnText = document.getElementById('btn-text');
+
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        // Bloquear UI
+        btn.disabled = true;
+        spinner.classList.remove('hidden');
+        btnText.textContent = "VERIFICANDO...";
+
+        google.script.run
+            .withSuccessHandler(function (response) {
+                if (response.status === "success") {
+                    // Guardar sesión completa en localStorage para persistencia
+                    const userData = {
+                        email: response.data.email,
+                        nombre: response.data.nombre,
+                        rol: response.data.rol,
+                        idCliente: response.data.idCliente
+                    };
+                    localStorage.setItem('userSST', JSON.stringify(userData));
+
+                    // Efecto de salida y redirección
+                    document.getElementById('login-container').classList.add('scale-95', 'opacity-0', 'transition-all', 'duration-500');
+                    setTimeout(() => {
+                        // Usar la URL real del deployment (SCRIPT_URL), NO window.location.href
+                        // window.location.href devuelve la URL del iframe (googleusercontent.com)
+                        // que NO pasa parámetros a doGet()
+                        const baseUrl = (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL)
+                            ? SCRIPT_URL
+                            : window.location.href.split('?')[0];
+
+                        const role = response.data.rol || 'USER';
+                        const email = encodeURIComponent(response.data.email || '');
+                        const destination = baseUrl + '?page=app&role=' + role + '&email=' + email;
+
+                        console.log('[SST-Login] Redirigiendo a:', destination);
+
+                        // Usar anchor con target="_top" para navegar fuera del iframe de GAS
+                        // Esta es la forma oficialmente soportada por Google Apps Script
+                        var link = document.createElement('a');
+                        link.href = destination;
+                        link.target = '_top';
+                        link.style.display = 'none';
+                        document.body.appendChild(link);
+                        link.click();
+                    }, 500);
+                } else {
+                    alert("❌ " + response.message);
+                    resetButton();
+                }
+            })
+            .withFailureHandler(function (err) {
+                alert("❌ Error crítico: " + err.toString());
+                resetButton();
+            })
+            .validarCredenciales(email, password);
+    });
+
+    function resetButton() {
+        const btn = document.getElementById('btn-login');
+        const spinner = document.getElementById('login-spinner');
+        const btnText = document.getElementById('btn-text');
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+        btnText.textContent = "Iniciar Sesión";
+    }
+</script>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html class="dark" lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Login | SaaS SST</title>
+    <style>
+        :root {
+            --color-primario: <?=config.COLOR_PRIMARIO || '#1E3A8A' ?>;
+            --color-acento: <?=config.COLOR_ACENTO || '#F59E0B' ?>;
+        }
+    </style>
+    <?!= include('Styles'); ?>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "<?= config.COLOR_PRIMARIO || '#C5A048' ?>",
+                        "primary-hover": "<?= config.COLOR_PRIMARIO || '#b08d3e' ?>",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            min-height: max(884px, 100dvh);
+            overflow-x: hidden;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #101922;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* Efecto de cristal para el formulario */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+
+<body
+    class="bg-background-light dark:bg-background-dark font-display antialiased min-h-screen relative flex flex-col justify-center">
+    <!-- Fondos decorativos difuminados -->
+    <div
+        class="fixed top-[-20%] right-[-10%] w-[400px] h-[400px] bg-primary/10 rounded-full blur-[100px] pointer-events-none">
+    </div>
+    <div
+        class="fixed bottom-[-10%] left-[-20%] w-[300px] h-[300px] bg-yellow-600/5 rounded-full blur-[80px] pointer-events-none">
+    </div>
+
+    <div class="relative w-full max-w-md mx-auto px-6 py-12 flex flex-col z-10 transition-all duration-500 scale-100 opacity-100"
+        id="login-container">
+
+        <!-- Logo y Cabecera -->
+        <div class="flex flex-col items-center mb-10 text-center">
+            <div
+                class="w-32 h-32 rounded-2xl bg-white dark:bg-slate-800/50 flex items-center justify-center mb-6 border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden p-3 group hover:scale-105 transition-transform">
+                <? if (config.URL_LOGO) { ?>
+                <img id="login-logo" src="<?= config.URL_LOGO ?>" alt="Logo"
+                    class="max-h-full max-w-full object-contain">
+                <? } else { ?>
+                <span class="material-symbols-outlined text-[64px] text-primary">security</span>
+                <? } ?>
+            </div>
+            <h1 class="text-slate-900 dark:text-slate-100 text-3xl font-bold tracking-tight mb-2">Bienvenido de nuevo
+            </h1>
+            <p class="text-slate-500 dark:text-slate-400 text-base">Inicie sesión para acceder a <span
+                    class="text-primary font-semibold">
+                    <?= config.NOMBRE_EMPRESA || 'SECURITY WORK S&M' ?>
+                </span></p>
+        </div>
+
+        <!-- Formulario de Login -->
+        <form class="flex flex-col gap-5" id="login-form">
+            <!-- Email -->
+            <div class="flex flex-col gap-2">
+                <label class="text-slate-700 dark:text-slate-300 text-sm font-medium" for="email">Correo
+                    electrónico</label>
+                <div class="relative group">
+                    <div
+                        class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
+                        <span class="material-symbols-outlined text-[20px]">mail</span>
+                    </div>
+                    <input autocomplete="email" required
+                        class="block w-full rounded-xl border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/40 backdrop-blur-sm pl-11 pr-4 py-3.5 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
+                        id="email" placeholder="usuario@ejemplo.com" type="email" />
+                </div>
+            </div>
+
+            <!-- Password -->
+            <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-slate-700 dark:text-slate-300 text-sm font-medium"
+                        for="password">Contraseña</label>
+                    <a class="text-primary hover:text-primary-hover text-sm font-medium transition-colors"
+                        href="#">¿Olvidaste tu contraseña?</a>
+                </div>
+                <div class="relative group">
+                    <div
+                        class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
+                        <span class="material-symbols-outlined text-[20px]">lock</span>
+                    </div>
+                    <input autocomplete="current-password" required
+                        class="block w-full rounded-xl border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/40 backdrop-blur-sm pl-11 pr-12 py-3.5 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
+                        id="password" placeholder="••••••••" type="password" />
+                    <button
+                        class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                        type="button" onclick="togglePassword()">
+                        <span class="material-symbols-outlined text-[20px]" id="eye-icon">visibility_off</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Botón Login -->
+            <button
+                class="w-full bg-primary hover:opacity-90 text-white font-semibold py-4 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-primary/20 mt-2 flex justify-center items-center"
+                id="btn-login" type="submit">
+                <span id="btn-text">Iniciar Sesión</span>
+                <div id="login-spinner"
+                    class="hidden ml-3 h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent">
+                </div>
+            </button>
+        </form>
+
+        <div class="relative flex py-8 items-center">
+            <div class="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+            <span class="flex-shrink-0 mx-4 text-slate-400 dark:text-slate-500 text-xs uppercase font-medium">O
+                CONTINUAR CON</span>
+            <div class="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+            <button
+                class="flex items-center justify-center gap-3 px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
+                <div class="w-5 h-5 flex items-center justify-center bg-contain bg-no-repeat"
+                    style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC_GHrzS3_owwVSQ5jWOpfnNIHKeE-4D0EvLeDwZgzYVStR74rh2UycMNGxc8bO1ykgYDv-2paZ6E4YveeO0YqCchrK-8xHm1V6-vdkdTn-3T_3jhT06sYdv6x7_vH0IqwKaWMGszeZg7GaEH4pjOKdpvfyhP6Kgay4z9rdXiJI8Rk_GJ1sp5_NSHfa485urWgeZwS5Ge7OYQdETkJ5f9r1OgDNkHMsUwgpzHQd8424FLgpQy7YMzh4aUI-62hjjFUfNBf6om0ZCQYY');">
+                </div>
+                <span class="text-slate-700 dark:text-slate-300 font-medium text-sm">Google</span>
+            </button>
+            <button
+                class="flex items-center justify-center gap-3 px-4 py-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                <div class="w-5 h-5 flex items-center justify-center bg-contain bg-no-repeat dark:invert"
+                    style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD1XbNh984E5f5tn8xdKLa3mmgyTCSFAOPpcJT0UByzEE6K3u4nVPsjMcvH01T1wO2pOHexMNYn4moqzJZGaFGwR7lCheXU7B0eZTypMeD2G0AlPBOPo-o_VFu7TPfH2OkidmvGNfJqpRoqRqLFY3ocXmzFE3FbebciZzs2FAlDTdwunvukG4PpZczVI8dLAlIc5cWJDPcbpw-0OQG7DmQ7QGL7k5_0p8MMI2G-oyzxTlZs-UWgqiDTqg7Y3W29oBSmu9QrYMI-Im_Q');">
+                </div>
+                <span class="text-slate-700 dark:text-slate-300 font-medium text-sm">Apple</span>
+            </button>
+        </div>
+
+        <p class="text-center text-slate-500 dark:text-slate-400 text-sm mt-8">
+            ¿No tienes una cuenta?
+            <a class="text-primary font-semibold hover:underline" href="#">Regístrate</a>
+        </p>
+
+        <!-- Footer Informativo -->
+        <div class="mt-12 text-center">
+            <p class="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-widest font-bold">&copy; 2026 SaaS
+                SST - Soluciones IA</p>
+        </div>
+    </div>
+
+    <!-- URL real del deployment de GAS (inyectada por el servidor) -->
+    <script>
+        var SCRIPT_URL = '<?= scriptUrl || "" ?>';
+        console.log('[SST-Login] URL del script:', SCRIPT_URL);
+    </script>
+    <?!= include('Login.js'); ?>
+</body>
+
+</html>

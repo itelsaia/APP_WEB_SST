@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaaS SST - Control de Campo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --color-primario: #1E3A8A;
+            --color-acento: #F59E0B;
+        }
+
+        .bg-primary {
+            background-color: var(--color-primario);
+        }
+
+        .text-primary {
+            color: var(--color-primario);
+        }
+
+        .border-primary {
+            border-color: var(--color-primario);
+        }
+
+        .bg-accent {
+            background-color: var(--color-acento);
+        }
+
+        .text-accent {
+            color: var(--color-acento);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.8s ease-out forwards;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+    <!-- CONFIG INYECTADA POR EL SERVIDOR (única expresión de template) -->
+    <script>
+        var SERVER_CONFIG = {};
+        var SERVER_ROLE = '';
+        var SERVER_EMAIL = '';
+        var SERVER_URL = '';
+        try {
+            SERVER_CONFIG = <?!= configJSON || '{}' ?>;
+            SERVER_ROLE = '<?= role || "" ?>';
+            SERVER_EMAIL = '<?= email || "" ?>';
+            SERVER_URL = '<?= scriptUrl || "" ?>';
+        } catch (e) {
+            console.error('[SST] Error parseando config del servidor:', e);
+        }
+
+        // Aplicar colores dinámicos inmediatamente
+        if (SERVER_CONFIG.COLOR_PRIMARIO) {
+            document.documentElement.style.setProperty('--color-primario', SERVER_CONFIG.COLOR_PRIMARIO);
+        }
+        if (SERVER_CONFIG.COLOR_ACENTO) {
+            document.documentElement.style.setProperty('--color-acento', SERVER_CONFIG.COLOR_ACENTO);
+        }
+
+        console.log('[SST] Página cargada. Rol:', SERVER_ROLE, 'Email:', SERVER_EMAIL);
+    </script>
+
+    <!-- Capa de Carga Inicial -->
+    <div id="initial-loader" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center"
+        style="transition: opacity 0.5s ease;">
+        <div class="animate-spin rounded-full h-16 w-16 mb-4"
+            style="border: 4px solid #e5e7eb; border-top-color: var(--color-primario);"></div>
+        <p class="text-gray-600 font-medium">Verificando sesión segura...</p>
+    </div>
+    <script>
+        setTimeout(function () {
+            var loader = document.getElementById('initial-loader');
+            if (loader) {
+                loader.style.opacity = '0';
+                setTimeout(function () { if (loader.parentNode) loader.parentNode.removeChild(loader); }, 600);
+                console.warn('[SST] Loader eliminado por timeout de seguridad (8s)');
+            }
+        }, 8000);
+    </script>
+
+    <!-- Header -->
+    <header class="bg-white shadow-md p-4 flex justify-between items-center border-b-4 border-primary">
+        <div class="flex items-center space-x-4">
+            <span id="logo-marca-icon" class="material-symbols-outlined text-primary text-4xl">security</span>
+            <img id="logo-marca" src="" alt="Logo" class="h-12 w-auto object-contain hidden">
+            <h1 class="text-xl font-bold text-gray-800">Sistema SST <span class="text-primary">| Control de Campo</span>
+            </h1>
+        </div>
+        <div id="user-info" class="hidden md:flex items-center space-x-3 text-sm">
+            <div class="text-right border-r pr-3 border-gray-200">
+                <p id="user-name" class="font-bold text-gray-800 leading-none">Cargando...</p>
+                <p id="user-role-label" class="text-xs text-primary font-medium uppercase tracking-wider mt-1">Rol</p>
+            </div>
+            <div class="flex flex-col">
+                <span id="user-email" class="text-gray-500 italic">...</span>
+            </div>
+        </div>
+    </header>
+    <script>
+        // Aplicar logo dinámicamente
+        if (SERVER_CONFIG.URL_LOGO) {
+            var logoImg = document.getElementById('logo-marca');
+            var logoIcon = document.getElementById('logo-marca-icon');
+            if (logoImg) { logoImg.src = SERVER_CONFIG.URL_LOGO; logoImg.classList.remove('hidden'); }
+            if (logoIcon) { logoIcon.classList.add('hidden'); }
+        }
+    </script>
+
+    <!-- Banner de Bienvenida -->
+    <section id="welcome-section"
+        class="bg-gradient-to-r from-primary/10 to-transparent border-l-4 border-accent p-4 mt-4 mx-6 rounded-r-lg hidden animate-pulse">
+        <div class="flex items-center space-x-3">
+            <span id="welcome-icon" class="material-symbols-outlined text-accent text-3xl">waving_hand</span>
+            <div>
+                <h3 id="welcome-message" class="text-lg font-bold text-gray-800">Cargando bienvenida...</h3>
+                <p id="welcome-subtext" class="text-sm text-gray-600 italic">Iniciando sesión segura</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contenedor Principal -->
+    <main class="flex-grow p-6 container mx-auto">
+        <div class="text-center mb-10">
+            <h2 class="text-3xl font-extrabold text-gray-900 sm:text-4xl">
+                Gestión de Seguridad Impulsada por <span class="text-accent">IA</span>
+            </h2>
+            <p class="mt-4 text-lg text-gray-500 max-w-2xl mx-auto">
+                Reporta hallazgos en segundos. Nuestra Inteligencia Artificial analizará el riesgo y propondrá planes
+                de acción normativos instantáneamente.
+            </p>
+        </div>
+
+        <!-- Navegación de Módulos -->
+        <nav id="module-nav" class="flex justify-center space-x-4 mb-8 hidden">
+            <button id="nav-asistencia" onclick="switchModule('asistencia')"
+                class="bg-primary text-white px-4 py-2 rounded-lg font-bold shadow hover:opacity-90 transition">
+                <span class="material-symbols-outlined align-middle mr-1">person_check</span> Asistencia
+            </button>
+            <button id="nav-inspeccion" onclick="switchModule('inspeccion')"
+                class="bg-white text-gray-700 px-4 py-2 rounded-lg font-bold shadow hover:bg-gray-50 transition border border-gray-200">
+                <span class="material-symbols-outlined align-middle mr-1">fact_check</span> Inspección
+            </button>
+        </nav>
+
+        <!-- Módulo de Asistencia -->
+        <div id="asistencia-content"
+            class="max-w-xl mx-auto bg-white rounded-xl shadow-xl p-8 border border-gray-100 hidden">
+            <div class="text-center mb-6">
+                <h3 class="text-2xl font-bold text-gray-800">Control de Asistencia</h3>
+                <p class="text-gray-500 text-sm mt-1">Registre su inicio o fin de labores para control de nómina.</p>
+            </div>
+            <form id="attendance-form" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Obra / Proyecto actual</label>
+                    <select id="idObraAsistencia" required
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition">
+                        <option value="">Cargando obras...</option>
+                    </select>
+                </div>
+                <div class="bg-gray-50 p-6 rounded-xl border-2 border-dashed border-gray-300 text-center">
+                    <div id="asis-preview-container"
+                        class="hidden mb-4 rounded-lg overflow-hidden shadow-md max-w-xs mx-auto">
+                        <img id="asis-img-preview" src="" alt="Soporte" class="w-full h-auto">
+                    </div>
+                    <label for="asis-foto" class="cursor-pointer flex flex-col items-center">
+                        <span class="material-symbols-outlined text-4xl text-primary">add_a_photo</span>
+                        <span class="mt-2 text-sm font-medium text-gray-600">Capturar Soporte de Presentación</span>
+                        <input type="file" id="asis-foto" accept="image/*" capture="camera" class="hidden"
+                            onchange="previewAsistencia(this)">
+                    </label>
+                </div>
+                <button type="submit" id="btn-asistencia"
+                    class="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl hover:bg-blue-800 transition-all flex justify-center items-center">
+                    <span id="asis-spinner"
+                        class="hidden animate-spin mr-3 border-2 border-white border-t-transparent rounded-full w-5 h-5"></span>
+                    <span id="asis-btn-text">REGISTRAR INGRESO</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Contenido Principal (Inspección / Admin / Error) -->
+        <div id="main-content" class="max-w-4xl mx-auto bg-white rounded-xl shadow-xl p-8 border border-gray-100">
+            <!-- Se carga dinámicamente vía JS según el rol -->
+            <div id="content-placeholder" class="text-center py-10 text-gray-400">
+                <span class="material-symbols-outlined text-5xl mb-3">hourglass_top</span>
+                <p>Cargando módulo...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- CONTENIDO CONDICIONAL SEGÚN ROL (Inyectado como templates ocultos) -->
+    <template id="tpl-inspeccion">
+        <?!= include('FormInspeccion'); ?>
+    </template>
+    <template id="tpl-admin">
+        <div class="text-center py-10">
+            <span class="material-symbols-outlined text-6xl text-primary mb-4">dashboard</span>
+            <h3 class="text-2xl font-bold text-gray-800">Panel de Administración</h3>
+            <p class="text-gray-500 mt-2">Bienvenido, Administrador. Próximamente visualización de métricas y gestión de
+                usuarios.</p>
+        </div>
+    </template>
+    <template id="tpl-error">
+        <div class="text-center py-10">
+            <span class="material-symbols-outlined text-6xl text-red-400 mb-4">error</span>
+            <p class="text-red-500 text-lg font-bold">Rol no reconocido o acceso no autorizado.</p>
+            <a id="error-login-link" href="#" class="text-primary underline mt-4 inline-block">Volver al Login</a>
+        </div>
+    </template>
+
+    <script>
+        // Inyectar contenido según rol del servidor
+        (function () {
+            var mainContent = document.getElementById('main-content');
+            var placeholder = document.getElementById('content-placeholder');
+            var tplId = '';
+
+            if (SERVER_ROLE === 'SUP-SST') {
+                tplId = 'tpl-inspeccion';
+            } else if (SERVER_ROLE === 'ADMIN') {
+                tplId = 'tpl-admin';
+            } else {
+                tplId = 'tpl-error';
+            }
+
+            var tpl = document.getElementById(tplId);
+            if (tpl && mainContent) {
+                mainContent.innerHTML = tpl.innerHTML;
+                // Configurar enlace de login si es error
+                var loginLink = document.getElementById('error-login-link');
+                if (loginLink && SERVER_URL) {
+                    loginLink.href = SERVER_URL;
+                }
+            }
+            console.log('[SST] Contenido cargado para rol:', SERVER_ROLE);
+        })();
+    </script>
+
+    <!-- Lógica principal del cliente -->
+    <?!= include('App.js'); ?>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white p-4 text-center text-xs mt-10">
+        <p>&copy; 2026 ITELSA IA - SaaS SST White-Label Solutions</p>
+        <p class="mt-1 text-gray-400">Powered by Google Cloud & AI Engine</p>
+    </footer>
+
+</body>
+
+</html>

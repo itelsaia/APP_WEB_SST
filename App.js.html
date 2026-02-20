@@ -1,0 +1,501 @@
+<script>
+    /**
+     * APP.JS.HTML — v2.0
+     * Manejador central de sesión y lógica UI.
+     * CORRECCIÓN: Session ahora es híbrida: URL params + localStorage para evadir
+     * limitaciones del sandbox de Google Apps Script.
+     */
+
+    let currentUser = null;
+    let archivoBase64 = null;
+    let nombreArchivo = "";
+
+    window.addEventListener('load', function () {
+        verificarSesion();
+    });
+
+    // ================================================================
+    // GESTIÓN DE SESIÓN — LÓGICA ROBUSTA
+    // ================================================================
+
+    /**
+     * Estrategia de sesión híbrida:
+     * 1. Intenta leer la sesión de localStorage
+     * 2. Como fallback, pide al servidor los datos del usuario con el email de la URL
+     */
+    function verificarSesion() {
+        console.log("[SST] Iniciando verificación de sesión...");
+
+        // ═══════════════════════════════════════════════════════════
+        // PRIORIDAD 1: Variables inyectadas por el servidor (siempre confiables)
+        // SERVER_EMAIL y SERVER_ROLE se definen en Index.html desde Web.gs
+        // ═══════════════════════════════════════════════════════════
+        if (typeof SERVER_EMAIL !== 'undefined' && SERVER_EMAIL &&
+            typeof SERVER_ROLE !== 'undefined' && SERVER_ROLE) {
+            console.log("[SST] Datos del servidor detectados — Email:", SERVER_EMAIL, "Rol:", SERVER_ROLE);
+            recuperarSesionConEmail(decodeURIComponent(SERVER_EMAIL));
+            return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // PRIORIDAD 2: localStorage (puede no estar disponible en sandbox GAS)
+        // ═══════════════════════════════════════════════════════════
+        const storedUser = localStorage.getItem('userSST');
+        if (storedUser) {
+            try {
+                currentUser = JSON.parse(storedUser);
+                console.log("[SST] Sesión recuperada de localStorage:", currentUser.email);
+            } catch (e) {
+                localStorage.removeItem('userSST');
+                currentUser = null;
+            }
+        }
+
+        if (currentUser && currentUser.email && currentUser.rol) {
+            inicializarAppConSesion();
+            return;
+        }
+
+        console.log("[SST] Sin sesión en servidor ni localStorage, intentando URL...");
+
+        // ═══════════════════════════════════════════════════════════
+        // PRIORIDAD 3: google.script.url.getLocation (API oficial de GAS)
+        // ═══════════════════════════════════════════════════════════
+        try {
+            if (typeof google !== 'undefined' && google.script && google.script.url) {
+                google.script.url.getLocation(function (location) {
+                    console.log("[SST] getLocation response:", JSON.stringify(location));
+                    var emailParam = location.parameter ? location.parameter.email : null;
+                    var roleParam = location.parameter ? location.parameter.role : null;
+
+                    console.log("[SST] Parámetros detectados:", { email: emailParam, role: roleParam });
+
+                    if (emailParam) {
+                        recuperarSesionConEmail(decodeURIComponent(emailParam));
+                    } else if (roleParam) {
+                        recuperarSesionConServidor();
+                    } else {
+                        console.log("[SST] Sin parámetros, intentando servidor...");
+                        recuperarSesionConServidor();
+                    }
+                });
+            } else {
+                console.warn("[SST] google.script.url no disponible, usando fallback...");
+                recuperarSesionConServidor();
+            }
+        } catch (e) {
+            console.error("[SST] Error en getLocation:", e);
+            recuperarSesionConServidor();
+        }
+    }
+
+    function recuperarSesionConEmail(email) {
+        google.script.run
+            .withSuccessHandler(function (response) {
+                if (response.status === 'success') {
+                    currentUser = response.data;
+                    localStorage.setItem('userSST', JSON.stringify(currentUser));
+                    console.log("[SST] Sesión OK vía email:", currentUser.email);
+                    inicializarAppConSesion();
+                } else {
+                    console.error("[SST] Backend rechazó email:", response.message);
+                    mostrarErrorAcceso("No se pudo verificar la sesión. Por favor inicie sesión nuevamente.");
+                }
+            })
+            .withFailureHandler(function (err) {
+                console.error("[SST] Error en obtenerDatosUsuario:", err);
+                mostrarErrorAcceso("Error de conexión. Por favor inicie sesión nuevamente.");
+            })
+            .obtenerDatosUsuario(email);
+    }
+
+    function recuperarSesionConServidor() {
+        google.script.run
+            .withSuccessHandler(function (response) {
+                if (response.status === 'success') {
+                    currentUser = response.data;
+                    localStorage.setItem('userSST', JSON.stringify(currentUser));
+                    console.log("[SST] Sesión OK vía servidor:", currentUser.email);
+                    inicializarAppConSesion();
+                } else {
+                    console.warn("[SST] Sin sesión activa en servidor:", response.message);
+                    mostrarErrorAcceso("No se detectó una sesión activa. Por favor inicie sesión.");
+                }
+            })
+            .withFailureHandler(function (err) {
+                console.error("[SST] Error en obtenerUsuarioActivo:", err);
+                mostrarErrorAcceso("Error de conexión. Por favor inicie sesión nuevamente.");
+            })
+            .obtenerUsuarioActivo();
+    }
+
+    /**
+     * Orquesta la UI una vez que currentUser está disponible.
+     */
+    function inicializarAppConSesion() {
+        inyectarDatosIdentidad();
+        mostrarBienvenidaPersonalizada();
+
+        if (currentUser && currentUser.rol === 'SUP-SST') {
+            document.getElementById('module-nav').classList.remove('hidden');
+            // Mostrar asistencia primero mientras carga el estado
+            document.getElementById('asistencia-content').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('hidden');
+
+            cargarObrasAsistencia();
+            configurarAsistencia();
+            verificarEstadoAsistencia();
+            cargarOtrasOpciones();
+        }
+
+        // Ocultar carga inicial
+        ocultarLoader();
+    }
+
+    // ================================================================
+    // MÓDULO: IDENTIDAD Y BIENVENIDA
+    // ================================================================
+
+    function inyectarDatosIdentidad() {
+        if (!currentUser) return;
+        const elName = document.getElementById('user-name');
+        const elEmail = document.getElementById('user-email');
+        const elRole = document.getElementById('user-role-label');
+        const elInfo = document.getElementById('user-info');
+        if (elName) elName.textContent = currentUser.nombre || "Usuario";
+        if (elEmail) elEmail.textContent = currentUser.email || "";
+        if (elRole) elRole.textContent = currentUser.rol || "COLABORADOR";
+        if (elInfo) elInfo.classList.remove('hidden');
+    }
+
+    function mostrarBienvenidaPersonalizada() {
+        const welcomeSection = document.getElementById('welcome-section');
+        const welcomeMsg = document.getElementById('welcome-message');
+        const welcomeSub = document.getElementById('welcome-subtext');
+        const welcomeIcon = document.getElementById('welcome-icon');
+        if (!currentUser || !welcomeSection) return;
+
+        const rol = currentUser.rol;
+        const nombre = (currentUser.nombre || "Usuario").split(' ')[0];
+
+        let config = { msg: `¡Hola, ${nombre}! 👋`, sub: "Bienvenido al sistema SST.", icon: "waving_hand" };
+
+        if (rol === 'SUP-SST') {
+            config.msg = `¡Hola, ${nombre}! 👷`;
+            config.sub = "Bienvenido a tu jornada. Registra tu asistencia y reporta hallazgos para mantener la seguridad.";
+            config.icon = "safety_check";
+        } else if (rol === 'ADMIN') {
+            config.msg = `Bienvenido, Administrador ${nombre} 👔`;
+            config.sub = "El panel de control estratégico está listo.";
+            config.icon = "query_stats";
+        } else if (rol === 'CLIENTE') {
+            config.msg = `Hola, ${nombre} 🤝`;
+            config.sub = "Revise el estado de seguridad de sus proyectos.";
+            config.icon = "handshake";
+        }
+
+        if (welcomeMsg) welcomeMsg.textContent = config.msg;
+        if (welcomeSub) welcomeSub.textContent = config.sub;
+        if (welcomeIcon) welcomeIcon.textContent = config.icon;
+        welcomeSection.classList.remove('hidden', 'animate-pulse');
+        welcomeSection.classList.add('animate-fade-in');
+    }
+
+    function mostrarErrorAcceso(msj) {
+        const content = document.getElementById('main-content');
+        if (!content) return;
+        const scriptUrl = window.location.href.split('?')[0];
+        content.innerHTML = `
+            <div class="text-center py-10">
+                <span class="material-symbols-outlined text-6xl text-red-500">lock</span>
+                <h3 class="text-2xl font-bold text-gray-800 mt-4">Acceso Restringido</h3>
+                <p class="text-gray-500 mt-2">${msj}</p>
+                <a href="${scriptUrl}" class="mt-6 inline-block bg-primary text-white px-6 py-2 rounded-lg font-bold hover:opacity-90 transition">
+                    Ir al Login
+                </a>
+            </div>
+        `;
+        content.classList.remove('hidden');
+        ocultarLoader();
+    }
+
+    function ocultarLoader() {
+        const loader = document.getElementById('initial-loader');
+        if (loader) {
+            loader.classList.add('opacity-0');
+            setTimeout(() => loader.remove(), 500);
+        }
+    }
+
+    // ================================================================
+    // MÓDULO: ASISTENCIA (REGISTRO-PRESENTACIÓN)
+    // ================================================================
+
+    function switchModule(target) {
+        const asisCont = document.getElementById('asistencia-content');
+        const mainCont = document.getElementById('main-content');
+        const btnAsis = document.getElementById('nav-asistencia');
+        const btnInsp = document.getElementById('nav-inspeccion');
+
+        const claseActiva = "bg-primary text-white px-4 py-2 rounded-lg font-bold shadow hover:opacity-90 transition";
+        const claseInactiva = "bg-white text-gray-700 px-4 py-2 rounded-lg font-bold shadow hover:bg-gray-50 transition border border-gray-200";
+
+        if (target === 'asistencia') {
+            asisCont.classList.remove('hidden');
+            mainCont.classList.add('hidden');
+            if (btnAsis) btnAsis.className = claseActiva;
+            if (btnInsp) btnInsp.className = claseInactiva;
+        } else {
+            asisCont.classList.add('hidden');
+            mainCont.classList.remove('hidden');
+            if (btnInsp) btnInsp.className = claseActiva;
+            if (btnAsis) btnAsis.className = claseInactiva;
+        }
+    }
+
+    function verificarEstadoAsistencia() {
+        if (!currentUser || !currentUser.email) return;
+        google.script.run
+            .withSuccessHandler(function (response) {
+                const btnText = document.getElementById('asis-btn-text');
+                const obraSelect = document.getElementById('idObraAsistencia');
+                if (!btnText) return;
+                if (response.status === "success" && response.data && response.data.activo) {
+                    btnText.textContent = "REGISTRAR SALIDA";
+                    if (obraSelect) obraSelect.disabled = true;
+                } else {
+                    btnText.textContent = "REGISTRAR INGRESO";
+                    if (obraSelect) obraSelect.disabled = false;
+                }
+                switchModule('asistencia');
+            })
+            .withFailureHandler(function (err) {
+                console.error("Error verificando asistencia:", err);
+                switchModule('asistencia');
+            })
+            .obtenerEstadoAsistencia(currentUser.email);
+    }
+
+    function previewAsistencia(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                archivoBase64 = e.target.result;
+                const prev = document.getElementById('asis-img-preview');
+                const cont = document.getElementById('asis-preview-container');
+                if (prev) prev.src = e.target.result;
+                if (cont) cont.classList.remove('hidden');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function configurarAsistencia() {
+        const form = document.getElementById('attendance-form');
+        if (!form) return;
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const obraSelect = document.getElementById('idObraAsistencia');
+            const btnText = document.getElementById('asis-btn-text') || {};
+            const isSalida = (btnText.textContent || '').includes("SALIDA");
+
+            // ▶ Validación: Obra seleccionada
+            if (obraSelect && (obraSelect.value === '' || obraSelect.selectedIndex === 0)) {
+                alert("⚠️ Por favor seleccione la Obra / Proyecto antes de continuar.");
+                return;
+            }
+
+            // ▶ Validación: Foto requerida
+            if (!archivoBase64) {
+                alert("⚠️ Debe capturar la foto de soporte antes de registrar.");
+                return;
+            }
+
+            const btn = document.getElementById('btn-asistencia');
+            const spinner = document.getElementById('asis-spinner');
+            if (btn) btn.disabled = true;
+            if (spinner) spinner.classList.remove('hidden');
+            if (btnText) btnText.textContent = "PROCESANDO...";
+
+            const payload = {
+                userEmail: currentUser.email,
+                obra: obraSelect ? obraSelect.options[obraSelect.selectedIndex].text : "Genérica",
+                archivoBase64: archivoBase64
+            };
+
+            const serverMethod = isSalida ? "registrarSalida" : "registrarIngreso";
+
+            google.script.run
+                .withSuccessHandler(function (res) {
+                    alert("✅ " + res.message);
+                    if (btn) btn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    archivoBase64 = null;
+                    const cont = document.getElementById('asis-preview-container');
+                    if (cont) cont.classList.add('hidden');
+                    verificarEstadoAsistencia();
+                })
+                .withFailureHandler(function (err) {
+                    alert("❌ Error: " + err.toString());
+                    if (btn) btn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (btnText) btnText.textContent = isSalida ? "REGISTRAR SALIDA" : "REGISTRAR INGRESO";
+                })[serverMethod](payload);
+        });
+    }
+
+    function cargarObrasAsistencia() {
+        google.script.run
+            .withSuccessHandler(function (response) {
+                const select = document.getElementById('idObraAsistencia');
+                if (!select) return;
+                if (response.status === "success" && response.data && response.data.length > 0) {
+                    select.innerHTML = '<option value="">Seleccione la obra...</option>';
+                    response.data.forEach(clie => {
+                        const opt = document.createElement('option');
+                        opt.value = clie.id;
+                        opt.textContent = clie.nombre;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No hay obras registradas</option>';
+                }
+            })
+            .withFailureHandler(function () {
+                const select = document.getElementById('idObraAsistencia');
+                if (select) select.innerHTML = '<option value="">Error al cargar obras</option>';
+            })
+            .obtenerClientesRegistrados();
+    }
+
+    function cargarOtrasOpciones() {
+        google.script.run.withSuccessHandler(llenarSelectores).obtenerOpcionesFormulario();
+        google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
+        configurarFormulario();
+    }
+
+    // ================================================================
+    // MÓDULO: INSPECCIÓN
+    // ================================================================
+
+    function cargarOpciones() {
+        google.script.run.withSuccessHandler(llenarSelectores).obtenerOpcionesFormulario();
+    }
+
+    function cargarClientes() {
+        google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
+    }
+
+    function llenarClientes(response) {
+        const select = document.getElementById('idCliente');
+        if (!select) return;
+        if (response.status === "success") {
+            select.innerHTML = '<option value="">Seleccione la empresa...</option>';
+            response.data.forEach(clie => {
+                const opt = document.createElement('option');
+                opt.value = clie.id;
+                opt.textContent = clie.nombre;
+                select.appendChild(opt);
+            });
+        } else {
+            select.innerHTML = '<option value="">Error al cargar clientes</option>';
+        }
+    }
+
+    function llenarSelectores(response) {
+        if (response.status === "success") {
+            const opts = response.data;
+            const selectTipo = document.getElementById('tipoActividad');
+            if (selectTipo) {
+                selectTipo.innerHTML = '<option value="">Seleccione una actividad...</option>';
+                opts.TIPO_ACTIVIDAD.forEach(item => {
+                    const op = document.createElement('option'); op.value = item; op.textContent = item;
+                    selectTipo.appendChild(op);
+                });
+            }
+            const selectPrio = document.getElementById('prioridadInicial');
+            if (selectPrio) {
+                selectPrio.innerHTML = '<option value="">Seleccione prioridad...</option>';
+                opts.PRIORIDAD.forEach(item => {
+                    const op = document.createElement('option'); op.value = item; op.textContent = item;
+                    selectPrio.appendChild(op);
+                });
+            }
+        }
+    }
+
+    function previewImagen(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            nombreArchivo = input.files[0].name;
+            reader.onload = function (e) {
+                archivoBase64 = e.target.result;
+                const previewCont = document.getElementById('preview-container');
+                const imgP = document.getElementById('img-preview');
+                if (imgP) imgP.src = e.target.result;
+                if (previewCont) previewCont.classList.remove('hidden');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function configurarFormulario() {
+        const form = document.getElementById('sst-form');
+        if (!form) return;
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-enviar');
+            const spinner = document.getElementById('spinner');
+            const btnText = document.getElementById('btn-text');
+            if (btn) btn.disabled = true;
+            if (spinner) spinner.classList.remove('hidden');
+            if (btnText) btnText.textContent = "PROCESANDO REPORTE...";
+
+            const selectCliente = document.getElementById('idCliente');
+            const formData = {
+                idCliente: selectCliente ? selectCliente.value : '',
+                nombreCliente: selectCliente ? selectCliente.options[selectCliente.selectedIndex].text : '',
+                tipoActividad: document.getElementById('tipoActividad').value,
+                hallazgoDetalle: document.getElementById('hallazgoDetalle').value,
+                prioridadInicial: document.getElementById('prioridadInicial').value,
+                archivoBase64: archivoBase64,
+                nombreArchivo: nombreArchivo
+            };
+
+            google.script.run
+                .withSuccessHandler(onExito)
+                .withFailureHandler(onError)
+                .guardarInspeccion(formData);
+        });
+    }
+
+    function onExito(response) {
+        const btn = document.getElementById('btn-enviar');
+        const spinner = document.getElementById('spinner');
+        const btnText = document.getElementById('btn-text');
+        if (response.status === "success") {
+            alert("✅ " + response.message);
+            document.getElementById('sst-form').reset();
+            const pc = document.getElementById('preview-container');
+            if (pc) pc.classList.add('hidden');
+            archivoBase64 = null;
+        } else {
+            alert("❌ Error: " + response.message);
+        }
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.classList.add('hidden');
+        if (btnText) btnText.textContent = "ENVIAR REPORTE AHORA";
+    }
+
+    function onError(err) {
+        alert("❌ Error crítico en el servidor: " + err.toString());
+        const btn = document.getElementById('btn-enviar');
+        if (btn) btn.disabled = false;
+        const sp = document.getElementById('spinner');
+        if (sp) sp.classList.add('hidden');
+        const bt = document.getElementById('btn-text');
+        if (bt) bt.textContent = "ENVIAR REPORTE AHORA";
+    }
+</script>
