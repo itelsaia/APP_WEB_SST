@@ -1,8 +1,8 @@
 <script>
     /**
-     * APP.JS.HTML — v2.0
+     * APP.JS.HTML — v3.0
      * Manejador central de sesión y lógica UI.
-     * CORRECCIÓN: Session ahora es híbrida: URL params + localStorage para evadir
+     * Session híbrida: URL params + localStorage para evadir
      * limitaciones del sandbox de Google Apps Script.
      */
 
@@ -18,18 +18,20 @@
     // GESTIÓN DE SESIÓN — LÓGICA ROBUSTA
     // ================================================================
 
-    /**
-     * Estrategia de sesión híbrida:
-     * 1. Intenta leer la sesión de localStorage
-     * 2. Como fallback, pide al servidor los datos del usuario con el email de la URL
-     */
     function verificarSesion() {
         console.log("[SST] Iniciando verificación de sesión...");
 
-        // ═══════════════════════════════════════════════════════════
-        // PRIORIDAD 1: Variables inyectadas por el servidor (siempre confiables)
-        // SERVER_EMAIL y SERVER_ROLE se definen en Index.html desde Web.gs
-        // ═══════════════════════════════════════════════════════════
+        // 1. Prioridad absoluta: Si hay 'logout=true' en la URL o flag de salida reciente
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('logout') === 'true' || sessionStorage.getItem('justLoggedOut')) {
+            console.log("[SST] Logout detectado. Bloqueando acceso automático.");
+            sessionStorage.removeItem('justLoggedOut');
+            localStorage.clear();
+            mostrarErrorAcceso("Sesión cerrada correctamente.");
+            return;
+        }
+
+
         if (typeof SERVER_EMAIL !== 'undefined' && SERVER_EMAIL &&
             typeof SERVER_ROLE !== 'undefined' && SERVER_ROLE) {
             console.log("[SST] Datos del servidor detectados — Email:", SERVER_EMAIL, "Rol:", SERVER_ROLE);
@@ -37,9 +39,6 @@
             return;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        // PRIORIDAD 2: localStorage (puede no estar disponible en sandbox GAS)
-        // ═══════════════════════════════════════════════════════════
         const storedUser = localStorage.getItem('userSST');
         if (storedUser) {
             try {
@@ -58,9 +57,6 @@
 
         console.log("[SST] Sin sesión en servidor ni localStorage, intentando URL...");
 
-        // ═══════════════════════════════════════════════════════════
-        // PRIORIDAD 3: google.script.url.getLocation (API oficial de GAS)
-        // ═══════════════════════════════════════════════════════════
         try {
             if (typeof google !== 'undefined' && google.script && google.script.url) {
                 google.script.url.getLocation(function (location) {
@@ -68,19 +64,15 @@
                     var emailParam = location.parameter ? location.parameter.email : null;
                     var roleParam = location.parameter ? location.parameter.role : null;
 
-                    console.log("[SST] Parámetros detectados:", { email: emailParam, role: roleParam });
-
                     if (emailParam) {
                         recuperarSesionConEmail(decodeURIComponent(emailParam));
                     } else if (roleParam) {
                         recuperarSesionConServidor();
                     } else {
-                        console.log("[SST] Sin parámetros, intentando servidor...");
                         recuperarSesionConServidor();
                     }
                 });
             } else {
-                console.warn("[SST] google.script.url no disponible, usando fallback...");
                 recuperarSesionConServidor();
             }
         } catch (e) {
@@ -98,12 +90,10 @@
                     console.log("[SST] Sesión OK vía email:", currentUser.email);
                     inicializarAppConSesion();
                 } else {
-                    console.error("[SST] Backend rechazó email:", response.message);
                     mostrarErrorAcceso("No se pudo verificar la sesión. Por favor inicie sesión nuevamente.");
                 }
             })
             .withFailureHandler(function (err) {
-                console.error("[SST] Error en obtenerDatosUsuario:", err);
                 mostrarErrorAcceso("Error de conexión. Por favor inicie sesión nuevamente.");
             })
             .obtenerDatosUsuario(email);
@@ -115,15 +105,12 @@
                 if (response.status === 'success') {
                     currentUser = response.data;
                     localStorage.setItem('userSST', JSON.stringify(currentUser));
-                    console.log("[SST] Sesión OK vía servidor:", currentUser.email);
                     inicializarAppConSesion();
                 } else {
-                    console.warn("[SST] Sin sesión activa en servidor:", response.message);
                     mostrarErrorAcceso("No se detectó una sesión activa. Por favor inicie sesión.");
                 }
             })
             .withFailureHandler(function (err) {
-                console.error("[SST] Error en obtenerUsuarioActivo:", err);
                 mostrarErrorAcceso("Error de conexión. Por favor inicie sesión nuevamente.");
             })
             .obtenerUsuarioActivo();
@@ -137,23 +124,19 @@
         mostrarBienvenidaPersonalizada();
 
         if (currentUser && currentUser.rol === 'SUP-SST') {
-            document.getElementById('module-nav').classList.remove('hidden');
-            // Mostrar asistencia primero mientras carga el estado
-            document.getElementById('asistencia-content').classList.remove('hidden');
-            document.getElementById('main-content').classList.add('hidden');
-
             cargarObrasAsistencia();
             configurarAsistencia();
-            verificarEstadoAsistencia();
             cargarOtrasOpciones();
+
+            // Verificar si ya tiene jornada activa
+            verificarEstadoAsistencia();
         }
 
-        // Ocultar carga inicial
         ocultarLoader();
     }
 
     // ================================================================
-    // MÓDULO: IDENTIDAD Y BIENVENIDA
+    // IDENTIDAD Y BIENVENIDA
     // ================================================================
 
     function inyectarDatosIdentidad() {
@@ -169,36 +152,50 @@
     }
 
     function mostrarBienvenidaPersonalizada() {
+        if (!currentUser) return;
+
         const welcomeSection = document.getElementById('welcome-section');
         const welcomeMsg = document.getElementById('welcome-message');
         const welcomeSub = document.getElementById('welcome-subtext');
         const welcomeIcon = document.getElementById('welcome-icon');
-        if (!currentUser || !welcomeSection) return;
+
+        if (!welcomeSection) return;
 
         const rol = currentUser.rol;
         const nombre = (currentUser.nombre || "Usuario").split(' ')[0];
 
-        let config = { msg: `¡Hola, ${nombre}! 👋`, sub: "Bienvenido al sistema SST.", icon: "waving_hand" };
+        // Frases motivacionales para SST
+        const quotes = [
+            "La seguridad no es un eslogan, es un estilo de vida. 👷",
+            "Tu familia te espera, trabaja con seguridad. 👨‍👩 family",
+            "La mejor herramienta eres tú. ¡Cuídate! 🛡️",
+            "Nada es tan importante que no pueda hacerse de forma segura. ✅",
+            "Hoy es un gran día para prevenir accidentes. 🚀",
+            "Tu compromiso con la seguridad salva vidas. 🤝",
+            "Trabaja con pasión, pero siempre con precaución. ✨",
+            "La prevención es la clave del éxito. 🔑"
+        ];
+        const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+
+        let config = {
+            msg: `¡Hola, ${nombre}! 👋`,
+            sub: randomQuote,
+            icon: "sentiment_satisfied"
+        };
 
         if (rol === 'SUP-SST') {
-            config.msg = `¡Hola, ${nombre}! 👷`;
-            config.sub = "Bienvenido a tu jornada. Registra tu asistencia y reporta hallazgos para mantener la seguridad.";
-            config.icon = "safety_check";
+            config.msg = `¡Bienvenido, ${nombre}! 👷`;
+            config.icon = "engineering";
         } else if (rol === 'ADMIN') {
-            config.msg = `Bienvenido, Administrador ${nombre} 👔`;
-            config.sub = "El panel de control estratégico está listo.";
+            config.msg = `Panel Control: ${nombre} 👔`;
             config.icon = "query_stats";
-        } else if (rol === 'CLIENTE') {
-            config.msg = `Hola, ${nombre} 🤝`;
-            config.sub = "Revise el estado de seguridad de sus proyectos.";
-            config.icon = "handshake";
         }
 
         if (welcomeMsg) welcomeMsg.textContent = config.msg;
         if (welcomeSub) welcomeSub.textContent = config.sub;
         if (welcomeIcon) welcomeIcon.textContent = config.icon;
-        welcomeSection.classList.remove('hidden', 'animate-pulse');
-        welcomeSection.classList.add('animate-fade-in');
+
+        welcomeSection.classList.remove('hidden');
     }
 
     function mostrarErrorAcceso(msj) {
@@ -227,50 +224,86 @@
         }
     }
 
-    // ================================================================
-    // MÓDULO: ASISTENCIA (REGISTRO-PRESENTACIÓN)
-    // ================================================================
+    // Helper: navega al Login usando anchor target="_top" (método oficial en GAS iframes)
+    function _irAlLogin(urlBase) {
+        var url = urlBase.split('?')[0] + '?page=login';
+        console.log("[SST] Navegando al Login:", url);
+        var a = document.createElement('a');
+        a.href = url;
+        a.target = '_top';
+        document.body.appendChild(a);
+        a.click();
+    }
 
-    function switchModule(target) {
-        const asisCont = document.getElementById('asistencia-content');
-        const mainCont = document.getElementById('main-content');
-        const btnAsis = document.getElementById('nav-asistencia');
-        const btnInsp = document.getElementById('nav-inspeccion');
+    // Botón "Cerrar Sesión" del header
+    function cerrarSesion() {
+        console.log("[SST] Cerrando sesión (header)...");
+        localStorage.clear();
+        sessionStorage.clear();
 
-        const claseActiva = "bg-primary text-white px-4 py-2 rounded-lg font-bold shadow hover:opacity-90 transition";
-        const claseInactiva = "bg-white text-gray-700 px-4 py-2 rounded-lg font-bold shadow hover:bg-gray-50 transition border border-gray-200";
-
-        if (target === 'asistencia') {
-            asisCont.classList.remove('hidden');
-            mainCont.classList.add('hidden');
-            if (btnAsis) btnAsis.className = claseActiva;
-            if (btnInsp) btnInsp.className = claseInactiva;
+        // SERVER_URL está inyectado por el servidor — es la fuente más confiable.
+        // Si por alguna razón está vacío, caemos al API de GAS como respaldo.
+        if (typeof SERVER_URL !== 'undefined' && SERVER_URL) {
+            _irAlLogin(SERVER_URL);
         } else {
-            asisCont.classList.add('hidden');
-            mainCont.classList.remove('hidden');
-            if (btnInsp) btnInsp.className = claseActiva;
-            if (btnAsis) btnAsis.className = claseInactiva;
+            google.script.run
+                .withSuccessHandler(_irAlLogin)
+                .withFailureHandler(function () {
+                    alert("No se pudo obtener la URL de sesión. Recargue la página.");
+                })
+                .getScriptUrl();
         }
     }
 
+    // ================================================================
+    // MÓDULO: ASISTENCIA
+    // ================================================================
+
+    /**
+     * Cambia entre la vista de asistencia y el panel de trabajo.
+     */
+    function switchModule(target) {
+        const asisCont = document.getElementById('asistencia-content');
+        const mainCont = document.getElementById('main-content');
+
+        console.log("[SST] switchModule llamado con:", target);
+
+        if (target === 'asistencia') {
+            if (asisCont) asisCont.classList.remove('hidden');
+            if (mainCont) mainCont.classList.add('hidden');
+        } else {
+            // 'inspeccion' o cualquier otro -> mostrar panel principal
+            if (asisCont) asisCont.classList.add('hidden');
+            if (mainCont) mainCont.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Verifica el estado de asistencia en el servidor.
+     * Si tiene jornada activa -> panel de trabajo + botón salida.
+     * Si no -> pantalla de registro de entrada.
+     */
     function verificarEstadoAsistencia() {
         if (!currentUser || !currentUser.email) return;
+        console.log("[SST] Verificando estado de asistencia para:", currentUser.email);
+
         google.script.run
             .withSuccessHandler(function (response) {
-                const btnText = document.getElementById('asis-btn-text');
-                const obraSelect = document.getElementById('idObraAsistencia');
-                if (!btnText) return;
+                console.log("[SST] Respuesta de obtenerEstadoAsistencia:", JSON.stringify(response));
+                const exitSection = document.getElementById('exit-section');
+
                 if (response.status === "success" && response.data && response.data.activo) {
-                    btnText.textContent = "REGISTRAR SALIDA";
-                    if (obraSelect) obraSelect.disabled = true;
+                    console.log("[SST] ✅ Jornada ACTIVA detectada — mostrando panel de trabajo");
+                    switchModule('inspeccion');
+                    if (exitSection) exitSection.classList.remove('hidden');
                 } else {
-                    btnText.textContent = "REGISTRAR INGRESO";
-                    if (obraSelect) obraSelect.disabled = false;
+                    console.log("[SST] ⏳ Sin jornada activa — mostrando registro de entrada");
+                    switchModule('asistencia');
+                    if (exitSection) exitSection.classList.add('hidden');
                 }
-                switchModule('asistencia');
             })
             .withFailureHandler(function (err) {
-                console.error("Error verificando asistencia:", err);
+                console.error("[SST] Error verificando asistencia:", err);
                 switchModule('asistencia');
             })
             .obtenerEstadoAsistencia(currentUser.email);
@@ -283,13 +316,21 @@
                 archivoBase64 = e.target.result;
                 const prev = document.getElementById('asis-img-preview');
                 const cont = document.getElementById('asis-preview-container');
+                const label = document.getElementById('asis-foto-label');
                 if (prev) prev.src = e.target.result;
                 if (cont) cont.classList.remove('hidden');
+                // Ocultar botón de captura para evitar duplicados
+                if (label) label.classList.add('hidden');
             };
             reader.readAsDataURL(input.files[0]);
         }
     }
 
+    /**
+     * Configura el formulario de asistencia (solo ENTRADA).
+     * FIX PRINCIPAL: Después de registrar exitosamente, se redirige
+     * DIRECTAMENTE al panel de trabajo sin esperar otra llamada al servidor.
+     */
     function configurarAsistencia() {
         const form = document.getElementById('attendance-form');
         if (!form) return;
@@ -298,26 +339,26 @@
             e.preventDefault();
 
             const obraSelect = document.getElementById('idObraAsistencia');
-            const btnText = document.getElementById('asis-btn-text') || {};
-            const isSalida = (btnText.textContent || '').includes("SALIDA");
 
-            // ▶ Validación: Obra seleccionada
             if (obraSelect && (obraSelect.value === '' || obraSelect.selectedIndex === 0)) {
-                alert("⚠️ Por favor seleccione la Obra / Proyecto antes de continuar.");
+                alert("⚠️ Por favor seleccione la Obra / Proyecto.");
                 return;
             }
 
-            // ▶ Validación: Foto requerida
             if (!archivoBase64) {
-                alert("⚠️ Debe capturar la foto de soporte antes de registrar.");
+                alert("⚠️ Debe capturar la foto de ingreso.");
                 return;
             }
 
             const btn = document.getElementById('btn-asistencia');
             const spinner = document.getElementById('asis-spinner');
+            const btnText = document.getElementById('asis-btn-text');
+            const btnIcon = document.getElementById('asis-btn-icon');
+
             if (btn) btn.disabled = true;
             if (spinner) spinner.classList.remove('hidden');
-            if (btnText) btnText.textContent = "PROCESANDO...";
+            if (btnText) btnText.textContent = "REGISTRANDO...";
+            if (btnIcon) btnIcon.classList.add('hidden');
 
             const payload = {
                 userEmail: currentUser.email,
@@ -325,26 +366,152 @@
                 archivoBase64: archivoBase64
             };
 
-            const serverMethod = isSalida ? "registrarSalida" : "registrarIngreso";
-
             google.script.run
                 .withSuccessHandler(function (res) {
-                    alert("✅ " + res.message);
+                    console.log("[SST] Respuesta registrarIngreso:", JSON.stringify(res));
+
+                    if (res.status === "success") {
+                        // ═══════════════════════════════════════
+                        // FIX: Redirección DIRECTA al panel de trabajo
+                        // No esperamos otra llamada al servidor.
+                        // ═══════════════════════════════════════
+                        console.log("[SST] ✅ Entrada registrada. Redirigiendo al panel de trabajo...");
+
+                        // Limpiar formulario
+                        archivoBase64 = null;
+                        const cont = document.getElementById('asis-preview-container');
+                        if (cont) cont.classList.add('hidden');
+
+                        // Mostrar el panel de trabajo DIRECTAMENTE
+                        switchModule('inspeccion');
+
+                        // Mostrar el botón de salida
+                        const exitSection = document.getElementById('exit-section');
+                        if (exitSection) exitSection.classList.remove('hidden');
+
+                        // Notificación amigable (no bloqueante)
+                        mostrarNotificacion("✅ " + res.message, "success");
+                    } else {
+                        alert("⚠️ " + res.message);
+                    }
+
+                    // Restaurar botón
                     if (btn) btn.disabled = false;
                     if (spinner) spinner.classList.add('hidden');
-                    archivoBase64 = null;
-                    const cont = document.getElementById('asis-preview-container');
-                    if (cont) cont.classList.add('hidden');
-                    verificarEstadoAsistencia();
+                    if (btnText) btnText.textContent = "INICIAR JORNADA";
+                    if (btnIcon) btnIcon.classList.remove('hidden');
                 })
                 .withFailureHandler(function (err) {
+                    console.error("[SST] Error en registrarIngreso:", err);
                     alert("❌ Error: " + err.toString());
                     if (btn) btn.disabled = false;
                     if (spinner) spinner.classList.add('hidden');
-                    if (btnText) btnText.textContent = isSalida ? "REGISTRAR SALIDA" : "REGISTRAR INGRESO";
-                })[serverMethod](payload);
+                    if (btnText) btnText.textContent = "INICIAR JORNADA";
+                    if (btnIcon) btnIcon.classList.remove('hidden');
+                }).registrarIngreso(payload);
         });
     }
+
+    /**
+     * Muestra una notificación tipo toast no-bloqueante
+     */
+    function mostrarNotificacion(mensaje, tipo) {
+        const toast = document.createElement('div');
+        toast.className = `fixed top-4 right-4 z-[100] px-6 py-3 rounded-xl shadow-2xl text-white font-bold text-sm animate-slide-up ${tipo === 'success' ? 'bg-green-500' : 'bg-red-500'
+            }`;
+        toast.textContent = mensaje;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.5s';
+            setTimeout(() => toast.remove(), 500);
+        }, 3000);
+    }
+
+    // ================================================================
+    // GESTIÓN DE SALIDA (MODAL)
+    // ================================================================
+
+    function openExitModal() {
+        document.getElementById('exit-modal').classList.remove('hidden');
+    }
+
+    function closeExitModal() {
+        document.getElementById('exit-modal').classList.add('hidden');
+        const prev = document.getElementById('exit-preview-container');
+        const label = document.getElementById('exit-foto-label');
+        if (prev) prev.classList.add('hidden');
+        // Mostrar el label de nuevo por si canceló para volver a intentar
+        if (label) label.classList.remove('hidden');
+        archivoBase64 = null;
+    }
+
+    function previewSalida(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                archivoBase64 = e.target.result;
+                const prev = document.getElementById('exit-img-preview');
+                const cont = document.getElementById('exit-preview-container');
+                const label = document.getElementById('exit-foto-label');
+                if (prev) prev.src = e.target.result;
+                if (cont) cont.classList.remove('hidden');
+                // Ocultar botón de captura
+                if (label) label.classList.add('hidden');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function submitSalida() {
+        if (!archivoBase64) {
+            alert("⚠️ Debe capturar la foto de salida.");
+            return;
+        }
+
+        const btn = document.getElementById('btn-submit-salida');
+        const spinner = document.getElementById('exit-spinner');
+        if (btn) btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        // ── PASO 1: Registrar salida en el backend (fire-and-forget) ──────────
+        // No esperamos la respuesta del servidor para cerrar sesión.
+        // La sesión se cierra SIEMPRE, independientemente del resultado del backend.
+        google.script.run
+            .withSuccessHandler(function (r) { console.log("[SST] registrarSalida:", r.status); })
+            .withFailureHandler(function (e) { console.warn("[SST] registrarSalida error:", e); })
+            .registrarSalida({
+                userEmail: currentUser ? currentUser.email : '',
+                archivoBase64: archivoBase64
+            });
+
+        // ── PASO 2: Cerrar modal, notificar y limpiar almacenamiento ──────────
+        closeExitModal();
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.classList.add('hidden');
+        mostrarNotificacion("👋 Jornada finalizada. Cerrando sesión...", "success");
+        localStorage.clear();
+        sessionStorage.clear();
+
+        // ── PASO 3: Obtener URL real del script y navegar al Login ─────────────
+        // Usamos getScriptUrl() porque es la fuente más confiable en GAS.
+        // SERVER_URL puede quedar vacío si el bloque try{} de Index.html falla.
+        google.script.run
+            .withSuccessHandler(_irAlLogin)
+            .withFailureHandler(function () {
+                // Fallback: SERVER_URL si el API falla
+                if (typeof SERVER_URL !== 'undefined' && SERVER_URL) {
+                    _irAlLogin(SERVER_URL);
+                } else {
+                    alert("Error al cerrar sesión. Cierre la pestaña manualmente.");
+                }
+            })
+            .getScriptUrl();
+    }
+
+    // ================================================================
+    // CARGA DE DATOS
+    // ================================================================
 
     function cargarObrasAsistencia() {
         google.script.run
@@ -455,6 +622,8 @@
 
             const selectCliente = document.getElementById('idCliente');
             const formData = {
+                userEmail: currentUser.email,
+                userCode: currentUser.codigo || '',
                 idCliente: selectCliente ? selectCliente.value : '',
                 nombreCliente: selectCliente ? selectCliente.options[selectCliente.selectedIndex].text : '',
                 tipoActividad: document.getElementById('tipoActividad').value,
@@ -476,7 +645,7 @@
         const spinner = document.getElementById('spinner');
         const btnText = document.getElementById('btn-text');
         if (response.status === "success") {
-            alert("✅ " + response.message);
+            mostrarNotificacion("✅ " + response.message, "success");
             document.getElementById('sst-form').reset();
             const pc = document.getElementById('preview-container');
             if (pc) pc.classList.add('hidden');

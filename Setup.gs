@@ -22,7 +22,7 @@ function inicializarBaseDeDatos() {
     },
     { 
       nombre: 'DB_INSPECCIONES', 
-      encabezados: ['ID_Registro', 'Fecha_Hora', 'Email_Supervisor', 'ID_Cliente', 'Tipo_Actividad', 'Hallazgo_Detalle', 'URL_Evidencia', 'Prioridad_Inicial'] 
+      encabezados: ['ID_Registro', 'Fecha_Hora', 'Email_Supervisor', 'ID_Cliente', 'Tipo_Actividad', 'Hallazgo_Detalle', 'URL_Evidencia', 'Prioridad_Inicial', 'Codigo_Supervisor'] 
     },
     { 
       nombre: 'DB_ANALISIS_IA', 
@@ -48,12 +48,10 @@ function inicializarBaseDeDatos() {
       Logger.log('La hoja ya existe: ' + configHoja.nombre);
     }
 
-    // Configurar encabezados si la hoja está vacía
-    if (hoja.getLastRow() === 0) {
-      hoja.getRange(1, 1, 1, configHoja.encabezados.length).setValues([configHoja.encabezados]);
-      hoja.setFrozenRows(1); // Congelar fila superior
-      Logger.log('Encabezados insertados en: ' + configHoja.nombre);
-    }
+    // Configurar/Actualizar encabezados (Siempre garantiza que la estructura sea la correcta)
+    hoja.getRange(1, 1, 1, configHoja.encabezados.length).setValues([configHoja.encabezados]);
+    if (hoja.getFrozenRows() === 0) hoja.setFrozenRows(1);
+    Logger.log('Estructura verificada/actualizada en: ' + configHoja.nombre);
   });
 
   // Insertar valores por defecto en PARAM_SISTEMA si está vacía

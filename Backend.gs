@@ -36,25 +36,32 @@ function guardarInspeccion(data) {
     const idRegistro = "REG-" + new Date().getTime();
     const fechaHora = new Date();
     
-    // 3. Preparar la fila para insertar
-    // Orden del PRD: ID_Registro, Fecha_Hora, Email, ID_Cliente, Tipo, Detalle, URL, Prioridad
+    // 4. Preparar la fila para insertar
+    // Orden Original + Codigo al final
     const nuevaFila = [
       idRegistro,
       fechaHora,
-      Session.getActiveUser().getEmail(), // Captura automática del email del usuario logueado
+      data.userEmail || "Sistema",
       data.idCliente || "CLIENTE-GENERAL",
       data.tipoActividad,
       data.hallazgoDetalle,
       urlEvidencia,
-      data.prioridadInicial
+      data.prioridadInicial,
+      data.userCode || "" // Código del supervisor al final (Columna I)
     ];
     
     // 4. Insertar datos en la hoja
     hoja.appendRow(nuevaFila);
     
-    // 5. [PREPARACIÓN PARA IA]
-    // Aquí se llamaría al módulo AI_Core.gs en el siguiente paso para analizar el hallazgo.
-    // Logger.log("Iniciando análisis de IA para: " + idRegistro);
+    // 5. [INTEGRACIÓN CON IA]
+    // Llamado al módulo AI_Core.gs para analizar el hallazgo de forma asíncrona (opcional con Trigger) 
+    // o directa. Para esta versión, lo ejecutamos directamente.
+    try {
+      const analisis = AI_CORE.analizarHallazgo(data.hallazgoDetalle, urlEvidencia);
+      AI_CORE.guardarAnalisis(idRegistro, analisis);
+    } catch (aiError) {
+      Logger.log("Error al procesar IA: " + aiError.toString());
+    }
     
     return {
       status: "success",
@@ -184,7 +191,8 @@ function validarCredenciales(email, password) {
               email: dbEmail,
               nombre: datos[i][1],
               rol: datos[i][2],
-              idCliente: datos[i][4]
+              idCliente: datos[i][4],
+              codigo: datos[i][4] || "" // Usar Columna E (ej: SUP-001) como código
             }
           };
         } else {
@@ -404,7 +412,8 @@ function obtenerDatosUsuario(email) {
             email: datos[i][0],
             nombre: datos[i][1],
             rol: datos[i][2],
-            idCliente: datos[i][4] || ''
+            idCliente: datos[i][4] || '',
+            codigo: datos[i][4] || '' // Columna E
           }
         };
       }

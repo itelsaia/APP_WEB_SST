@@ -68,3 +68,11 @@ function include(filename) {
     return '<!-- Error: ' + filename + ' -->';
   }
 }
+/**
+ * Retorna la URL limpia de la Web App para redirecciones.
+ */
+function getScriptUrl() {
+  const url = ScriptApp.getService().getUrl();
+  // Limpiar cualquier parámetro que Google pueda inyectar en ciertos entornos
+  return url.split('?')[0];
+}
