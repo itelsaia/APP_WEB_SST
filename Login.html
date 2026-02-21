@@ -39,7 +39,7 @@
     </script>
     <style>
         body {
-            min-height: max(884px, 100dvh);
+            min-height: 100dvh;
             overflow-x: hidden;
         }
 
@@ -80,13 +80,13 @@
         class="fixed bottom-[-10%] left-[-20%] w-[300px] h-[300px] bg-yellow-600/5 rounded-full blur-[80px] pointer-events-none">
     </div>
 
-    <div class="relative w-full max-w-md mx-auto px-6 py-12 flex flex-col z-10 transition-all duration-500 scale-100 opacity-100"
+    <div class="relative w-full max-w-md mx-auto px-6 py-4 flex flex-col z-10 transition-all duration-500 scale-100 opacity-100"
         id="login-container">
 
         <!-- Logo y Cabecera -->
-        <div class="flex flex-col items-center mb-10 text-center">
+        <div class="flex flex-col items-center mb-6 text-center">
             <div
-                class="w-32 h-32 rounded-xl bg-white dark:bg-slate-800/50 flex items-center justify-center mb-6 border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden group hover:scale-105 transition-transform">
+                class="w-28 h-28 rounded-xl bg-white dark:bg-slate-800/50 flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden group hover:scale-105 transition-transform">
                 <? if (config.URL_LOGO) { ?>
                 <img id="login-logo" src="<?= config.URL_LOGO ?>" alt="Logo" class="w-full h-full object-cover">
                 <? } else { ?>
@@ -153,7 +153,7 @@
             </button>
         </form>
 
-        <div class="relative flex py-8 items-center">
+        <div class="relative flex py-4 items-center">
             <div class="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
             <span class="flex-shrink-0 mx-4 text-slate-400 dark:text-slate-500 text-xs uppercase font-medium">O
                 CONTINUAR CON</span>
@@ -177,13 +177,13 @@
             </button>
         </div>
 
-        <p class="text-center text-slate-500 dark:text-slate-400 text-sm mt-8">
+        <p class="text-center text-slate-500 dark:text-slate-400 text-sm mt-4">
             ¿No tienes una cuenta?
             <a class="text-primary font-semibold hover:underline" href="#">Regístrate</a>
         </p>
 
         <!-- Footer Informativo -->
-        <div class="mt-12 text-center">
+        <div class="mt-6 text-center">
             <p class="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-widest font-bold">&copy; 2026 SaaS
                 SST - Soluciones IA</p>
         </div>
