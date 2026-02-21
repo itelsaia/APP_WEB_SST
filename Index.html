@@ -12,8 +12,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
-            --color-primario: #1E3A8A;
-            --color-acento: #F59E0B;
+            --color-primario: #C5A048;
+            --color-acento: #D4AF37;
+            --color-fondo: #101922;
         }
 
         .bg-primary {
@@ -100,7 +101,15 @@
     </style>
 </head>
 
-<body class="bg-gray-50 min-h-screen flex flex-col">
+<body class="bg-[#101922] min-h-screen flex flex-col text-slate-100 dark">
+
+    <!-- Fondos decorativos difuminados -->
+    <div
+        class="fixed top-[-20%] right-[-10%] w-[400px] h-[400px] bg-[#C5A048]/10 rounded-full blur-[100px] pointer-events-none z-0">
+    </div>
+    <div
+        class="fixed bottom-[-10%] left-[-20%] w-[300px] h-[300px] bg-[#C5A048]/5 rounded-full blur-[80px] pointer-events-none z-0">
+    </div>
 
     <!-- CONFIG INYECTADA POR EL SERVIDOR -->
     <script>
@@ -117,22 +126,19 @@
             console.error('[SST] Error parseando config del servidor:', e);
         }
 
-        if (SERVER_CONFIG.COLOR_PRIMARIO) {
-            document.documentElement.style.setProperty('--color-primario', SERVER_CONFIG.COLOR_PRIMARIO);
-        }
-        if (SERVER_CONFIG.COLOR_ACENTO) {
-            document.documentElement.style.setProperty('--color-acento', SERVER_CONFIG.COLOR_ACENTO);
+        if (SERVER_CONFIG.COLOR_FONDO) {
+            document.documentElement.style.setProperty('--color-fondo', SERVER_CONFIG.COLOR_FONDO);
         }
 
         console.log('[SST] Página cargada. Rol:', SERVER_ROLE, 'Email:', SERVER_EMAIL);
     </script>
 
     <!-- Capa de Carga Inicial -->
-    <div id="initial-loader" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center"
+    <div id="initial-loader" class="fixed inset-0 bg-[#101922] z-50 flex flex-col items-center justify-center"
         style="transition: opacity 0.5s ease;">
         <div class="animate-spin rounded-full h-16 w-16 mb-4"
-            style="border: 4px solid #e5e7eb; border-top-color: var(--color-primario);"></div>
-        <p class="text-gray-600 font-medium">Verificando sesión segura...</p>
+            style="border: 4px solid rgba(197, 160, 72, 0.1); border-top-color: var(--color-primario);"></div>
+        <p class="text-gray-400 font-medium tracking-tight">Verificando sesión segura...</p>
     </div>
     <script>
         setTimeout(function () {
@@ -146,27 +152,29 @@
     </script>
 
     <!-- Header compacto -->
-    <header class="bg-white shadow-sm px-4 py-3 flex justify-between items-center border-b-2 border-primary/20">
+    <header
+        class="bg-[#101922]/80 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex justify-between items-center border-b border-white/10">
         <div class="flex items-center space-x-3">
             <span id="logo-marca-icon" class="material-symbols-outlined text-primary text-3xl">security</span>
-            <img id="logo-marca" src="" alt="Logo" class="h-10 w-auto object-contain hidden">
+            <img id="logo-marca" src="" alt="Logo"
+                class="h-10 w-auto object-contain hidden border border-white/10 rounded-lg p-0.5">
             <div>
-                <h1 class="text-base font-bold text-gray-800 leading-tight">Sistema SST</h1>
-                <p class="text-xs text-gray-400 font-medium">Control de Campo</p>
+                <h1 class="text-base font-bold text-white leading-tight">Sistema SST</h1>
+                <p class="text-[10px] text-primary font-bold uppercase tracking-widest">CONTROL DE CAMPO</p>
             </div>
         </div>
-        <div id="user-info" class="hidden flex items-center space-x-2 text-sm">
+        <div id="user-info" class="hidden flex items-center space-x-2 text-sm text-white">
             <div class="text-right">
-                <p id="user-name" class="font-bold text-gray-800 text-sm leading-none">...</p>
-                <p id="user-role-label" class="text-[10px] text-primary font-semibold uppercase tracking-wider mt-0.5">
+                <p id="user-name" class="font-bold text-white text-sm leading-none">...</p>
+                <p id="user-role-label" class="text-[9px] text-primary font-bold uppercase tracking-wider mt-0.5">
                 </p>
             </div>
             <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center">
-                    <span class="material-symbols-outlined text-primary text-lg">person</span>
+                <div class="w-9 h-9 bg-primary/20 rounded-xl flex items-center justify-center border border-primary/20">
+                    <span class="material-symbols-outlined text-primary text-xl">person</span>
                 </div>
                 <button onclick="cerrarSesion()"
-                    class="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-colors shadow-sm"
+                    class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary hover:bg-primary hover:text-black transition-all shadow-sm border border-primary/20"
                     title="Cerrar Sesión">
                     <span class="material-symbols-outlined text-sm">logout</span>
                 </button>
@@ -175,32 +183,62 @@
         <span id="user-email" class="hidden"></span>
     </header>
     <script>
-        if (SERVER_CONFIG.URL_LOGO) {
+        (function () {
+            var rawUrl = SERVER_CONFIG.URL_LOGO || '';
             var logoImg = document.getElementById('logo-marca');
             var logoIcon = document.getElementById('logo-marca-icon');
-            if (logoImg) { logoImg.src = SERVER_CONFIG.URL_LOGO; logoImg.classList.remove('hidden'); }
-            if (logoIcon) { logoIcon.classList.add('hidden'); }
-        }
+            if (!rawUrl || rawUrl.indexOf('placeholder') !== -1) return;
+
+            if (logoImg) {
+                // Extraer ID de Drive para usar thumbnail (más confiable)
+                var driveMatch = rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                var driveId = driveMatch ? driveMatch[1] : null;
+                var firstUrl = driveId
+                    ? 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w120'
+                    : rawUrl;
+
+                logoImg.setAttribute('data-raw-url', rawUrl);
+                logoImg.setAttribute('data-drive-id', driveId || '');
+                logoImg.setAttribute('data-retry', '0');
+                logoImg.src = firstUrl;
+                logoImg.classList.remove('hidden');
+
+                logoImg.onerror = function () {
+                    var img = this;
+                    var id = img.getAttribute('data-drive-id');
+                    var raw = img.getAttribute('data-raw-url') || '';
+                    var retry = parseInt(img.getAttribute('data-retry') || '0');
+                    img.setAttribute('data-retry', retry + 1);
+                    if (retry === 0 && id) { img.src = 'https://drive.google.com/uc?export=view&id=' + id; }
+                    else if (retry === 1 && id) { img.src = 'https://lh3.googleusercontent.com/d/' + id; }
+                    else if (retry === 2) { img.src = raw; }
+                    else {
+                        img.classList.add('hidden');
+                        if (logoIcon) logoIcon.classList.remove('hidden');
+                    }
+                };
+                if (logoIcon) logoIcon.classList.add('hidden');
+            }
+        })();
     </script>
 
-    <!-- Hero / Bienvenida Principal -->
-    <header id="welcome-section" class="max-w-2xl mx-auto px-4 pt-6 pb-2 hidden">
+    <!-- Bienvenida compacta (visible solo en desktop / pantallas grandes) -->
+    <header id="welcome-section" class="max-w-2xl mx-auto px-4 pt-4 pb-1 hidden z-10 relative">
         <div
-            class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex flex-col items-center text-center animate-fade-in relative overflow-hidden">
-            <!-- Decoración sutil de fondo -->
-            <div class="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-primary/5 rounded-full blur-3xl"></div>
-            <div class="absolute bottom-0 left-0 -mb-8 -ml-8 w-32 h-32 bg-accent/5 rounded-full blur-3xl"></div>
-
+            class="hidden md:flex bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 px-5 py-4 items-center gap-4 animate-fade-in">
             <div
-                class="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mb-6 ring-8 ring-primary/5 rotate-3 hover:rotate-0 transition-transform duration-500">
-                <span id="welcome-icon" class="material-symbols-outlined text-5xl text-primary">waving_hand</span>
+                class="w-12 h-12 bg-primary/15 rounded-2xl flex items-center justify-center shrink-0 border border-primary/20">
+                <span id="welcome-icon" class="material-symbols-outlined text-3xl text-primary">waving_hand</span>
             </div>
-            <h2 id="welcome-message" class="text-2xl font-black text-gray-800 tracking-tight mb-3">¡Cargando...!</h2>
-            <div class="max-w-sm">
-                <p id="welcome-subtext" class="text-gray-500 font-medium leading-relaxed italic text-sm md:text-base">
-                    Preparando su entorno de trabajo seguro...
-                </p>
+            <div>
+                <h2 id="welcome-message" class="text-lg font-black text-white tracking-tight">¡Cargando...!</h2>
+                <p id="welcome-subtext" class="text-slate-400 text-xs font-medium italic">Preparando su entorno...</p>
             </div>
+        </div>
+        <!-- Mobile: saludo inline mínimo -->
+        <div class="md:hidden px-1 pb-1">
+            <p class="text-sm font-bold" style="color: var(--color-primario);"><span
+                    id="welcome-message-mobile">Bienvenido/a</span> 👋</p>
         </div>
     </header>
 
@@ -212,67 +250,71 @@
         <!-- ═══════════════════════════════════════════════ -->
         <div id="asistencia-content" class="hidden animate-slide-up">
             <div class="max-w-md mx-auto">
-                <!-- Card principal -->
-                <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-                    <!-- Banner superior con gradiente -->
-                    <div
-                        class="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 px-6 py-8 text-center text-white relative overflow-hidden">
-                        <div class="absolute inset-0 opacity-10"
-                            style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 80 80%22><circle cx=%2240%22 cy=%2240%22 r=%2230%22 fill=%22white%22 opacity=%220.05%22/></svg>'); background-size: 80px;">
+                <!-- Card principal — diseño mobile-first compacto -->
+                <div class="bg-white/5 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/10">
+
+                    <!-- Banner superior compacto (minimal en mobile) -->
+                    <div class="px-5 py-4 flex items-center gap-3 border-b border-primary/10"
+                        style="background: linear-gradient(135deg,#1A1A1A,#101922);">
+                        <div
+                            class="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/30 shrink-0">
+                            <span class="material-symbols-outlined text-2xl text-primary">engineering</span>
                         </div>
-                        <div class="relative z-10">
-                            <div
-                                class="inline-flex items-center justify-center w-16 h-16 bg-white/15 rounded-2xl mb-4 backdrop-blur-sm">
-                                <span class="material-symbols-outlined text-4xl text-white">fingerprint</span>
-                            </div>
-                            <h3 class="text-xl font-black uppercase tracking-tight">Inicio de Jornada</h3>
-                            <p class="text-blue-200 text-sm mt-1 font-medium">Registre su ingreso para comenzar</p>
+                        <div>
+                            <h3 class="text-sm font-black uppercase tracking-tight text-white leading-none">Inicio de
+                                Jornada</h3>
+                            <p class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Registre su
+                                ingreso</p>
                         </div>
                     </div>
 
-                    <!-- Formulario -->
-                    <div class="p-6 space-y-5">
-                        <form id="attendance-form" class="space-y-5">
+                    <!-- Formulario compacto para mobile -->
+                    <div class="p-4 space-y-3">
+                        <form id="attendance-form" class="space-y-3">
                             <!-- Campo 1: Obra -->
                             <div>
                                 <label
-                                    class="flex items-center text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                                    <span
-                                        class="material-symbols-outlined text-sm mr-1.5 text-primary">location_on</span>
+                                    class="flex items-center text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                                    <span class="material-symbols-outlined text-sm mr-1 text-primary">location_on</span>
                                     Obra / Proyecto
                                 </label>
                                 <select id="idObraAsistencia" required
-                                    class="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl field-focus outline-none transition-all font-medium text-gray-700 text-sm appearance-none cursor-pointer">
-                                    <option value="">Seleccione ubicación...</option>
+                                    style="background-color:#1a242f; color:#f8fafc; color-scheme: dark;"
+                                    class="w-full px-3 py-3 border border-white/10 rounded-xl outline-none text-sm font-medium appearance-none cursor-pointer transition-all"
+                                    onfocus="this.style.borderColor='var(--color-primario)'"
+                                    onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                                    <option value="" style="background:#1a242f; color:#f8fafc;">Seleccione ubicación...
+                                    </option>
                                 </select>
                             </div>
 
-                            <!-- Campo 2: Foto -->
+                            <!-- Campo 2: Foto (compacto) -->
                             <div>
                                 <label
-                                    class="flex items-center text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                    class="flex items-center text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
                                     <span
-                                        class="material-symbols-outlined text-sm mr-1.5 text-primary">photo_camera</span>
+                                        class="material-symbols-outlined text-sm mr-1 text-primary">photo_camera</span>
                                     Evidencia Fotográfica
                                 </label>
 
                                 <div id="asis-preview-container"
-                                    class="hidden mb-3 rounded-xl overflow-hidden shadow-md border-2 border-primary/20 aspect-video relative">
+                                    class="hidden mb-2 rounded-xl overflow-hidden shadow-md border-2 border-primary/20 relative"
+                                    style="max-height: 140px;">
                                     <img id="asis-img-preview" src="" alt="Soporte" class="w-full h-full object-cover">
                                     <div
-                                        class="absolute bottom-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center">
-                                        <span class="material-symbols-outlined text-xs mr-0.5">check_circle</span>
-                                        Capturada
+                                        class="absolute bottom-1.5 right-1.5 bg-primary text-black text-[9px] font-black px-2 py-0.5 rounded-full flex items-center shadow-lg">
+                                        <span class="material-symbols-outlined text-[10px] mr-0.5">check_circle</span>
+                                        CAPTURADA
                                     </div>
                                 </div>
 
                                 <label for="asis-foto" id="asis-foto-label"
-                                    class="cursor-pointer border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center hover:border-primary/50 hover:bg-blue-50/50 transition-all group">
+                                    class="cursor-pointer border-2 border-dashed border-white/10 rounded-xl py-4 flex flex-col items-center hover:border-primary/50 hover:bg-white/5 transition-all group">
                                     <div
-                                        class="bg-primary/10 p-3 rounded-full group-hover:scale-110 transition-transform">
-                                        <span class="material-symbols-outlined text-3xl text-primary">add_a_photo</span>
+                                        class="bg-primary/10 p-2.5 rounded-full group-hover:scale-110 transition-transform border border-primary/20">
+                                        <span class="material-symbols-outlined text-2xl text-primary">add_a_photo</span>
                                     </div>
-                                    <span class="mt-2 text-xs font-semibold text-gray-500">Toque para capturar
+                                    <span class="mt-1.5 text-[11px] font-semibold text-slate-400">Toque para capturar
                                         selfie</span>
                                     <input type="file" id="asis-foto" accept="image/*" capture="camera" class="hidden"
                                         onchange="previewAsistencia(this)">
@@ -281,10 +323,11 @@
 
                             <!-- Botón de acción -->
                             <button type="submit" id="btn-asistencia"
-                                class="w-full bg-gradient-to-r from-blue-800 to-blue-600 text-white py-4 rounded-xl font-bold text-base shadow-lg shadow-blue-800/25 hover:shadow-xl hover:from-blue-700 hover:to-blue-500 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+                                style="background: var(--color-primario); box-shadow: 0 6px 20px rgba(197,160,72,0.25);"
+                                class="w-full hover:opacity-90 text-black font-black py-3.5 rounded-xl text-sm active:scale-[0.98] transition-all flex justify-center items-center gap-2 uppercase tracking-widest mt-1">
                                 <span id="asis-spinner"
-                                    class="hidden animate-spin border-3 border-white border-t-transparent rounded-full w-5 h-5"></span>
-                                <span class="material-symbols-outlined text-xl" id="asis-btn-icon">login</span>
+                                    class="hidden animate-spin border-2 border-black border-t-transparent rounded-full w-4 h-4"></span>
+                                <span class="material-symbols-outlined text-lg" id="asis-btn-icon">login</span>
                                 <span id="asis-btn-text">INICIAR JORNADA</span>
                             </button>
                         </form>
@@ -295,19 +338,21 @@
 
         <!-- Banner de jornada activa + botón salida (Independiente) -->
         <div id="exit-section"
-            class="hidden mb-6 rounded-2xl overflow-hidden border border-amber-200 shadow-md animate-pulse-glow max-w-2xl mx-auto">
-            <div class="bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 flex items-center justify-between">
+            class="hidden mb-6 rounded-2xl overflow-hidden glass-card shadow-2xl animate-pulse-glow max-w-2xl mx-auto border-primary/20">
+            <div
+                class="bg-gradient-to-r from-primary/20 to-primary/5 px-4 py-3 flex items-center justify-between backdrop-blur-md">
                 <div class="flex items-center space-x-3">
-                    <div class="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                        <span class="material-symbols-outlined text-white">schedule</span>
+                    <div class="bg-primary/20 p-2 rounded-xl border border-primary/30">
+                        <span class="material-symbols-outlined text-primary text-xl">schedule</span>
                     </div>
                     <div>
-                        <p class="text-sm font-bold text-white">Jornada Activa</p>
-                        <p class="text-xs text-amber-100">Registre su salida al finalizar</p>
+                        <p class="text-sm font-black text-white uppercase tracking-tighter">Jornada Activa</p>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Registre su salida al
+                            finalizar</p>
                     </div>
                 </div>
                 <button onclick="openExitModal()"
-                    class="bg-white text-orange-600 hover:bg-orange-50 px-4 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex items-center text-sm whitespace-nowrap ml-3">
+                    class="bg-primary text-black hover:opacity-90 px-5 py-2.5 rounded-xl font-black shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center text-xs uppercase tracking-widest ml-3">
                     <span class="material-symbols-outlined mr-1.5 text-base">logout</span>
                     Finalizar
                 </button>
@@ -319,10 +364,10 @@
         <!-- ═══════════════════════════════════════════════ -->
         <div id="main-content" class="hidden animate-slide-up">
             <!-- Contenido del panel (se inyecta por JS según rol) -->
-            <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-                <div id="content-placeholder" class="text-center py-8 text-gray-400">
-                    <span class="material-symbols-outlined text-4xl mb-2">hourglass_top</span>
-                    <p class="text-sm">Cargando módulo...</p>
+            <div class="bg-white/5 backdrop-blur-xl rounded-2xl shadow-2xl p-6 border border-white/10">
+                <div id="content-placeholder" class="text-center py-8 text-slate-500">
+                    <span class="material-symbols-outlined text-4xl mb-2 text-primary">hourglass_top</span>
+                    <p class="text-sm font-medium">Cargando módulo seguro...</p>
                 </div>
             </div>
         </div>
@@ -331,29 +376,31 @@
         <!-- MODAL DE SALIDA                                -->
         <!-- ═══════════════════════════════════════════════ -->
         <div id="exit-modal"
-            class="fixed inset-0 bg-black/60 z-[60] flex items-end sm:items-center justify-center hidden backdrop-blur-sm"
+            class="fixed inset-0 bg-black/80 z-[60] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
             onclick="if(event.target===this) closeExitModal()">
             <div
-                class="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden animate-slide-up">
+                class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden animate-slide-up border border-white/10">
                 <!-- Handle bar (mobile) -->
                 <div class="sm:hidden flex justify-center pt-3 pb-1">
-                    <div class="w-10 h-1 bg-gray-300 rounded-full"></div>
+                    <div class="w-10 h-1 bg-white/20 rounded-full"></div>
                 </div>
 
                 <!-- Header del modal -->
                 <div class="px-6 pt-5 pb-4 text-center">
-                    <div class="inline-flex items-center justify-center w-14 h-14 bg-orange-100 rounded-2xl mb-3">
-                        <span class="material-symbols-outlined text-3xl text-orange-500">waving_hand</span>
+                    <div
+                        class="inline-flex items-center justify-center w-14 h-14 bg-primary/10 rounded-2xl mb-3 border border-primary/20">
+                        <span class="material-symbols-outlined text-3xl text-primary">waving_hand</span>
                     </div>
-                    <h3 class="text-xl font-bold text-gray-800">Finalizar Jornada</h3>
-                    <p class="text-gray-400 text-sm mt-1">Capture su foto de salida para cerrar el registro</p>
+                    <h3 class="text-xl font-bold text-white tracking-tight">Finalizar Jornada</h3>
+                    <p class="text-slate-400 text-sm mt-1 font-medium italic">Capture su foto de salida para concluir
+                    </p>
                 </div>
 
                 <div class="px-6 pb-6">
                     <!-- Preview de la foto capturada -->
                     <div id="exit-preview-container"
-                        class="hidden mb-4 rounded-xl overflow-hidden shadow-md border-2 border-green-200 relative">
-                        <img id="exit-img-preview" src="" class="w-full h-48 object-cover">
+                        class="hidden mb-4 rounded-xl overflow-hidden shadow-2xl border-2 border-primary/30 relative aspect-video">
+                        <img id="exit-img-preview" src="" class="w-full h-full object-cover">
                         <div
                             class="absolute bottom-2 right-2 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center">
                             <span class="material-symbols-outlined text-xs mr-0.5">check_circle</span> Lista
@@ -362,11 +409,13 @@
 
                     <!-- Botón de captura -->
                     <label for="exit-foto" id="exit-foto-label"
-                        class="cursor-pointer border-2 border-dashed border-gray-200 rounded-xl p-5 flex flex-col items-center hover:border-orange-300 hover:bg-orange-50/50 transition-all group mb-5">
-                        <div class="bg-orange-100 p-3 rounded-full group-hover:scale-110 transition-transform">
-                            <span class="material-symbols-outlined text-2xl text-orange-500">add_a_photo</span>
+                        class="cursor-pointer border-2 border-dashed border-white/10 rounded-xl p-5 flex flex-col items-center hover:border-primary/50 hover:bg-white/5 transition-all group mb-5">
+                        <div
+                            class="bg-primary/10 p-3 rounded-full group-hover:scale-110 transition-transform border border-primary/20">
+                            <span class="material-symbols-outlined text-2xl text-primary">add_a_photo</span>
                         </div>
-                        <span class="mt-2 text-xs font-bold text-gray-500 uppercase">Toque para capturar</span>
+                        <span class="mt-2 text-xs font-bold text-slate-400 uppercase tracking-widest">Toque para
+                            capturar</span>
                         <input type="file" id="exit-foto" accept="image/*" capture="camera" class="hidden"
                             onchange="previewSalida(this)">
                     </label>
@@ -374,11 +423,11 @@
                     <!-- Botones de acción -->
                     <div class="flex space-x-3">
                         <button onclick="closeExitModal()"
-                            class="flex-1 py-3.5 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition text-sm border border-gray-200">Cancelar</button>
+                            class="flex-1 py-3.5 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">Cancelar</button>
                         <button onclick="submitSalida()" id="btn-submit-salida"
-                            class="flex-1 py-3.5 bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 hover:from-orange-600 hover:to-red-600 transition-all active:scale-[0.98] flex items-center justify-center text-sm">
+                            class="flex-1 py-3.5 bg-primary text-black font-black rounded-xl shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-[0.98] flex items-center justify-center text-sm uppercase tracking-widest">
                             <span id="exit-spinner"
-                                class="hidden animate-spin mr-2 border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
+                                class="hidden animate-spin mr-2 border-2 border-black border-t-transparent rounded-full w-4 h-4"></span>
                             <span class="material-symbols-outlined text-base mr-1">logout</span>
                             Confirmar Salida
                         </button>
@@ -425,11 +474,12 @@
 
             var tpl = document.getElementById(tplId);
             if (tpl && mainContent) {
-                var contentDiv = mainContent.querySelector('.bg-white.rounded-xl');
+                // Buscamos cualquier contenedor que tenga backdrop-blur-xl (nuestra nueva clase global)
+                var contentDiv = mainContent.querySelector('.backdrop-blur-xl');
                 if (contentDiv) {
                     contentDiv.innerHTML = tpl.innerHTML;
                 } else {
-                    mainContent.innerHTML += tpl.innerHTML;
+                    mainContent.innerHTML = '<div class="bg-white/5 backdrop-blur-xl rounded-2xl shadow-2xl p-6 border border-white/10">' + tpl.innerHTML + '</div>';
                 }
                 var loginLink = document.getElementById('error-login-link');
                 if (loginLink && SERVER_URL) {
@@ -444,9 +494,10 @@
     <?!= include('App.js'); ?>
 
     <!-- Footer -->
-    <footer class="bg-gray-800 text-white p-3 text-center text-xs mt-auto">
-        <p>&copy; 2026 ITELSA IA - SaaS SST White-Label Solutions</p>
-        <p class="mt-0.5 text-gray-400">Powered by Google Cloud & AI Engine</p>
+    <footer
+        class="bg-[#101922]/90 backdrop-blur-md text-white p-6 text-center text-[10px] mt-auto border-t border-white/5">
+        <p class="font-bold uppercase tracking-[0.2em] text-slate-500 mb-1">Desarrollado por ITELSA IA</p>
+        <p class="text-primary font-bold">Powered by Google Cloud & Gemini AI</p>
     </footer>
 
 </body>

@@ -4,6 +4,26 @@
      * Maneja la interacción del formulario de inicio de sesión.
      */
 
+    function showLoginError(msg) {
+        var el = document.getElementById('login-error');
+        var txt = document.getElementById('login-error-msg');
+        if (el && txt) {
+            txt.textContent = msg;
+            el.style.display = 'flex';
+        }
+    }
+
+    function hideLoginError() {
+        var el = document.getElementById('login-error');
+        if (el) el.style.display = 'none';
+    }
+
+    // Auto-ocultar error al escribir
+    ['email', 'password'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', hideLoginError);
+    });
+
     function togglePassword() {
         const passInput = document.getElementById('password');
         const eyeIcon = document.getElementById('eye-icon');
@@ -30,9 +50,17 @@
         btn.disabled = true;
         spinner.classList.remove('hidden');
         btnText.textContent = "VERIFICANDO...";
+        hideLoginError();
+
+        // Timeout: si GAS no responde en 12s, resetear automáticamente
+        var loginTimeout = setTimeout(function () {
+            showLoginError('La conexión tardó demasiado. Verifica tu internet e intenta de nuevo.');
+            resetButton();
+        }, 12000);
 
         google.script.run
             .withSuccessHandler(function (response) {
+                clearTimeout(loginTimeout);
                 if (response.status === "success") {
                     // Guardar sesión completa en localStorage para persistencia
                     const userData = {
@@ -69,12 +97,14 @@
                         link.click();
                     }, 500);
                 } else {
-                    alert("❌ " + response.message);
+                    showLoginError(response.message || 'Credenciales incorrectas');
                     resetButton();
                 }
             })
             .withFailureHandler(function (err) {
-                alert("❌ Error crítico: " + err.toString());
+                clearTimeout(loginTimeout);
+                showLoginError('Error de conexión. Intenta de nuevo.');
+                console.error('[SST] Login error:', err);
                 resetButton();
             })
             .validarCredenciales(email, password);
@@ -86,6 +116,6 @@
         const btnText = document.getElementById('btn-text');
         btn.disabled = false;
         spinner.classList.add('hidden');
-        btnText.textContent = "Iniciar Sesión";
+        btnText.textContent = "INICIAR SESIÓN";
     }
 </script>

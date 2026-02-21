@@ -184,16 +184,18 @@
         };
 
         if (rol === 'SUP-SST') {
-            config.msg = `¡Bienvenido, ${nombre}! 👷`;
+            config.msg = `¡Bienvenido/a, ${nombre}! 👷`;
             config.icon = "engineering";
         } else if (rol === 'ADMIN') {
-            config.msg = `Panel Control: ${nombre} 👔`;
+            config.msg = `Bienvenido/a: ${nombre} 👔`;
             config.icon = "query_stats";
         }
 
         if (welcomeMsg) welcomeMsg.textContent = config.msg;
         if (welcomeSub) welcomeSub.textContent = config.sub;
         if (welcomeIcon) welcomeIcon.textContent = config.icon;
+        const mobileGreet = document.getElementById('welcome-message-mobile');
+        if (mobileGreet) mobileGreet.textContent = '¡Hola, ' + nombre + '!';
 
         welcomeSection.classList.remove('hidden');
     }
@@ -203,13 +205,18 @@
         if (!content) return;
         const scriptUrl = window.location.href.split('?')[0];
         content.innerHTML = `
-            <div class="text-center py-10">
-                <span class="material-symbols-outlined text-6xl text-red-500">lock</span>
-                <h3 class="text-2xl font-bold text-gray-800 mt-4">Acceso Restringido</h3>
-                <p class="text-gray-500 mt-2">${msj}</p>
-                <a href="${scriptUrl}" class="mt-6 inline-block bg-primary text-white px-6 py-2 rounded-lg font-bold hover:opacity-90 transition">
-                    Ir al Login
-                </a>
+            <div class="flex flex-col items-center justify-center py-12 px-4 animate-fade-in">
+                <div class="bg-white/5 backdrop-blur-xl rounded-3xl p-10 border border-white/10 shadow-2xl max-w-sm w-full text-center">
+                    <div class="w-20 h-20 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-red-500/20">
+                        <span class="material-symbols-outlined text-5xl text-red-500">lock</span>
+                    </div>
+                    <h3 class="text-2xl font-black text-white tracking-tight mb-2 uppercase">Acceso Restringido</h3>
+                    <p class="text-slate-400 font-medium mb-8 leading-relaxed">${msj}</p>
+                    <a href="${scriptUrl}" 
+                       class="block w-full bg-primary text-black py-4 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95">
+                        Ir al Login
+                    </a>
+                </div>
             </div>
         `;
         content.classList.remove('hidden');
@@ -417,15 +424,21 @@
      */
     function mostrarNotificacion(mensaje, tipo) {
         const toast = document.createElement('div');
-        toast.className = `fixed top-4 right-4 z-[100] px-6 py-3 rounded-xl shadow-2xl text-white font-bold text-sm animate-slide-up ${tipo === 'success' ? 'bg-green-500' : 'bg-red-500'
+        toast.className = `fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border font-bold text-xs uppercase tracking-widest animate-slide-up flex items-center space-x-3 min-w-[300px] justify-center ${tipo === 'success'
+            ? 'bg-green-500/10 border-green-500/20 text-green-400'
+            : 'bg-red-500/10 border-red-500/20 text-red-400'
             }`;
-        toast.textContent = mensaje;
+
+        const icon = tipo === 'success' ? 'check_circle' : 'error';
+        toast.innerHTML = `<span class="material-symbols-outlined text-lg">${icon}</span><span>${mensaje}</span>`;
+
         document.body.appendChild(toast);
         setTimeout(() => {
             toast.style.opacity = '0';
-            toast.style.transition = 'opacity 0.5s';
+            toast.style.transform = 'translate(-50%, 20px)';
+            toast.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
             setTimeout(() => toast.remove(), 500);
-        }, 3000);
+        }, 3500);
     }
 
     // ================================================================

@@ -4,10 +4,17 @@
 <style>
   /* Variables base de CSS que Tailwind consumirá */
   :root {
-    --color-primario: #1E3A8A;
-    /* Valor por defecto */
-    --color-acento: #F59E0B;
-    /* Valor por defecto */
+    --color-primario: #C5A048;
+    /* Dorado */
+    --color-acento: #D4AF37;
+    /* Oro viejo */
+    --color-fondo: #101922;
+    /* Negro/Oscuro */
+  }
+
+  /* Forzar esquema oscuro para componentes del navegador */
+  html {
+    color-scheme: dark;
   }
 
   /* Clases de utilidad vinculadas a las variables dinámicas */
@@ -31,8 +38,18 @@
     color: var(--color-acento);
   }
 
+  /* Glassmorphism utility */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
   /* Animaciones suaves para el cambio de marca */
   body {
+    background-color: var(--color-fondo);
+    color: #f8fafc;
     transition: background-color 0.5s ease, color 0.5s ease;
   }
 
@@ -51,5 +68,33 @@
 
   .animate-fade-in {
     animation: fadeIn 0.8s ease-out forwards;
+  }
+
+  /* Selectores nativos — fondo oscuro sólido para que las opciones sean legibles */
+  select {
+    color-scheme: dark;
+    background-color: #1a242f !important;
+    color: #f8fafc !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  select option,
+  select optgroup {
+    background-color: #1a242f !important;
+    color: #f8fafc !important;
+  }
+
+  select option:hover,
+  select option:checked {
+    background-color: #243041 !important;
+    color: #C5A048 !important;
+  }
+
+  /* Placeholder de carga */
+  #content-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
   }
 </style>

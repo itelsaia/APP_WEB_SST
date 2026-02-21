@@ -3,173 +3,288 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport" />
     <title>Login | SaaS SST</title>
     <style>
         :root {
-            --color-primario: <?=config.COLOR_PRIMARIO || '#1E3A8A' ?>;
-            --color-acento: <?=config.COLOR_ACENTO || '#F59E0B' ?>;
+            --color-primario: <?=config.COLOR_PRIMARIO || '#C5A048' ?>;
+            --color-acento: <?=config.COLOR_ACENTO || '#D4AF37' ?>;
+            --color-fondo: <?=config.COLOR_FONDO || '#101922' ?>;
         }
-    </style>
-    <?!= include('Styles'); ?>
-    <link href="https://fonts.googleapis.com" rel="preconnect" />
-    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-        rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script>
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "primary": "<?= config.COLOR_PRIMARIO || '#C5A048' ?>",
-                        "primary-hover": "<?= config.COLOR_PRIMARIO || '#b08d3e' ?>",
-                        "background-light": "#f6f7f8",
-                        "background-dark": "#101922",
-                    },
-                    fontFamily: {
-                        "display": ["Inter", "sans-serif"]
-                    },
-                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
-                },
-            },
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
-    </script>
-    <style>
+
+        html {
+            color-scheme: dark;
+            height: 100%;
+        }
+
         body {
+            background-color: var(--color-fondo);
+            font-family: 'Inter', sans-serif;
             min-height: 100dvh;
-            overflow-x: hidden;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            /* NO scroll en mobile */
+            position: relative;
+            color: #f8fafc;
         }
 
-        ::-webkit-scrollbar {
-            width: 8px;
+        /* Blobs decorativos */
+        .blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
         }
 
-        ::-webkit-scrollbar-track {
-            background: #101922;
+        .blob-1 {
+            width: 320px;
+            height: 320px;
+            top: -10%;
+            right: -8%;
+            background: var(--color-primario);
+            opacity: .07;
         }
 
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 4px;
+        .blob-2 {
+            width: 240px;
+            height: 240px;
+            bottom: -8%;
+            left: -12%;
+            background: var(--color-acento);
+            opacity: .05;
         }
 
-        ::-webkit-scrollbar-thumb:hover {
-            background: #475569;
-        }
-
-        /* Efecto de cristal para el formulario */
+        /* Card */
         .glass-panel {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, .04);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: 1.25rem;
+        }
+
+        /* Inputs */
+        .field-dark {
+            background: rgba(255, 255, 255, .05);
+            border: 1px solid rgba(255, 255, 255, .10);
+            color: #f8fafc;
+            border-radius: .75rem;
+            transition: border-color .2s, box-shadow .2s;
+            width: 100%;
+            padding: .75rem .75rem .75rem 2.75rem;
+            font-size: .9rem;
+            font-family: inherit;
+        }
+
+        .field-dark:focus {
+            outline: none;
+            border-color: var(--color-primario);
+            box-shadow: 0 0 0 3px rgba(197, 160, 72, .15);
+        }
+
+        .field-dark::placeholder {
+            color: rgba(248, 250, 252, .35);
+        }
+
+        /* Error toast */
+        #login-error {
+            display: none;
+            background: rgba(239, 68, 68, .12);
+            border: 1px solid rgba(239, 68, 68, .35);
+            border-radius: .75rem;
+            padding: .7rem 1rem;
+            font-size: .82rem;
+            font-weight: 600;
+            color: #fca5a5;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        /* Links */
+        .link-gold {
+            color: var(--color-primario);
+            font-weight: 700;
+            text-decoration: none;
+            transition: opacity .2s;
+            font-size: .8rem;
+        }
+
+        .link-gold:hover {
+            opacity: .75;
+            text-decoration: underline;
+        }
+
+        /* Animate */
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-in {
+            animation: fadeUp .5s ease-out both;
         }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@400,0&display=swap"
+        rel="stylesheet" />
+    <?!= include('Styles'); ?>
 </head>
 
-<body
-    class="bg-background-light dark:bg-background-dark font-display antialiased min-h-screen relative flex flex-col justify-center">
-    <!-- Fondos decorativos difuminados -->
-    <div
-        class="fixed top-[-20%] right-[-10%] w-[400px] h-[400px] bg-primary/10 rounded-full blur-[100px] pointer-events-none">
-    </div>
-    <div
-        class="fixed bottom-[-10%] left-[-20%] w-[300px] h-[300px] bg-yellow-600/5 rounded-full blur-[80px] pointer-events-none">
-    </div>
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
 
-    <div class="relative w-full max-w-md mx-auto px-6 py-4 flex flex-col z-10 transition-all duration-500 scale-100 opacity-100"
-        id="login-container">
+    <!-- LOGIN CONTAINER — ancho máx 400px, sin scroll -->
+    <div id="login-container" class="relative z-10 w-full animate-in" style="max-width:400px; padding:1.25rem;">
 
-        <!-- Logo y Cabecera -->
-        <div class="flex flex-col items-center mb-6 text-center">
-            <div
-                class="w-28 h-28 rounded-xl bg-white dark:bg-slate-800/50 flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden group hover:scale-105 transition-transform">
-                <? if (config.URL_LOGO) { ?>
-                <img id="login-logo" src="<?= config.URL_LOGO ?>" alt="Logo" class="w-full h-full object-cover">
+        <!-- Logo + Título -->
+        <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:1.2rem; text-align:center;">
+
+            <!-- Logo box 72×72 -->
+            <div style="
+                width:72px; height:72px; border-radius:1rem; overflow:hidden;
+                border:2px solid var(--color-primario);
+                background:rgba(255,255,255,.05);
+                box-shadow:0 0 32px rgba(197,160,72,.18);
+                display:flex; align-items:center; justify-content:center;
+                margin-bottom:.9rem; flex-shrink:0;">
+                <? var rawLogoUrl = config.URL_LOGO || ''; ?>
+                <? var logoValido  = rawLogoUrl && rawLogoUrl.indexOf('placeholder') === -1 && rawLogoUrl.trim() !== ''; ?>
+                <? if (logoValido) { ?>
+                <?
+                        // Extraer file ID para thumbnail (más confiable que uc?export=view)
+                        var driveMatch = rawLogoUrl.match(/\/d\/([a-zA-Z0-9_\-]+)/);
+                        var driveId    = driveMatch ? driveMatch[1] : null;
+                        var thumbUrl   = driveId
+                            ? 'https://drive.google.com/thumbnail?id=' + driveId + '&sz=w200'
+                            : rawLogoUrl;
+                    ?>
+                <img id="login-logo" src="<?= thumbUrl ?>" alt="<?= config.NOMBRE_EMPRESA || 'Logo' ?>"
+                    style="width:100%; height:100%; object-fit:cover;" data-raw="<?= rawLogoUrl ?>"
+                    data-drive-id="<?= driveId || '' ?>" data-retry="0" onerror="(function(img){
+                           var id    = img.getAttribute('data-drive-id');
+                           var raw   = img.getAttribute('data-raw');
+                           var retry = parseInt(img.getAttribute('data-retry')||'0');
+                           img.setAttribute('data-retry', retry+1);
+                           if (retry===0 && id)       { img.src='https://drive.google.com/uc?export=view&id='+id; }
+                           else if (retry===1 && id)  { img.src='https://lh3.googleusercontent.com/d/'+id; }
+                           else if (retry===2 && raw) { img.src=raw; }
+                           else {
+                             img.style.display='none';
+                             var fb=document.getElementById('logo-fallback');
+                             if(fb){ fb.style.display='flex'; }
+                           }
+                         })(this);" />
+                <span id="logo-fallback" class="material-symbols-outlined"
+                    style="color:var(--color-primario); font-size:44px; display:none;">security</span>
                 <? } else { ?>
-                <span class="material-symbols-outlined text-[64px] text-primary">security</span>
+                <span class="material-symbols-outlined"
+                    style="color:var(--color-primario); font-size:44px;">security</span>
                 <? } ?>
             </div>
-            <h1 class="text-slate-900 dark:text-slate-100 text-3xl font-bold tracking-tight mb-2 uppercase">GESTION STT
-            </h1>
-            <p class="text-slate-500 dark:text-slate-400 text-base">Inicie sesión para acceder a <span
-                    class="text-primary font-semibold">
+
+            <h1
+                style="font-size:1.6rem; font-weight:900; letter-spacing:-.02em; color:#fff; text-transform:uppercase; margin-bottom:.3rem;">
+                GESTION STT</h1>
+            <p style="font-size:.82rem; color:rgba(248,250,252,.55); font-weight:500;">
+                Inicie sesión para acceder a
+                <span style="color:var(--color-primario); font-weight:800;">
                     <?= config.NOMBRE_EMPRESA || 'SECURITY WORK S&M' ?>
-                </span></p>
+                </span>
+            </p>
         </div>
 
-        <!-- Formulario de Login -->
-        <form class="flex flex-col gap-5" id="login-form">
-            <!-- Email -->
-            <div class="flex flex-col gap-2">
-                <label class="text-slate-700 dark:text-slate-300 text-sm font-medium" for="email">Correo
-                    electrónico</label>
-                <div class="relative group">
-                    <div
-                        class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
-                        <span class="material-symbols-outlined text-[20px]">mail</span>
+        <!-- Form card -->
+        <div class="glass-panel" style="padding:1.4rem;">
+            <form id="login-form" style="display:flex; flex-direction:column; gap:.9rem;">
+
+                <!-- Error toast (oculto por defecto) -->
+                <div id="login-error"
+                    style="display:none; background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.35); border-radius:.75rem; padding:.6rem .9rem; font-size:.82rem; font-weight:600; color:#fca5a5; align-items:center; gap:.5rem;">
+                    <span class="material-symbols-outlined" style="font-size:18px; flex-shrink:0;">error</span>
+                    <span id="login-error-msg">Error</span>
+                </div>
+
+                <!-- Email -->
+                <div>
+                    <label
+                        style="font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--color-primario); opacity:.85; display:block; margin-bottom:.4rem;"
+                        for="email">Correo electrónico</label>
+                    <div style="position:relative;">
+                        <span class="material-symbols-outlined"
+                            style="position:absolute; left:.75rem; top:50%; transform:translateY(-50%); font-size:18px; color:var(--color-primario); opacity:.7; pointer-events:none;">mail</span>
+                        <input type="email" id="email" required autocomplete="email" placeholder="usuario@ejemplo.com"
+                            class="field-dark" />
                     </div>
-                    <input autocomplete="email" required
-                        class="block w-full rounded-xl border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/40 backdrop-blur-sm pl-11 pr-4 py-3.5 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
-                        id="email" placeholder="usuario@ejemplo.com" type="email" />
                 </div>
-            </div>
 
-            <!-- Password -->
-            <div class="flex flex-col gap-2">
-                <div class="flex justify-between items-center">
-                    <label class="text-slate-700 dark:text-slate-300 text-sm font-medium"
-                        for="password">Contraseña</label>
-                    <a class="text-primary hover:text-primary-hover text-sm font-medium transition-colors"
-                        href="#">¿Olvidaste tu contraseña?</a>
-                </div>
-                <div class="relative group">
-                    <div
-                        class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
-                        <span class="material-symbols-outlined text-[20px]">lock</span>
+                <!-- Password -->
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.4rem;">
+                        <label
+                            style="font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--color-primario); opacity:.85;"
+                            for="password">Contraseña</label>
+                        <a href="#" class="link-gold" style="opacity:.7;">¿Olvidaste tu contraseña?</a>
                     </div>
-                    <input autocomplete="current-password" required
-                        class="block w-full rounded-xl border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/40 backdrop-blur-sm pl-11 pr-12 py-3.5 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
-                        id="password" placeholder="••••••••" type="password" />
-                    <button
-                        class="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                        type="button" onclick="togglePassword()">
-                        <span class="material-symbols-outlined text-[20px]" id="eye-icon">visibility_off</span>
-                    </button>
+                    <div style="position:relative;">
+                        <span class="material-symbols-outlined"
+                            style="position:absolute; left:.75rem; top:50%; transform:translateY(-50%); font-size:18px; color:var(--color-primario); opacity:.7; pointer-events:none;">lock</span>
+                        <input type="password" id="password" required autocomplete="current-password"
+                            placeholder="••••••••" class="field-dark" style="padding-right:3rem;" />
+                        <button type="button" onclick="togglePassword()"
+                            style="position:absolute; right:.75rem; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--color-primario); display:flex; align-items:center;">
+                            <span class="material-symbols-outlined" id="eye-icon"
+                                style="font-size:18px;">visibility_off</span>
+                        </button>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Botón Login -->
-            <button
-                class="w-full bg-primary hover:opacity-90 text-white font-semibold py-4 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-primary/20 mt-2 flex justify-center items-center"
-                id="btn-login" type="submit">
-                <span id="btn-text">Iniciar Sesión</span>
-                <div id="login-spinner"
-                    class="hidden ml-3 h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent">
-                </div>
-            </button>
-        </form>
+                <!-- Submit -->
+                <button type="submit" id="btn-login"
+                    style="background:var(--color-primario); box-shadow:0 6px 24px rgba(197,160,72,.30); color:#000; border:none; border-radius:.75rem; padding:.9rem; font-size:.9rem; font-weight:900; text-transform:uppercase; letter-spacing:.1em; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:.5rem; width:100%; transition:opacity .2s, transform .1s; margin-top:.15rem;">
+                    <span id="login-spinner" class="hidden animate-spin"
+                        style="border:2px solid #000; border-top-color:transparent; border-radius:50%; width:18px; height:18px;"></span>
+                    <span class="material-symbols-outlined" style="font-size:20px;">login</span>
+                    <span id="btn-text">INICIAR SESIÓN</span>
+                </button>
+            </form>
+        </div>
 
-
-        <p class="text-center text-slate-500 dark:text-slate-400 text-sm mt-4">
-            ¿No tienes una cuenta?
-            <a class="text-primary font-semibold hover:underline" href="#">Regístrate</a>
-        </p>
-
-        <!-- Footer Informativo -->
-        <div class="mt-6 text-center">
-            <p class="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-widest font-bold">Desarrollado por
-                ITELSA IA</p>
+        <!-- Registrar / Footer -->
+        <div style="text-align:center; margin-top:.9rem;">
+            <p style="font-size:.8rem; color:rgba(248,250,252,.45);">
+                ¿No tienes una cuenta?
+                <a href="#" onclick="showRegister()" class="link-gold" style="margin-left:4px;">Regístrate</a>
+            </p>
+            <p
+                style="font-size:.65rem; letter-spacing:.12em; color:rgba(248,250,252,.2); text-transform:uppercase; font-weight:700; margin-top:.5rem;">
+                Desarrollado por ITELSA IA</p>
         </div>
     </div>
 
-    <!-- URL real del deployment de GAS (inyectada por el servidor) -->
     <script>
         var SCRIPT_URL = '<?= scriptUrl || "" ?>';
-        console.log('[SST-Login] URL del script:', SCRIPT_URL);
     </script>
     <?!= include('Login.js'); ?>
 </body>

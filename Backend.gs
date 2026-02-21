@@ -157,54 +157,73 @@ function obtenerClientesRegistrados() {
 
 /**
  * Valida las credenciales del usuario contra la hoja DB_USUARIOS.
+ * Usa CacheService para evitar leer el spreadsheet en cada intento.
  * @param {String} email Correo del usuario.
  * @param {String} password Contraseña ingresada.
  * @return {Object} Resultado con datos del usuario o error.
  */
 function validarCredenciales(email, password) {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const hoja = ss.getSheetByName('DB_USUARIOS');
-    
-    if (!hoja) {
-      return { status: "error", message: "La hoja DB_USUARIOS no existe." };
+    // ── Intentar leer desde cache ────────────────────────────────────
+    const cache     = CacheService.getScriptCache();
+    const CACHE_KEY = 'db_usuarios_v1';
+    let   usuarios  = null;
+
+    const cached = cache.get(CACHE_KEY);
+    if (cached) {
+      try { usuarios = JSON.parse(cached); } catch(e) { usuarios = null; }
     }
-    
-    const datos = hoja.getDataRange().getValues();
-    
-    // Buscar el usuario por email (columna A)
-    for (let i = 1; i < datos.length; i++) {
-      const dbEmail = datos[i][0];
-      const dbPass = datos[i][3]; // Columna D (Pasword)
-      const dbEstado = (datos[i][5] || "").toString().toLowerCase(); // Columna F (Estado)
-      
-      if (dbEmail === email) {
-        if (dbEstado !== 'activo') {
-          return { status: "error", message: "Usuario inactivo. Contacte al administrador." };
+
+    // ── Cache miss: leer hoja y guardar ─────────────────────────────
+    if (!usuarios) {
+      const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+      const hoja = ss.getSheetByName('DB_USUARIOS');
+      if (!hoja) return { status: 'error', message: 'La hoja DB_USUARIOS no existe.' };
+
+      const datos = hoja.getDataRange().getValues();
+      usuarios    = [];
+      for (let i = 1; i < datos.length; i++) {
+        usuarios.push({
+          email:     (datos[i][0] || '').toString().trim().toLowerCase(),
+          nombre:    datos[i][1],
+          rol:       datos[i][2],
+          password:  (datos[i][3] || '').toString(),
+          idCliente: datos[i][4] || '',
+          estado:    (datos[i][5] || '').toString().toLowerCase()
+        });
+      }
+      // Guardar por 5 minutos (300s)
+      cache.put(CACHE_KEY, JSON.stringify(usuarios), 300);
+    }
+
+    // ── Buscar usuario ───────────────────────────────────────────────
+    const emailLower = (email || '').toString().trim().toLowerCase();
+    for (let i = 0; i < usuarios.length; i++) {
+      const u = usuarios[i];
+      if (u.email === emailLower) {
+        if (u.estado !== 'activo') {
+          return { status: 'error', message: 'Usuario inactivo. Contacte al administrador.' };
         }
-        
-        if (dbPass.toString() === password.toString()) {
-          // Éxito: devolver datos básicos (sin password)
+        if (u.password === password.toString()) {
           return {
-            status: "success",
+            status: 'success',
             data: {
-              email: dbEmail,
-              nombre: datos[i][1],
-              rol: datos[i][2],
-              idCliente: datos[i][4],
-              codigo: datos[i][4] || "" // Usar Columna E (ej: SUP-001) como código
+              email:     u.email,
+              nombre:    u.nombre,
+              rol:       u.rol,
+              idCliente: u.idCliente,
+              codigo:    u.idCliente || ''
             }
           };
-        } else {
-          return { status: "error", message: "Contraseña incorrecta." };
         }
+        return { status: 'error', message: 'Contraseña incorrecta.' };
       }
     }
-    
-    return { status: "error", message: "Usuario no encontrado." };
-    
+    return { status: 'error', message: 'Usuario no encontrado.' };
+
   } catch (e) {
-    return { status: "error", message: "Error en validación: " + e.toString() };
+    Logger.log('Error en validarCredenciales: ' + e.toString());
+    return { status: 'error', message: 'Error en validación: ' + e.toString() };
   }
 }
 
