@@ -86,15 +86,14 @@
         <!-- Logo y Cabecera -->
         <div class="flex flex-col items-center mb-10 text-center">
             <div
-                class="w-32 h-32 rounded-2xl bg-white dark:bg-slate-800/50 flex items-center justify-center mb-6 border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden p-3 group hover:scale-105 transition-transform">
+                class="w-32 h-32 rounded-xl bg-white dark:bg-slate-800/50 flex items-center justify-center mb-6 border border-slate-200 dark:border-slate-700/50 shadow-sm overflow-hidden group hover:scale-105 transition-transform">
                 <? if (config.URL_LOGO) { ?>
-                <img id="login-logo" src="<?= config.URL_LOGO ?>" alt="Logo"
-                    class="max-h-full max-w-full object-contain">
+                <img id="login-logo" src="<?= config.URL_LOGO ?>" alt="Logo" class="w-full h-full object-cover">
                 <? } else { ?>
                 <span class="material-symbols-outlined text-[64px] text-primary">security</span>
                 <? } ?>
             </div>
-            <h1 class="text-slate-900 dark:text-slate-100 text-3xl font-bold tracking-tight mb-2">Bienvenido de nuevo
+            <h1 class="text-slate-900 dark:text-slate-100 text-3xl font-bold tracking-tight mb-2 uppercase">GESTION STT
             </h1>
             <p class="text-slate-500 dark:text-slate-400 text-base">Inicie sesión para acceder a <span
                     class="text-primary font-semibold">
