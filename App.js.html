@@ -8,7 +8,9 @@
 
     let currentUser = null;
     let archivoBase64 = null;
-    let nombreArchivo = "";
+    let nombreArchivo = '';
+    let _obraSeleccionada = ''; // Obra elegida en el formulario de jornada
+    let _clientesCargados = false; // Flag: ¿ya se cargó el select de clientes?
 
     window.addEventListener('load', function () {
         verificarSesion();
@@ -292,25 +294,32 @@
      */
     function verificarEstadoAsistencia() {
         if (!currentUser || !currentUser.email) return;
-        console.log("[SST] Verificando estado de asistencia para:", currentUser.email);
+        console.log('[SST] Verificando estado de asistencia para:', currentUser.email);
 
         google.script.run
             .withSuccessHandler(function (response) {
-                console.log("[SST] Respuesta de obtenerEstadoAsistencia:", JSON.stringify(response));
+                console.log('[SST] Respuesta de obtenerEstadoAsistencia:', JSON.stringify(response));
                 const exitSection = document.getElementById('exit-section');
 
-                if (response.status === "success" && response.data && response.data.activo) {
-                    console.log("[SST] ✅ Jornada ACTIVA detectada — mostrando panel de trabajo");
+                if (response.status === 'success' && response.data && response.data.activo) {
+                    console.log('[SST] ✅ Jornada ACTIVA detectada — mostrando panel de trabajo');
+                    // Recuperar la obra activa para bloquear el formulario de inspección
+                    if (response.data.obra) {
+                        _obraSeleccionada = response.data.obra;
+                        console.log('[SST] Obra activa recuperada del servidor:', _obraSeleccionada);
+                    }
                     switchModule('inspeccion');
                     if (exitSection) exitSection.classList.remove('hidden');
+                    // Intentar bloquear (puede que los clientes ya hayan cargado)
+                    _intentarBloqueoEmpresa();
                 } else {
-                    console.log("[SST] ⏳ Sin jornada activa — mostrando registro de entrada");
+                    console.log('[SST] ⏳ Sin jornada activa — mostrando registro de entrada');
                     switchModule('asistencia');
                     if (exitSection) exitSection.classList.add('hidden');
                 }
             })
             .withFailureHandler(function (err) {
-                console.error("[SST] Error verificando asistencia:", err);
+                console.error('[SST] Error verificando asistencia:', err);
                 switchModule('asistencia');
             })
             .obtenerEstadoAsistencia(currentUser.email);
@@ -375,14 +384,14 @@
 
             google.script.run
                 .withSuccessHandler(function (res) {
-                    console.log("[SST] Respuesta registrarIngreso:", JSON.stringify(res));
+                    console.log('[SST] Respuesta registrarIngreso:', JSON.stringify(res));
 
-                    if (res.status === "success") {
-                        // ═══════════════════════════════════════
-                        // FIX: Redirección DIRECTA al panel de trabajo
-                        // No esperamos otra llamada al servidor.
-                        // ═══════════════════════════════════════
-                        console.log("[SST] ✅ Entrada registrada. Redirigiendo al panel de trabajo...");
+                    if (res.status === 'success') {
+                        // Guardar la obra seleccionada para pre-rellenar el formulario de inspección
+                        _obraSeleccionada = obraSelect
+                            ? obraSelect.options[obraSelect.selectedIndex].text
+                            : '';
+                        console.log('[SST] Obra guardada:', _obraSeleccionada);
 
                         // Limpiar formulario
                         archivoBase64 = null;
@@ -396,8 +405,11 @@
                         const exitSection = document.getElementById('exit-section');
                         if (exitSection) exitSection.classList.remove('hidden');
 
+                        // Bloquear el campo empresa con la obra seleccionada
+                        _intentarBloqueoEmpresa();
+
                         // Notificación amigable (no bloqueante)
-                        mostrarNotificacion("✅ " + res.message, "success");
+                        mostrarNotificacion('✅ ' + res.message, 'success');
                     } else {
                         alert("⚠️ " + res.message);
                     }
@@ -571,17 +583,111 @@
     function llenarClientes(response) {
         const select = document.getElementById('idCliente');
         if (!select) return;
-        if (response.status === "success") {
+        if (response.status === 'success') {
             select.innerHTML = '<option value="">Seleccione la empresa...</option>';
-            response.data.forEach(clie => {
+            response.data.forEach(function (clie) {
                 const opt = document.createElement('option');
                 opt.value = clie.id;
                 opt.textContent = clie.nombre;
                 select.appendChild(opt);
             });
+            _clientesCargados = true;
+            // Intentar bloquear (puede que la obra ya se haya detectado)
+            _intentarBloqueoEmpresa();
         } else {
             select.innerHTML = '<option value="">Error al cargar clientes</option>';
         }
+    }
+
+    /**
+     * Coordinador: bloquea el campo empresa SOLO cuando ya se
+     * cargaron los clientes Y se conoce la obra de la jornada activa.
+     * Resuelve la race-condition entre llenarClientes() y verificarEstadoAsistencia().
+     */
+    function _intentarBloqueoEmpresa() {
+        if (!_obraSeleccionada || !_clientesCargados) return;
+        var select = document.getElementById('idCliente');
+        if (!select) return;
+
+        // Primero auto-seleccionar la opción correcta
+        var obraLower = _obraSeleccionada.trim().toLowerCase();
+        for (var i = 0; i < select.options.length; i++) {
+            if (select.options[i].text.trim().toLowerCase() === obraLower) {
+                select.selectedIndex = i;
+                console.log('[SST] Obra auto-seleccionada:', _obraSeleccionada);
+                break;
+            }
+        }
+        // Ahora bloquear visualmente
+        bloquearCampoEmpresa(select);
+    }
+
+    /**
+     * Reemplaza el select de empresa/proyecto por un campo bloqueado.
+     * Garantiza que cada hallazgo quede vinculado a la obra de la jornada activa.
+     */
+    function bloquearCampoEmpresa(select) {
+        if (!select) select = document.getElementById('idCliente');
+        if (!select) return;
+
+        var id = select.value;
+        var texto = select.options[select.selectedIndex]
+            ? select.options[select.selectedIndex].text
+            : _obraSeleccionada;
+
+        // Contenedor padre del select
+        var wrapper = select.parentNode;
+
+        // Ocultar el select original (no disabled, para que siga siendo accesible por JS)
+        select.style.display = 'none';
+
+        // Ocultar botón "Actualizar" (innecesario cuando está bloqueado)
+        var btnActualizar = wrapper.parentNode
+            ? wrapper.parentNode.querySelector('[onclick="cargarClientes()"]')
+            : null;
+        if (btnActualizar) btnActualizar.style.display = 'none';
+
+        // Insertar campo visual bloqueado (si no existe)
+        var bloqueado = document.getElementById('idCliente-bloqueado');
+        if (!bloqueado) {
+            bloqueado = document.createElement('div');
+            bloqueado.id = 'idCliente-bloqueado';
+            bloqueado.style.cssText = [
+                'display:flex', 'align-items:center', 'gap:.6rem',
+                'background:rgba(197,160,72,.07)',
+                'border:1px solid rgba(197,160,72,.3)',
+                'border-radius:.75rem',
+                'padding:.75rem 1rem',
+                'cursor:not-allowed'
+            ].join(';');
+            bloqueado.innerHTML =
+                '<span class="material-symbols-outlined" style="font-size:18px;color:var(--color-primario);flex-shrink:0;">lock</span>' +
+                '<div style="flex:1;min-width:0;">' +
+                '<p id="idCliente-bloqueado-texto" style="font-size:.9rem;font-weight:700;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + texto + '</p>' +
+                '<p style="font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:rgba(197,160,72,.65);font-weight:700;margin-top:2px;">Fija para esta jornada</p>' +
+                '</div>';
+            wrapper.insertBefore(bloqueado, select);
+        } else {
+            // Actualizar texto si ya existía
+            var t = document.getElementById('idCliente-bloqueado-texto');
+            if (t) t.textContent = texto;
+        }
+
+        // Asegurar que el hidden input exista y tenga el valor correcto
+        var hidden = document.getElementById('idCliente-hidden');
+        if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.id = 'idCliente-hidden';
+            hidden.name = 'idCliente-backup';
+            wrapper.appendChild(hidden);
+        }
+        hidden.value = id;
+
+        // Redirigir la lectura del ID al hidden input desde configurarFormulario()
+        // actualizando el value del select oculto también para que el código existente funcione
+        // (configurarFormulario() lee selectCliente.value que sigue accesible)
+        console.log('[SST] Campo empresa BLOQUEADO. ID:', id, '| Obra:', texto);
     }
 
     function llenarSelectores(response) {
@@ -657,14 +763,18 @@
         const btn = document.getElementById('btn-enviar');
         const spinner = document.getElementById('spinner');
         const btnText = document.getElementById('btn-text');
-        if (response.status === "success") {
-            mostrarNotificacion("✅ " + response.message, "success");
+        if (response.status === 'success') {
+            mostrarNotificacion('✅ ' + response.message, 'success');
             document.getElementById('sst-form').reset();
             const pc = document.getElementById('preview-container');
             if (pc) pc.classList.add('hidden');
             archivoBase64 = null;
+            // Re-bloquear el campo empresa tras el reset() del formulario
+            if (_obraSeleccionada) {
+                setTimeout(function () { bloquearCampoEmpresa(null); }, 50);
+            }
         } else {
-            alert("❌ Error: " + response.message);
+            alert('❌ Error: ' + response.message);
         }
         if (btn) btn.disabled = false;
         if (spinner) spinner.classList.add('hidden');
