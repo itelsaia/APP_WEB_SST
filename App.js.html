@@ -1491,6 +1491,7 @@
             .withSuccessHandler(function(res) {
                 if (res.status === 'success') {
                     _asistenciaTotal = res.data || [];
+                    _poblarSelectsAsistencia(_asistenciaTotal);
                     filtrarAsistencia();
                 } else {
                     mostrarNotificacion('❌ ' + res.message, 'error');
@@ -1504,19 +1505,60 @@
     }
 
     /**
-     * Aplica los filtros de búsqueda (nombre/email) + estado y actualiza la vista.
-     * Recalcula los stats según los datos visibles.
+     * Puebla los <select> de supervisores y obras con los valores únicos del dataset.
+     * Preserva la selección actual si el valor sigue existiendo.
+     */
+    function _poblarSelectsAsistencia(registros) {
+        var selNombre = document.getElementById('asis-filtro-nombre');
+        var selObra   = document.getElementById('asis-filtro-obra');
+        if (!selNombre || !selObra) return;
+
+        var valNombre = selNombre.value;
+        var valObra   = selObra.value;
+
+        // Supervisores únicos ordenados por nombre
+        var supervisores = {};
+        registros.forEach(function(r) {
+            if (r.email) supervisores[r.email] = r.nombre || r.email;
+        });
+        selNombre.innerHTML = '<option value="" style="background:#1a242f;">Todos los supervisores...</option>';
+        Object.keys(supervisores).sort(function(a, b) {
+            return supervisores[a].localeCompare(supervisores[b]);
+        }).forEach(function(email) {
+            var opt = document.createElement('option');
+            opt.value = email;
+            opt.textContent = supervisores[email];
+            opt.style.background = '#1a242f';
+            selNombre.appendChild(opt);
+        });
+
+        // Obras únicas ordenadas alfabéticamente
+        var obras = {};
+        registros.forEach(function(r) { if (r.obra) obras[r.obra] = true; });
+        selObra.innerHTML = '<option value="" style="background:#1a242f;">Todas las obras...</option>';
+        Object.keys(obras).sort(function(a, b) { return a.localeCompare(b); }).forEach(function(obra) {
+            var opt = document.createElement('option');
+            opt.value = obra;
+            opt.textContent = obra;
+            opt.style.background = '#1a242f';
+            selObra.appendChild(opt);
+        });
+
+        // Restaurar selección previa si aún existe
+        if (valNombre) selNombre.value = valNombre;
+        if (valObra)   selObra.value   = valObra;
+    }
+
+    /**
+     * Aplica los filtros de supervisor + obra + estado y actualiza la vista.
      */
     function filtrarAsistencia() {
-        var q     = ((document.getElementById('asis-filtro-nombre') || {}).value || '').trim().toLowerCase();
-        var qObra = ((document.getElementById('asis-filtro-obra')   || {}).value || '').trim().toLowerCase();
+        var emailSel = ((document.getElementById('asis-filtro-nombre') || {}).value || '').trim();
+        var obraSel  = ((document.getElementById('asis-filtro-obra')   || {}).value || '').trim();
 
         var filtrados = _asistenciaTotal.filter(function(r) {
-            var coincideNombre = !q ||
-                r.nombre.toLowerCase().includes(q) ||
-                r.email.toLowerCase().includes(q);
-            var coincideObra   = !qObra ||
-                (r.obra || '').toLowerCase().includes(qObra);
+            var coincideNombre = !emailSel || r.email === emailSel;
+            var coincideObra   = !obraSel  || (r.obra || '') === obraSel;
             var coincideEstado = _filtroEstadoAsist === 'todos' || r.estado === _filtroEstadoAsist;
             return coincideNombre && coincideObra && coincideEstado;
         });

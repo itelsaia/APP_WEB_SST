@@ -49,23 +49,25 @@
 
     <!-- ── FILTROS ────────────────────────────────────────────────── -->
     <div class="flex flex-col sm:flex-row gap-2">
-        <!-- Búsqueda por nombre / email -->
+        <!-- Selector de supervisor SST -->
         <div class="relative flex-1">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none">person_search</span>
-            <input type="text" id="asis-filtro-nombre"
-                placeholder="Buscar por nombre o email..."
-                oninput="filtrarAsistencia()"
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">person_search</span>
+            <select id="asis-filtro-nombre"
+                onchange="filtrarAsistencia()"
                 style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
-                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer">
+                <option value="" style="background:#1a242f;">Todos los supervisores...</option>
+            </select>
         </div>
-        <!-- Búsqueda por obra / proyecto -->
+        <!-- Selector de obra / proyecto -->
         <div class="relative flex-1">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none">location_city</span>
-            <input type="text" id="asis-filtro-obra"
-                placeholder="Buscar por obra o proyecto..."
-                oninput="filtrarAsistencia()"
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">location_city</span>
+            <select id="asis-filtro-obra"
+                onchange="filtrarAsistencia()"
                 style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
-                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer">
+                <option value="" style="background:#1a242f;">Todas las obras...</option>
+            </select>
         </div>
         <!-- Pills de estado -->
         <div class="flex gap-2 shrink-0">
