@@ -1508,15 +1508,17 @@
      * Recalcula los stats según los datos visibles.
      */
     function filtrarAsistencia() {
-        var query  = (document.getElementById('asis-filtro-nombre') || {}).value || '';
-        var q      = query.trim().toLowerCase();
+        var q     = ((document.getElementById('asis-filtro-nombre') || {}).value || '').trim().toLowerCase();
+        var qObra = ((document.getElementById('asis-filtro-obra')   || {}).value || '').trim().toLowerCase();
 
         var filtrados = _asistenciaTotal.filter(function(r) {
-            var coincideTexto = !q ||
+            var coincideNombre = !q ||
                 r.nombre.toLowerCase().includes(q) ||
                 r.email.toLowerCase().includes(q);
+            var coincideObra   = !qObra ||
+                (r.obra || '').toLowerCase().includes(qObra);
             var coincideEstado = _filtroEstadoAsist === 'todos' || r.estado === _filtroEstadoAsist;
-            return coincideTexto && coincideEstado;
+            return coincideNombre && coincideObra && coincideEstado;
         });
 
         actualizarStatsAsistencia(filtrados);
