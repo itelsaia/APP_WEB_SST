@@ -160,7 +160,7 @@
                 class="h-10 w-auto object-contain hidden border border-white/10 rounded-lg p-0.5">
             <div>
                 <h1 class="text-base font-bold text-white leading-tight">Sistema SST</h1>
-                <p class="text-[10px] text-primary font-bold uppercase tracking-widest">CONTROL DE CAMPO</p>
+                <p id="header-modulo-label" class="text-[10px] text-primary font-bold uppercase tracking-widest">CONTROL DE CAMPO</p>
             </div>
         </div>
         <div id="user-info" class="hidden flex items-center space-x-2 text-sm text-white">
@@ -444,6 +444,18 @@
     <template id="tpl-admin">
         <!-- ══ PORTAL DE MÓDULOS (visible al entrar) ══════════════════ -->
         <div id="admin-portal" class="space-y-4 animate-fade-in">
+
+            <!-- ── BIENVENIDA INLINE (se llena desde JS con el nombre y frase) ── -->
+            <div class="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+                <div class="w-10 h-10 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center shrink-0">
+                    <span id="admin-welcome-icon" class="material-symbols-outlined text-2xl text-primary">admin_panel_settings</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p id="admin-welcome-msg" class="text-sm font-black text-white tracking-tight">¡Bienvenido/a!</p>
+                    <p id="admin-welcome-sub" class="text-[10px] text-slate-400 font-medium italic mt-0.5">Portal de Administración</p>
+                </div>
+            </div>
+
             <!-- Cabecera del portal -->
             <div class="border-b border-white/10 pb-4">
                 <div class="flex items-center gap-3 mb-1">
@@ -542,12 +554,17 @@
 
             var tpl = document.getElementById(tplId);
             if (tpl && mainContent) {
-                // Buscamos cualquier contenedor que tenga backdrop-blur-xl (nuestra nueva clase global)
-                var contentDiv = mainContent.querySelector('.backdrop-blur-xl');
-                if (contentDiv) {
-                    contentDiv.innerHTML = tpl.innerHTML;
+                if (SERVER_ROLE === 'ADMIN') {
+                    // Admin: inyectar sin card wrapper para ocupar el ancho completo
+                    mainContent.innerHTML = tpl.innerHTML;
                 } else {
-                    mainContent.innerHTML = '<div class="bg-white/5 backdrop-blur-xl rounded-2xl shadow-2xl p-6 border border-white/10">' + tpl.innerHTML + '</div>';
+                    // Otros roles: envolver en card con fondo translúcido
+                    var contentDiv = mainContent.querySelector('.backdrop-blur-xl');
+                    if (contentDiv) {
+                        contentDiv.innerHTML = tpl.innerHTML;
+                    } else {
+                        mainContent.innerHTML = '<div class="bg-white/5 backdrop-blur-xl rounded-2xl shadow-2xl p-6 border border-white/10">' + tpl.innerHTML + '</div>';
+                    }
                 }
                 var loginLink = document.getElementById('error-login-link');
                 if (loginLink && SERVER_URL) {

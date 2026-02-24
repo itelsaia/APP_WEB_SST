@@ -65,16 +65,31 @@
             </div>
         </div>
 
-        <!-- Botón enviar -->
-        <div class="pt-2">
-            <button type="submit" id="btn-enviar"
-                style="background: var(--color-primario); box-shadow: 0 8px 24px rgba(197,160,72,0.25);"
-                class="w-full flex justify-center items-center gap-2 py-4 px-4 border-0 rounded-xl text-sm font-black text-black hover:opacity-90 transition-all disabled:opacity-50 uppercase tracking-widest">
-                <span id="spinner"
-                    class="hidden animate-spin h-4 w-4 border-2 border-black border-t-transparent rounded-full"></span>
-                <span class="material-symbols-outlined text-base">assignment_add</span>
-                <span id="btn-text">REGISTRAR PENDIENTE</span>
+        <!-- Botones de acción: Pendiente | Con Firma -->
+        <div class="pt-2 grid grid-cols-2 gap-2">
+
+            <!-- Registrar como Pendiente por firma -->
+            <button type="button" id="btn-pendiente"
+                onclick="enviarInspeccion('pendiente')"
+                style="background:rgba(197,160,72,0.1); border:1.5px solid rgba(197,160,72,0.4);"
+                class="flex justify-center items-center gap-1.5 py-3.5 rounded-xl text-[11px] font-black text-primary hover:opacity-80 transition-all active:scale-95 disabled:opacity-40 uppercase tracking-widest">
+                <span id="spinner-pendiente"
+                    class="hidden animate-spin h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full shrink-0"></span>
+                <span class="material-symbols-outlined text-base shrink-0">assignment_add</span>
+                PENDIENTE
             </button>
+
+            <!-- Registrar + capturar firma al instante -->
+            <button type="button" id="btn-con-firma"
+                onclick="enviarInspeccion('firma')"
+                style="background:var(--color-primario); box-shadow:0 6px 20px rgba(197,160,72,0.25);"
+                class="flex justify-center items-center gap-1.5 py-3.5 rounded-xl text-[11px] font-black text-black hover:opacity-90 transition-all active:scale-95 disabled:opacity-40 uppercase tracking-widest">
+                <span id="spinner-firma"
+                    class="hidden animate-spin h-3.5 w-3.5 border-2 border-black border-t-transparent rounded-full shrink-0"></span>
+                <span class="material-symbols-outlined text-base shrink-0">verified</span>
+                CON FIRMA
+            </button>
+
         </div>
     </form>
 

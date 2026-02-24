@@ -137,6 +137,14 @@
                 switchModule('asistencia');
             }
         } else if (currentUser && currentUser.rol === 'ADMIN') {
+            // Ampliar contenedor principal para pantalla completa
+            var mainEl = document.querySelector('main');
+            if (mainEl) {
+                mainEl.classList.remove('max-w-2xl');
+                mainEl.classList.add('max-w-6xl');
+            }
+            // Etiquetar el módulo activo en el header
+            actualizarModuloHeader('Administración');
             switchModule('admin');
         }
 
@@ -206,13 +214,32 @@
             config.icon = "admin_panel_settings";
         }
 
-        if (welcomeMsg) welcomeMsg.textContent = config.msg;
-        if (welcomeSub) welcomeSub.textContent = config.sub;
-        if (welcomeIcon) welcomeIcon.textContent = config.icon;
-        const mobileGreet = document.getElementById('welcome-message-mobile');
-        if (mobileGreet) mobileGreet.textContent = '¡Hola, ' + nombre + '!';
+        if (rol === 'ADMIN') {
+            // Para admin: poblar la bienvenida inline del portal (no la sección flotante)
+            var inlineMsg  = document.getElementById('admin-welcome-msg');
+            var inlineSub  = document.getElementById('admin-welcome-sub');
+            var inlineIcon = document.getElementById('admin-welcome-icon');
+            if (inlineMsg)  inlineMsg.textContent  = config.msg;
+            if (inlineSub)  inlineSub.textContent  = config.sub;
+            if (inlineIcon) inlineIcon.textContent = config.icon;
+            // welcome-section permanece oculta para evitar solapamiento con el modal
+        } else {
+            if (welcomeMsg)  welcomeMsg.textContent  = config.msg;
+            if (welcomeSub)  welcomeSub.textContent  = config.sub;
+            if (welcomeIcon) welcomeIcon.textContent = config.icon;
+            const mobileGreet = document.getElementById('welcome-message-mobile');
+            if (mobileGreet) mobileGreet.textContent = '¡Hola, ' + nombre + '!';
+            welcomeSection.classList.remove('hidden');
+        }
+    }
 
-        welcomeSection.classList.remove('hidden');
+    /**
+     * Actualiza el subtítulo del módulo en el header principal.
+     * @param {string} texto Nombre del módulo activo (ej: 'Gestión de Empresas')
+     */
+    function actualizarModuloHeader(texto) {
+        var el = document.getElementById('header-modulo-label');
+        if (el) el.textContent = texto;
     }
 
     function mostrarErrorAcceso(msj) {
@@ -769,51 +796,90 @@
     }
 
     function configurarFormulario() {
-        const form = document.getElementById('sst-form');
-        if (!form) return;
-        form.addEventListener('submit', function (e) {
-            e.preventDefault();
-            const btn = document.getElementById('btn-enviar');
-            const spinner = document.getElementById('spinner');
-            const btnText = document.getElementById('btn-text');
-            if (btn) btn.disabled = true;
-            if (spinner) spinner.classList.remove('hidden');
-            if (btnText) btnText.textContent = "REGISTRANDO...";
+        // Los botones de acción llaman directamente a enviarInspeccion(modo)
+        // mediante onclick — no se usa el evento submit del form.
+    }
 
-            const selectCliente = document.getElementById('idCliente');
-            const selectFormato = document.getElementById('idFormato');
-            const fmtData = _formatosDisponibles.find(f => f.id === selectFormato.value);
+    /**
+     * Envía el formulario de inspección.
+     * @param {'pendiente'|'firma'} modo
+     *   'pendiente' → guarda con estado PENDIENTE y recarga la lista de pendientes.
+     *   'firma'     → guarda con estado PENDIENTE y abre el modal de firma
+     *                 para capturar la firma inmediatamente.
+     */
+    function enviarInspeccion(modo) {
+        const btnP = document.getElementById('btn-pendiente');
+        const btnF = document.getElementById('btn-con-firma');
+        const spP  = document.getElementById('spinner-pendiente');
+        const spF  = document.getElementById('spinner-firma');
 
-            const formData = {
-                userCode: currentUser.codigo || '',
-                nombreCliente: selectCliente ? selectCliente.options[selectCliente.selectedIndex].text : _obraSeleccionada,
-                idFormato: selectFormato ? selectFormato.value : '',
-                descripcionRegistro: fmtData ? fmtData.descripcion : '',
-                archivoBase64: archivoBase64
-            };
+        const selectCliente = document.getElementById('idCliente');
+        const selectFormato = document.getElementById('idFormato');
+        const fmtData = _formatosDisponibles.find(
+            function(f) { return f.id === (selectFormato ? selectFormato.value : ''); }
+        );
 
-            if (!formData.idFormato || !formData.archivoBase64) {
-                mostrarNotificacion('⚠️ Por favor seleccione un formato y capture la foto.', 'warning');
-                if (btn) btn.disabled = false;
-                if (spinner) spinner.classList.add('hidden');
-                if (btnText) btnText.textContent = "REGISTRAR PENDIENTE";
-                return;
-            }
+        // Validar campos mínimos
+        if (!selectFormato || !selectFormato.value || !archivoBase64) {
+            mostrarNotificacion('⚠️ Por favor seleccione un formato y capture la foto.', 'warning');
+            return;
+        }
 
-            google.script.run
-                .withSuccessHandler(function (res) {
-                    if (res.status === 'success') {
-                        onExito(res);
-                        cargarPendientes();
+        // Deshabilitar ambos botones y mostrar spinner del botón presionado
+        if (btnP) btnP.disabled = true;
+        if (btnF) btnF.disabled = true;
+        if (modo === 'pendiente' && spP) spP.classList.remove('hidden');
+        if (modo === 'firma'     && spF) spF.classList.remove('hidden');
+
+        const formData = {
+            userCode:            currentUser.codigo || '',
+            nombreCliente:       selectCliente
+                                    ? selectCliente.options[selectCliente.selectedIndex].text
+                                    : _obraSeleccionada,
+            idFormato:           selectFormato.value,
+            descripcionRegistro: fmtData ? fmtData.descripcion : '',
+            archivoBase64:       archivoBase64
+        };
+
+        function _resetBotones() {
+            if (btnP) btnP.disabled = false;
+            if (btnF) btnF.disabled = false;
+            if (spP)  spP.classList.add('hidden');
+            if (spF)  spF.classList.add('hidden');
+        }
+
+        function _resetFormulario() {
+            archivoBase64 = null;
+            const form = document.getElementById('sst-form');
+            if (form) form.reset();
+            const prev = document.getElementById('preview-container');
+            if (prev) prev.classList.add('hidden');
+            const descCont = document.getElementById('formato-descripcion-container');
+            if (descCont) descCont.classList.add('hidden');
+            _intentarBloqueoEmpresa();
+        }
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                _resetBotones();
+                if (res.status === 'success') {
+                    _resetFormulario();
+                    if (modo === 'firma') {
+                        mostrarNotificacion('✅ Formato guardado. Capture la firma del jefe SST.', 'success');
+                        abrirModalFirma(res.data.id);
                     } else {
-                        onError(res.message);
+                        mostrarNotificacion('✅ ' + res.message, 'success');
+                        cargarPendientes();
                     }
-                })
-                .withFailureHandler(function (err) {
-                    onError(err.toString());
-                })
-                .guardarRegistroFormato(formData);
-        });
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                _resetBotones();
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .guardarRegistroFormato(formData);
     }
     /**
      * Gestión de registros pendientes
@@ -1009,6 +1075,7 @@
             const workspace = document.getElementById('admin-workspace-clientes');
             if (portal)    portal.classList.add('hidden');
             if (workspace) workspace.classList.remove('hidden');
+            actualizarModuloHeader('Gestión de Empresas');
             cargarClientesAdmin();
         }
     }
@@ -1021,19 +1088,28 @@
         const workspace = document.getElementById('admin-workspace-clientes');
         if (portal)    portal.classList.remove('hidden');
         if (workspace) workspace.classList.add('hidden');
+        actualizarModuloHeader('Administración');
         _filtroAdmin = 'todas'; // Resetear filtro al volver
     }
 
     /**
-     * Carga todos los clientes desde el servidor y actualiza la tabla.
+     * Carga todos los clientes desde el servidor y actualiza ambas vistas (tabla y tarjetas).
      */
     function cargarClientesAdmin() {
-        const tbody = document.getElementById('tabla-clientes-body');
+        // Estado de carga — tabla (escritorio)
+        var tbody = document.getElementById('tabla-clientes-body');
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="10" class="text-center py-10 text-slate-500 text-xs italic">' +
                 '<div class="flex flex-col items-center gap-2">' +
                 '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
                 '<span>Cargando empresas...</span></div></td></tr>';
+        }
+        // Estado de carga — tarjetas (móvil)
+        var listaMov = document.getElementById('lista-clientes-mobile');
+        if (listaMov) {
+            listaMov.innerHTML = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
+                '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+                '<span>Cargando...</span></div>';
         }
 
         google.script.run
@@ -1045,6 +1121,7 @@
                 } else {
                     mostrarNotificacion('❌ ' + res.message, 'error');
                     if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-red-400 text-xs">Error al cargar datos</td></tr>';
+                    if (listaMov) listaMov.innerHTML = '<div class="text-center py-6 text-red-400 text-xs">Error al cargar datos</div>';
                 }
             })
             .withFailureHandler(function (err) {
@@ -1094,10 +1171,13 @@
     }
 
     /**
-     * Genera las filas de la tabla de clientes.
+     * Genera filas de la tabla (escritorio) y tarjetas (móvil) con la lista de clientes.
      * @param {Array} clientes Lista filtrada de clientes.
      */
     function renderizarTablaClientes(clientes) {
+        // Renderizar vista móvil primero (siempre)
+        _renderCardsMovil(clientes);
+
         const tbody = document.getElementById('tabla-clientes-body');
         if (!tbody) return;
 
@@ -1165,6 +1245,70 @@
         return (str || '').toString()
             .replace(/\\/g, '\\\\')
             .replace(/'/g, "\\'");
+    }
+
+    /**
+     * Renderiza la vista de tarjetas para pantallas móviles (sm:hidden).
+     * Muestra los campos clave + acciones en formato compacto y legible.
+     * @param {Array} clientes Lista filtrada de clientes.
+     */
+    function _renderCardsMovil(clientes) {
+        var lista = document.getElementById('lista-clientes-mobile');
+        if (!lista) return;
+
+        if (!clientes || clientes.length === 0) {
+            lista.innerHTML = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
+                '<span class="material-symbols-outlined text-3xl">search_off</span>' +
+                '<span>Sin registros para mostrar</span></div>';
+            return;
+        }
+
+        lista.innerHTML = clientes.map(function (c) {
+            var esActivo    = c.estado === 'ACTIVO';
+            var badgeClases = esActivo
+                ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                : 'bg-red-500/15 text-red-400 border border-red-500/30';
+            var toggleIcon  = esActivo ? 'toggle_on' : 'toggle_off';
+            var toggleLabel = esActivo ? 'Desactivar' : 'Activar';
+            var toggleClase = esActivo
+                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                : 'bg-green-500/10 text-green-400 border border-green-500/20';
+
+            // Campos secundarios visibles en tarjeta
+            var extras = '';
+            if (c.nit)     extras += '<div><span class="text-slate-600">NIT</span><br><span class="text-slate-300 font-medium">' + _esc(c.nit) + '</span></div>';
+            if (c.celular) extras += '<div><span class="text-slate-600">Celular</span><br><span class="text-slate-300 font-medium">' + _esc(c.celular) + '</span></div>';
+            if (c.correo)  extras += '<div class="col-span-2"><span class="text-slate-600">Correo</span><br><span class="text-slate-300 font-medium break-all">' + _esc(c.correo) + '</span></div>';
+
+            return '<div class="bg-white/5 border border-white/10 rounded-xl p-3.5 animate-fade-in' + (esActivo ? '' : ' opacity-60') + '">' +
+                // Cabecera tarjeta: ID + Nombre + Badge estado
+                '<div class="flex items-start justify-between gap-2 mb-2.5">' +
+                    '<div class="min-w-0 flex-1">' +
+                        '<p class="text-[9px] font-black uppercase tracking-widest mb-0.5" style="color:var(--color-primario)">' + _esc(c.id) + '</p>' +
+                        '<p class="text-sm font-black text-white leading-tight">' + _esc(c.nombre) + '</p>' +
+                        (c.obra ? '<p class="text-[10px] text-slate-500 font-medium mt-0.5 leading-tight">' + _esc(c.obra) + '</p>' : '') +
+                    '</div>' +
+                    '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest shrink-0 ' + badgeClases + '">' + c.estado + '</span>' +
+                '</div>' +
+                // Campos secundarios
+                (extras ? '<div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px] mb-3 pb-3 border-b border-white/5">' + extras + '</div>' : '') +
+                // Acciones
+                '<div class="flex gap-2">' +
+                    '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
+                        'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">' +
+                        '<span class="material-symbols-outlined text-sm">edit</span>Editar' +
+                    '</button>' +
+                    '<button onclick="toggleEstadoCliente(\'' + _esc(c.id) + '\',\'' + c.estado + '\')" ' +
+                        'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl ' + toggleClase + ' border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">' +
+                        '<span class="material-symbols-outlined text-sm">' + toggleIcon + '</span>' + toggleLabel +
+                    '</button>' +
+                    '<button onclick="confirmarEliminarCliente(\'' + _esc(c.id) + '\',\'' + _escAttr(c.nombre) + '\')" ' +
+                        'class="w-10 flex items-center justify-center rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 transition-all active:scale-95" title="Eliminar">' +
+                        '<span class="material-symbols-outlined text-sm">delete</span>' +
+                    '</button>' +
+                '</div>' +
+            '</div>';
+        }).join('');
     }
 
     /**
@@ -1310,34 +1454,17 @@
 
     function onExito(response) {
         mostrarNotificacion('✅ ' + response.message, 'success');
+        archivoBase64 = null;
         const form = document.getElementById('sst-form');
         if (form) form.reset();
-
-        archivoBase64 = null;
         const prev = document.getElementById('preview-container');
         if (prev) prev.classList.add('hidden');
-
-        // Re-bloquear empresa e intentar cargar formatos de nuevo (por si acaso)
         _intentarBloqueoEmpresa();
-
         const descCont = document.getElementById('formato-descripcion-container');
         if (descCont) descCont.classList.add('hidden');
-
-        const btn = document.getElementById('btn-enviar');
-        const spinner = document.getElementById('spinner');
-        const btnText = document.getElementById('btn-text');
-        if (btn) btn.disabled = false;
-        if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.textContent = "REGISTRAR PENDIENTE";
     }
 
     function onError(message) {
         mostrarNotificacion('❌ Error: ' + message, 'error');
-        const btn = document.getElementById('btn-enviar');
-        const spinner = document.getElementById('spinner');
-        const btnText = document.getElementById('btn-text');
-        if (btn) btn.disabled = false;
-        if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.textContent = "REGISTRAR PENDIENTE";
     }
 </script>
