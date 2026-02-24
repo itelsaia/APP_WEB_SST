@@ -69,20 +69,17 @@
                 <option value="" style="background:#1a242f;">Todas las obras...</option>
             </select>
         </div>
-        <!-- Pills de estado -->
-        <div class="flex gap-2 shrink-0">
-            <button data-estado="todos" onclick="setFiltroEstadoAsistencia('todos')"
-                class="asis-filter-pill px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border">
-                Todos
-            </button>
-            <button data-estado="ACTIVO" onclick="setFiltroEstadoAsistencia('ACTIVO')"
-                class="asis-filter-pill px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border">
-                Activas
-            </button>
-            <button data-estado="CERRADO" onclick="setFiltroEstadoAsistencia('CERRADO')"
-                class="asis-filter-pill px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border">
-                Cerradas
-            </button>
+        <!-- Selector de estado de sesión -->
+        <div class="relative shrink-0 min-w-[170px]">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">radio_button_checked</span>
+            <select id="asis-filtro-estado"
+                onchange="filtrarAsistencia()"
+                style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer">
+                <option value="" style="background:#1a242f;">Todos los estados</option>
+                <option value="ACTIVO" style="background:#1a242f;">Activas (en curso)</option>
+                <option value="CERRADO" style="background:#1a242f;">Cerradas</option>
+            </select>
         </div>
     </div>
 
@@ -99,21 +96,18 @@
         <table class="w-full min-w-[960px] text-left">
             <thead>
                 <tr style="background:rgba(255,255,255,0.04);" class="border-b border-white/10">
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">ID</th>
                     <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Supervisor</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Email</th>
                     <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Fecha</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Entrada</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Salida</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Hora Entrada</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Hora Salida</th>
                     <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Tipo Día</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Obra / Proyecto</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Fotos</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Cliente / Empresa</th>
                     <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Estado</th>
                 </tr>
             </thead>
             <tbody id="asis-tabla-body">
                 <tr>
-                    <td colspan="10" class="text-center py-10 text-slate-500 text-xs italic">
+                    <td colspan="7" class="text-center py-10 text-slate-500 text-xs italic">
                         <div class="flex flex-col items-center gap-2">
                             <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>
                             <span>Cargando asistencia...</span>

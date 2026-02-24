@@ -347,6 +347,18 @@ function obtenerAsistenciaAdmin() {
     const datos     = hoja.getDataRange().getValues();
     const registros = [];
 
+    const tz = Session.getScriptTimeZone();
+    const fmtFecha = (v) => {
+      if (!v) return '';
+      try { return Utilities.formatDate(v instanceof Date ? v : new Date(v), tz, 'dd/MM/yyyy'); }
+      catch(e) { return v.toString().trim(); }
+    };
+    const fmtHora = (v) => {
+      if (!v) return '';
+      try { return Utilities.formatDate(v instanceof Date ? v : new Date(v), tz, 'HH:mm'); }
+      catch(e) { return v.toString().trim(); }
+    };
+
     for (let i = 1; i < datos.length; i++) {
       const id = (datos[i][0] || '').toString().trim();
       if (!id) continue; // Saltar filas vacías
@@ -355,9 +367,9 @@ function obtenerAsistenciaAdmin() {
         id:          id,
         email:       (datos[i][1]  || '').toString().trim(),
         nombre:      (datos[i][2]  || '').toString().trim(),
-        fecha:       (datos[i][3]  || '').toString().trim(),
-        horaEntrada: (datos[i][4]  || '').toString().trim(),
-        horaSalida:  (datos[i][5]  || '').toString().trim(),
+        fecha:       fmtFecha(datos[i][3]),
+        horaEntrada: fmtHora(datos[i][4]),
+        horaSalida:  fmtHora(datos[i][5]),
         tipoDia:     (datos[i][6]  || '').toString().trim(),
         obra:        (datos[i][7]  || '').toString().trim(),
         fotoEntrada: (datos[i][8]  || '').toString().trim(),
