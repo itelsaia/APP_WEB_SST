@@ -389,9 +389,11 @@ function obtenerAsistenciaAdmin() {
 
 // ══════════════════════════════════════════════════════════
 // ADMINISTRACIÓN DE USUARIOS
-// Esquema DB_USUARIOS: A=ID_Usuario B=Email C=Nombre_Completo D=Rol
-//                      E=Password F=ID_Cliente_Asociado G=Cedula
-//                      H=Celular_Whatsapp I=Estado (ACTIVO/INACTIVO)
+// Schema ACTUAL DB_USUARIOS (8 columnas):
+//   A(0)=Email  B(1)=Nombre_Completo  C(2)=Rol  D(3)=Password
+//   E(4)=ID_Cliente_Asociado (código usuario: ADMIN-001, SUP-001…)
+//   F(5)=Cedula  G(6)=Celular_Whatsapp  H(7)=Estado (ACTIVO/INACTIVO)
+// Clave de búsqueda: col E (código único por usuario)
 // ══════════════════════════════════════════════════════════
 
 /**
@@ -406,17 +408,16 @@ function obtenerUsuariosAdmin() {
     const datos    = hoja.getDataRange().getValues();
     const usuarios = [];
     for (let i = 1; i < datos.length; i++) {
-      const id = (datos[i][0] || '').toString().trim();
-      if (!id) continue;
+      const email = (datos[i][0] || '').toString().trim();
+      if (!email) continue;
       usuarios.push({
-        id:        id,
-        email:     (datos[i][1] || '').toString().trim(),
-        nombre:    (datos[i][2] || '').toString().trim(),
-        rol:       (datos[i][3] || '').toString().trim(),
-        idCliente: (datos[i][5] || '').toString().trim(),
-        cedula:    (datos[i][6] || '').toString().trim(),
-        celular:   (datos[i][7] || '').toString().trim(),
-        estado:    (datos[i][8] || 'ACTIVO').toString().trim().toUpperCase()
+        id:      (datos[i][4] || '').toString().trim(), // col E = código usuario
+        email:   email,                                  // col A
+        nombre:  (datos[i][1] || '').toString().trim(), // col B
+        rol:     (datos[i][2] || '').toString().trim(), // col C
+        cedula:  (datos[i][5] || '').toString().trim(), // col F
+        celular: (datos[i][6] || '').toString().trim(), // col G
+        estado:  (datos[i][7] || 'ACTIVO').toString().trim().toUpperCase() // col H
       });
     }
     return { status: 'success', data: usuarios };
@@ -427,22 +428,22 @@ function obtenerUsuariosAdmin() {
 }
 
 /**
- * Genera el próximo ID de usuario según el prefijo del rol.
- * Ej: rol "SUP-SST" → prefijo "SUP" → "SUP-003"
+ * Genera el próximo código de usuario según el prefijo del rol.
+ * Ej: rol "SUP-SST" → prefijo "SUP" → busca en col E → "SUP-003"
  */
 function _generarIdUsuario_(rol, hoja) {
   const prefijo = (rol || '').split('-')[0].toUpperCase() || 'USR';
   const datos   = hoja.getDataRange().getValues();
   let   contador = 0;
   for (let i = 1; i < datos.length; i++) {
-    const id = (datos[i][0] || '').toString().trim();
-    if (id.startsWith(prefijo + '-')) contador++;
+    const codigo = (datos[i][4] || '').toString().trim(); // col E
+    if (codigo.startsWith(prefijo + '-')) contador++;
   }
   return prefijo + '-' + String(contador + 1).padStart(3, '0');
 }
 
 /**
- * Crea un nuevo usuario. Valida email duplicado y genera ID automático.
+ * Crea un nuevo usuario. Valida email duplicado y genera código automático en col E.
  */
 function crearUsuario(datos) {
   const lock = LockService.getScriptLock();
@@ -456,25 +457,24 @@ function crearUsuario(datos) {
     if (!emailNuevo) return { status: 'error', message: 'El email es obligatorio.' };
     if (!datos.password) return { status: 'error', message: 'La contraseña es obligatoria.' };
 
-    // Verificar email duplicado
+    // Verificar email duplicado (col A)
     const filas = hoja.getDataRange().getValues();
     for (let i = 1; i < filas.length; i++) {
-      if ((filas[i][1] || '').toString().trim().toLowerCase() === emailNuevo) {
+      if ((filas[i][0] || '').toString().trim().toLowerCase() === emailNuevo) {
         return { status: 'error', message: 'Ya existe un usuario con ese email.' };
       }
     }
 
     const nuevoId = _generarIdUsuario_(datos.rol, hoja);
     hoja.appendRow([
-      nuevoId,                                        // A: ID_Usuario
-      emailNuevo,                                     // B: Email
-      (datos.nombre    || '').toString().trim(),      // C: Nombre_Completo
-      (datos.rol       || '').toString().trim(),      // D: Rol
-      (datos.password  || '').toString(),             // E: Password
-      (datos.idCliente || '').toString().trim(),      // F: ID_Cliente_Asociado
-      (datos.cedula    || '').toString().trim(),      // G: Cedula
-      (datos.celular   || '').toString().trim(),      // H: Celular_Whatsapp
-      'ACTIVO'                                        // I: Estado
+      emailNuevo,                                    // A(0): Email
+      (datos.nombre  || '').toString().trim(),       // B(1): Nombre_Completo
+      (datos.rol     || '').toString().trim(),       // C(2): Rol
+      (datos.password|| '').toString(),              // D(3): Password
+      nuevoId,                                       // E(4): Código usuario (auto)
+      (datos.cedula  || '').toString().trim(),       // F(5): Cedula
+      (datos.celular || '').toString().trim(),       // G(6): Celular_Whatsapp
+      'ACTIVO'                                       // H(7): Estado
     ]);
     SpreadsheetApp.flush();
     CacheService.getScriptCache().remove('db_usuarios_v1');
@@ -488,7 +488,7 @@ function crearUsuario(datos) {
 }
 
 /**
- * Actualiza los datos de un usuario (sin cambiar contraseña ni email).
+ * Actualiza datos de un usuario (busca por col E = código). No cambia email ni password.
  */
 function actualizarUsuario(datos) {
   try {
@@ -498,14 +498,13 @@ function actualizarUsuario(datos) {
 
     const filas = hoja.getDataRange().getValues();
     for (let i = 1; i < filas.length; i++) {
-      if ((filas[i][0] || '').toString().trim() === datos.id) {
+      if ((filas[i][4] || '').toString().trim() === datos.id) { // busca por col E
         const fila = i + 1;
-        hoja.getRange(fila, 3).setValue((datos.nombre    || '').toString().trim()); // C
-        hoja.getRange(fila, 4).setValue((datos.rol       || '').toString().trim()); // D
-        hoja.getRange(fila, 6).setValue((datos.idCliente || '').toString().trim()); // F
-        hoja.getRange(fila, 7).setValue((datos.cedula    || '').toString().trim()); // G
-        hoja.getRange(fila, 8).setValue((datos.celular   || '').toString().trim()); // H
-        hoja.getRange(fila, 9).setValue((datos.estado    || 'ACTIVO').toString().trim().toUpperCase()); // I
+        hoja.getRange(fila, 2).setValue((datos.nombre  || '').toString().trim()); // B: Nombre
+        hoja.getRange(fila, 3).setValue((datos.rol     || '').toString().trim()); // C: Rol
+        hoja.getRange(fila, 6).setValue((datos.cedula  || '').toString().trim()); // F: Cedula
+        hoja.getRange(fila, 7).setValue((datos.celular || '').toString().trim()); // G: Celular
+        hoja.getRange(fila, 8).setValue((datos.estado  || 'ACTIVO').toString().trim().toUpperCase()); // H: Estado
         SpreadsheetApp.flush();
         CacheService.getScriptCache().remove('db_usuarios_v1');
         return { status: 'success', message: 'Usuario actualizado correctamente.' };
@@ -519,7 +518,7 @@ function actualizarUsuario(datos) {
 }
 
 /**
- * Resetea la contraseña de un usuario.
+ * Resetea la contraseña de un usuario (busca por col E = código).
  */
 function resetPasswordUsuario(idUsuario, newPassword) {
   try {
@@ -532,8 +531,8 @@ function resetPasswordUsuario(idUsuario, newPassword) {
 
     const filas = hoja.getDataRange().getValues();
     for (let i = 1; i < filas.length; i++) {
-      if ((filas[i][0] || '').toString().trim() === idUsuario) {
-        hoja.getRange(i + 1, 5).setValue(newPassword.toString()); // E: Password
+      if ((filas[i][4] || '').toString().trim() === idUsuario) { // col E
+        hoja.getRange(i + 1, 4).setValue(newPassword.toString()); // D: Password
         SpreadsheetApp.flush();
         CacheService.getScriptCache().remove('db_usuarios_v1');
         return { status: 'success', message: 'Contraseña actualizada correctamente.' };
@@ -547,7 +546,7 @@ function resetPasswordUsuario(idUsuario, newPassword) {
 }
 
 /**
- * Alterna el estado ACTIVO/INACTIVO de un usuario.
+ * Alterna el estado ACTIVO/INACTIVO de un usuario (busca por col E = código).
  */
 function toggleEstadoUsuario(idUsuario) {
   try {
@@ -557,10 +556,10 @@ function toggleEstadoUsuario(idUsuario) {
 
     const filas = hoja.getDataRange().getValues();
     for (let i = 1; i < filas.length; i++) {
-      if ((filas[i][0] || '').toString().trim() === idUsuario) {
-        const estadoActual = (filas[i][8] || 'ACTIVO').toString().trim().toUpperCase();
+      if ((filas[i][4] || '').toString().trim() === idUsuario) { // col E
+        const estadoActual = (filas[i][7] || 'ACTIVO').toString().trim().toUpperCase(); // col H
         const nuevoEstado  = estadoActual === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
-        hoja.getRange(i + 1, 9).setValue(nuevoEstado); // I: Estado
+        hoja.getRange(i + 1, 8).setValue(nuevoEstado); // H: Estado
         SpreadsheetApp.flush();
         CacheService.getScriptCache().remove('db_usuarios_v1');
         return { status: 'success', message: 'Estado cambiado a ' + nuevoEstado + '.', data: { estado: nuevoEstado } };
@@ -762,20 +761,19 @@ function validarCredenciales(email, password) {
       const hoja = ss.getSheetByName('DB_USUARIOS');
       if (!hoja) return { status: 'error', message: 'La hoja DB_USUARIOS no existe.' };
 
-      // Esquema DB_USUARIOS: A=ID_Usuario B=Email C=Nombre D=Rol E=Password F=ID_Cliente G=Cedula H=Celular I=Estado
+      // Schema: A(0)=Email B(1)=Nombre C(2)=Rol D(3)=Password E(4)=Código F(5)=Cedula G(6)=Celular H(7)=Estado
       const datos = hoja.getDataRange().getValues();
       usuarios    = [];
       for (let i = 1; i < datos.length; i++) {
-        const id = (datos[i][0] || '').toString().trim();
-        if (!id) continue;
+        const emailRow = (datos[i][0] || '').toString().trim().toLowerCase();
+        if (!emailRow) continue;
         usuarios.push({
-          id:        id,
-          email:     (datos[i][1] || '').toString().trim().toLowerCase(),
-          nombre:    datos[i][2],
-          rol:       datos[i][3],
-          password:  (datos[i][4] || '').toString(),
-          idCliente: datos[i][5] || '',
-          estado:    (datos[i][8] || 'activo').toString().toLowerCase()
+          email:     emailRow,
+          nombre:    datos[i][1],
+          rol:       datos[i][2],
+          password:  (datos[i][3] || '').toString(),
+          idCliente: datos[i][4] || '', // col E = código usuario (ADMIN-001, SUP-001…)
+          estado:    (datos[i][7] || 'activo').toString().toLowerCase() // col H
         });
       }
       // Guardar por 5 minutos (300s)

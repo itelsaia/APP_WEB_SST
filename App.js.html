@@ -1722,9 +1722,8 @@
     // ================================================================
 
     let _usuariosTotal   = [];   // Cache completo
-    let _clientesParaUSR = [];   // Cache de clientes para el select del modal
-    let _usrEditandoId   = null; // ID del usuario en edición (null = nuevo)
-    let _usrResetId      = null; // ID del usuario en reset de contraseña
+    let _usrEditandoId = null; // ID del usuario en edición (null = nuevo)
+    let _usrResetId    = null; // ID del usuario en reset de contraseña
 
     function cargarUsuariosAdmin() {
         var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
@@ -1732,7 +1731,7 @@
                      '<span>Cargando usuarios...</span></div>';
         var tbody = document.getElementById('usr-tabla-body');
         var movil = document.getElementById('usr-lista-mobile');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="py-10 text-center">' + loader + '</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="py-10 text-center">' + loader + '</td></tr>';
         if (movil) movil.innerHTML = loader;
 
         google.script.run
@@ -1749,15 +1748,6 @@
                 mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
             })
             .obtenerUsuariosAdmin();
-
-        // Cargar clientes para el select del modal (si no están en cache)
-        if (_clientesParaUSR.length === 0) {
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res.status === 'success') _clientesParaUSR = res.data || [];
-                })
-                .obtenerListaClientesAdmin();
-        }
     }
 
     function _poblarSelectRoles() {
@@ -1813,7 +1803,7 @@
         if (!tbody) return;
 
         if (!registros || registros.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-500 text-xs italic">' +
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10 text-slate-500 text-xs italic">' +
                 '<div class="flex flex-col items-center gap-2">' +
                 '<span class="material-symbols-outlined text-3xl">search_off</span>' +
                 '<span>Sin usuarios para mostrar</span></div></td></tr>';
@@ -1836,7 +1826,6 @@
                 '<td class="px-3 py-2.5 text-xs font-bold text-white whitespace-nowrap">' + _esc(u.nombre) + '</td>' +
                 '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(u.email) + '</td>' +
                 '<td class="px-3 py-2.5 whitespace-nowrap">' + rolBadge + '</td>' +
-                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap max-w-[120px] truncate" title="' + _escAttr(u.idCliente) + '">' + _esc(u.idCliente || '-') + '</td>' +
                 '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(u.cedula || '-') + '</td>' +
                 '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(u.celular || '-') + '</td>' +
                 '<td class="px-3 py-2.5 whitespace-nowrap">' + estadoBadge + '</td>' +
@@ -1882,7 +1871,7 @@
                 '<span class="text-slate-500">Rol:</span><span class="text-primary font-bold">' + _esc(u.rol) + '</span>' +
                 '<span class="text-slate-500">Cédula:</span><span class="text-slate-300">' + _esc(u.cedula || '-') + '</span>' +
                 '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
-                '<span class="text-slate-500">Cliente:</span><span class="text-slate-300 truncate">' + _esc(u.idCliente || '-') + '</span>' +
+                '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '</div>' +
                 '<div class="flex gap-2 border-t border-white/5 pt-2">' +
                 '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" ' +
@@ -1908,54 +1897,36 @@
         var fldPwd   = document.getElementById('usr-campo-password');
         var fldEst   = document.getElementById('usr-campo-estado');
 
-        // Poblar select de clientes
-        var selCliente = document.getElementById('usr-inp-cliente');
-        if (selCliente && _clientesParaUSR.length > 0) {
-            selCliente.innerHTML = '<option value="" style="background:#1a242f;">Sin cliente asociado</option>';
-            _clientesParaUSR.forEach(function(c) {
-                var opt = document.createElement('option');
-                opt.value = c.id; opt.textContent = c.nombre; opt.style.background = '#1a242f';
-                selCliente.appendChild(opt);
-            });
-        }
-
         if (!id) {
             // NUEVO
             titulo.textContent = 'Nuevo Usuario';
-            subId.textContent  = 'ID se asignará automáticamente';
-            document.getElementById('usr-inp-nombre').value   = '';
-            document.getElementById('usr-inp-email').value    = '';
-            document.getElementById('usr-inp-email').readOnly = false;
+            subId.textContent  = 'Código se asignará automáticamente';
+            document.getElementById('usr-inp-nombre').value    = '';
+            document.getElementById('usr-inp-email').value     = '';
+            document.getElementById('usr-inp-email').readOnly  = false;
             document.getElementById('usr-inp-email').style.opacity = '1';
-            document.getElementById('usr-inp-rol').value     = '';
-            document.getElementById('usr-inp-password').value = '';
-            document.getElementById('usr-inp-cedula').value  = '';
-            document.getElementById('usr-inp-celular').value = '';
-            if (selCliente) selCliente.value = '';
+            document.getElementById('usr-inp-rol').value       = '';
+            document.getElementById('usr-inp-password').value  = '';
+            document.getElementById('usr-inp-cedula').value    = '';
+            document.getElementById('usr-inp-celular').value   = '';
             fldPwd.classList.remove('hidden');
             fldEst.classList.add('hidden');
-            document.getElementById('usr-campo-cliente').classList.add('hidden');
         } else {
             // EDICIÓN
             var u = _usuariosTotal.find(function(x) { return x.id === id; });
             if (!u) return;
             titulo.textContent = 'Editar Usuario';
             subId.textContent  = u.id;
-            document.getElementById('usr-inp-nombre').value   = u.nombre;
-            document.getElementById('usr-inp-email').value    = u.email;
-            document.getElementById('usr-inp-email').readOnly = true;
+            document.getElementById('usr-inp-nombre').value    = u.nombre;
+            document.getElementById('usr-inp-email').value     = u.email;
+            document.getElementById('usr-inp-email').readOnly  = true;
             document.getElementById('usr-inp-email').style.opacity = '0.5';
-            document.getElementById('usr-inp-rol').value     = u.rol;
-            document.getElementById('usr-inp-cedula').value  = u.cedula || '';
-            document.getElementById('usr-inp-celular').value = u.celular || '';
-            if (selCliente) selCliente.value = u.idCliente || '';
-            document.getElementById('usr-inp-estado').value  = u.estado;
+            document.getElementById('usr-inp-rol').value       = u.rol;
+            document.getElementById('usr-inp-cedula').value    = u.cedula || '';
+            document.getElementById('usr-inp-celular').value   = u.celular || '';
+            document.getElementById('usr-inp-estado').value    = u.estado;
             fldPwd.classList.add('hidden');
             fldEst.classList.remove('hidden');
-            // Mostrar campo cliente según rol
-            var fldCli = document.getElementById('usr-campo-cliente');
-            if (u.rol && u.rol !== 'ADMIN') fldCli.classList.remove('hidden');
-            else fldCli.classList.add('hidden');
         }
 
         modal.classList.remove('hidden');
@@ -1967,14 +1938,7 @@
         _usrEditandoId = null;
     }
 
-    function onCambioRolUsuario() {
-        var rol    = (document.getElementById('usr-inp-rol') || {}).value || '';
-        var fldCli = document.getElementById('usr-campo-cliente');
-        if (fldCli) {
-            if (rol && rol !== 'ADMIN') fldCli.classList.remove('hidden');
-            else fldCli.classList.add('hidden');
-        }
-    }
+    function onCambioRolUsuario() {} // sin efecto visual en schema actual
 
     function guardarUsuario() {
         var nombre   = (document.getElementById('usr-inp-nombre')   || {}).value || '';
@@ -1983,7 +1947,6 @@
         var password = (document.getElementById('usr-inp-password') || {}).value || '';
         var cedula   = (document.getElementById('usr-inp-cedula')   || {}).value || '';
         var celular  = (document.getElementById('usr-inp-celular')  || {}).value || '';
-        var idCliente = (document.getElementById('usr-inp-cliente') || {}).value || '';
         var estado   = (document.getElementById('usr-inp-estado')   || {}).value || 'ACTIVO';
 
         if (!nombre.trim()) { mostrarNotificacion('⚠️ El nombre es obligatorio.', 'warning'); return; }
@@ -1997,7 +1960,7 @@
         if (spinner) spinner.classList.remove('hidden');
 
         var datos = { nombre: nombre.trim(), email: email.trim(), rol: rol.trim(),
-                      idCliente: idCliente.trim(), cedula: cedula.trim(), celular: celular.trim() };
+                      cedula: cedula.trim(), celular: celular.trim() };
 
         var fnExito = function(res) {
             if (btn)     btn.disabled = false;
