@@ -326,6 +326,56 @@ function obtenerClientesRegistrados() {
 }
 
 // ══════════════════════════════════════════════════════════
+// ADMINISTRACIÓN — CONTROL DE ASISTENCIA
+// ══════════════════════════════════════════════════════════
+
+/**
+ * Devuelve todos los registros de DB_ASISTENCIA para el panel de administración.
+ * Solo lectura — no modifica ningún dato.
+ * Schema DB_ASISTENCIA (11 columnas):
+ * A(0):ID_Asistencia | B(1):Email_Supervisor | C(2):Nombre_Completo | D(3):Fecha
+ * E(4):Hora_Entrada  | F(5):Hora_Salida      | G(6):Tipo_Dia         | H(7):Obra_Proyecto
+ * I(8):Foto_Entrada_URL | J(9):Foto_Salida_URL  | K(10):Estado
+ * @return {Object} Lista de registros en orden descendente (más reciente primero).
+ */
+function obtenerAsistenciaAdmin() {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_ASISTENCIA');
+    if (!hoja) return { status: 'success', data: [] };
+
+    const datos     = hoja.getDataRange().getValues();
+    const registros = [];
+
+    for (let i = 1; i < datos.length; i++) {
+      const id = (datos[i][0] || '').toString().trim();
+      if (!id) continue; // Saltar filas vacías
+
+      registros.push({
+        id:          id,
+        email:       (datos[i][1]  || '').toString().trim(),
+        nombre:      (datos[i][2]  || '').toString().trim(),
+        fecha:       (datos[i][3]  || '').toString().trim(),
+        horaEntrada: (datos[i][4]  || '').toString().trim(),
+        horaSalida:  (datos[i][5]  || '').toString().trim(),
+        tipoDia:     (datos[i][6]  || '').toString().trim(),
+        obra:        (datos[i][7]  || '').toString().trim(),
+        fotoEntrada: (datos[i][8]  || '').toString().trim(),
+        fotoSalida:  (datos[i][9]  || '').toString().trim(),
+        estado:      (datos[i][10] || 'CERRADO').toString().trim().toUpperCase()
+      });
+    }
+
+    // Más reciente primero
+    registros.reverse();
+    return { status: 'success', data: registros };
+  } catch (e) {
+    Logger.log('Error en obtenerAsistenciaAdmin: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 // ADMINISTRACIÓN DE CLIENTES/EMPRESAS
 // ══════════════════════════════════════════════════════════
 

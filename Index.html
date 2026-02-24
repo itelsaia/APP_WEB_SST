@@ -472,7 +472,7 @@
             </div>
             <!-- Cuadrícula de módulos -->
             <div class="grid grid-cols-2 gap-3">
-                <!-- Módulo activo: Gestión de Empresas -->
+                <!-- Módulo 1: Gestión de Empresas -->
                 <button onclick="abrirModuloAdmin('clientes')"
                     class="group flex flex-col items-center justify-center gap-2.5 p-5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 rounded-2xl transition-all active:scale-95 text-center">
                     <div
@@ -484,18 +484,18 @@
                         <p class="text-[9px] text-slate-500 font-bold mt-0.5">Gestión de Clientes</p>
                     </div>
                 </button>
-                <!-- Módulo futuro: Usuarios -->
-                <div
-                    class="flex flex-col items-center justify-center gap-2.5 p-5 bg-white/3 border border-white/5 rounded-2xl opacity-35 cursor-not-allowed text-center">
+                <!-- Módulo 2: Control de Asistencia -->
+                <button onclick="abrirModuloAdmin('asistencia')"
+                    class="group flex flex-col items-center justify-center gap-2.5 p-5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 rounded-2xl transition-all active:scale-95 text-center">
                     <div
-                        class="w-12 h-12 bg-slate-500/10 border border-slate-500/20 rounded-xl flex items-center justify-center">
-                        <span class="material-symbols-outlined text-2xl text-slate-500">group</span>
+                        class="w-12 h-12 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-2xl text-primary">groups</span>
                     </div>
                     <div>
-                        <p class="text-xs font-black text-slate-500 uppercase tracking-tight leading-none">Usuarios</p>
-                        <p class="text-[9px] text-slate-600 font-bold mt-0.5">Próximamente</p>
+                        <p class="text-xs font-black text-white uppercase tracking-tight leading-none">Asistencia</p>
+                        <p class="text-[9px] text-slate-500 font-bold mt-0.5">Control Personal SST</p>
                     </div>
-                </div>
+                </button>
                 <!-- Módulo futuro: Reportes -->
                 <div
                     class="flex flex-col items-center justify-center gap-2.5 p-5 bg-white/3 border border-white/5 rounded-2xl opacity-35 cursor-not-allowed text-center">
@@ -524,9 +524,14 @@
             </div>
         </div>
 
-        <!-- ══ WORKSPACE: GESTIÓN DE CLIENTES (oculto inicialmente) ══ -->
+        <!-- ══ WORKSPACE: GESTIÓN DE CLIENTES ══ -->
         <div id="admin-workspace-clientes" class="hidden">
             <?!= include('AdminClientes'); ?>
+        </div>
+
+        <!-- ══ WORKSPACE: CONTROL DE ASISTENCIA ══ -->
+        <div id="admin-workspace-asistencia" class="hidden">
+            <?!= include('AdminAsistencia'); ?>
         </div>
     </template>
     <template id="tpl-error">

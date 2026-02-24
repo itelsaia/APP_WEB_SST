@@ -1071,12 +1071,18 @@
      */
     function abrirModuloAdmin(modulo) {
         const portal = document.getElementById('admin-portal');
+        if (portal) portal.classList.add('hidden');
+
         if (modulo === 'clientes') {
             const workspace = document.getElementById('admin-workspace-clientes');
-            if (portal)    portal.classList.add('hidden');
             if (workspace) workspace.classList.remove('hidden');
             actualizarModuloHeader('Gestión de Empresas');
             cargarClientesAdmin();
+        } else if (modulo === 'asistencia') {
+            const workspace = document.getElementById('admin-workspace-asistencia');
+            if (workspace) workspace.classList.remove('hidden');
+            actualizarModuloHeader('Control de Asistencia');
+            cargarAsistenciaAdmin();
         }
     }
 
@@ -1084,12 +1090,17 @@
      * Regresa al portal principal de módulos del administrador.
      */
     function volverAlPortalAdmin() {
-        const portal    = document.getElementById('admin-portal');
-        const workspace = document.getElementById('admin-workspace-clientes');
-        if (portal)    portal.classList.remove('hidden');
-        if (workspace) workspace.classList.add('hidden');
+        const portal = document.getElementById('admin-portal');
+        if (portal) portal.classList.remove('hidden');
+
+        // Ocultar todos los workspaces
+        ['admin-workspace-clientes', 'admin-workspace-asistencia'].forEach(function(id) {
+            var ws = document.getElementById(id);
+            if (ws) ws.classList.add('hidden');
+        });
+
         actualizarModuloHeader('Administración');
-        _filtroAdmin = 'todas'; // Resetear filtro al volver
+        _filtroAdmin = 'todas';
     }
 
     /**
@@ -1450,6 +1461,236 @@
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
             .cambiarEstadoCliente(id, nuevoEstado);
+    }
+
+    // ================================================================
+    // MÓDULO: CONTROL DE ASISTENCIA (PERSONAL / SUPERVISORES)
+    // ================================================================
+
+    let _asistenciaTotal    = [];    // Cache completo de registros
+    let _filtroEstadoAsist  = 'todos'; // Filtro de estado activo
+
+    /**
+     * Carga todos los registros desde el servidor.
+     */
+    function cargarAsistenciaAdmin() {
+        var tbody  = document.getElementById('asis-tabla-body');
+        var movil  = document.getElementById('asis-lista-mobile');
+        var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
+                     '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+                     '<span>Cargando asistencia...</span></div>';
+
+        if (tbody)  tbody.innerHTML  = '<tr><td colspan="10" class="py-10 text-center">' + loader + '</td></tr>';
+        if (movil)  movil.innerHTML  = loader;
+
+        // Inicializar pills al estado por defecto
+        _filtroEstadoAsist = 'todos';
+        _aplicarEstilosPillsAsistencia('todos');
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res.status === 'success') {
+                    _asistenciaTotal = res.data || [];
+                    filtrarAsistencia();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-red-400 text-xs">Error al cargar datos</td></tr>';
+                }
+            })
+            .withFailureHandler(function(err) {
+                mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
+            })
+            .obtenerAsistenciaAdmin();
+    }
+
+    /**
+     * Aplica los filtros de búsqueda (nombre/email) + estado y actualiza la vista.
+     * Recalcula los stats según los datos visibles.
+     */
+    function filtrarAsistencia() {
+        var query  = (document.getElementById('asis-filtro-nombre') || {}).value || '';
+        var q      = query.trim().toLowerCase();
+
+        var filtrados = _asistenciaTotal.filter(function(r) {
+            var coincideTexto = !q ||
+                r.nombre.toLowerCase().includes(q) ||
+                r.email.toLowerCase().includes(q);
+            var coincideEstado = _filtroEstadoAsist === 'todos' || r.estado === _filtroEstadoAsist;
+            return coincideTexto && coincideEstado;
+        });
+
+        actualizarStatsAsistencia(filtrados);
+        _renderTablaAsistencia(filtrados);
+        _renderCardsAsistenciaMovil(filtrados);
+    }
+
+    /**
+     * Cambia el filtro de estado y dispara el filtrado.
+     */
+    function setFiltroEstadoAsistencia(estado) {
+        _filtroEstadoAsist = estado;
+        _aplicarEstilosPillsAsistencia(estado);
+        filtrarAsistencia();
+    }
+
+    function _aplicarEstilosPillsAsistencia(estado) {
+        document.querySelectorAll('[data-estado]').forEach(function(btn) {
+            var isActive = btn.dataset.estado === estado;
+            btn.style.backgroundColor = isActive ? 'rgba(197,160,72,0.18)' : 'rgba(255,255,255,0.05)';
+            btn.style.borderColor     = isActive ? 'rgba(197,160,72,0.40)' : 'rgba(255,255,255,0.10)';
+            btn.style.color           = isActive ? 'var(--color-primario)'  : 'rgb(148,163,184)';
+        });
+    }
+
+    /**
+     * Actualiza las tarjetas de estadísticas según los registros visibles.
+     */
+    function actualizarStatsAsistencia(registros) {
+        var emailsUnicos = {};
+        registros.forEach(function(r) { if (r.email) emailsUnicos[r.email] = true; });
+        var supervisores = Object.keys(emailsUnicos).length;
+        var activas      = registros.filter(function(r) { return r.estado === 'ACTIVO'; }).length;
+        var cerradas     = registros.filter(function(r) { return r.estado === 'CERRADO'; }).length;
+
+        var elSup  = document.getElementById('asis-stat-supervisores');
+        var elTot  = document.getElementById('asis-stat-total');
+        var elAct  = document.getElementById('asis-stat-activas');
+        var elCer  = document.getElementById('asis-stat-cerradas');
+
+        if (elSup) elSup.querySelector('.stat-num').textContent = supervisores;
+        if (elTot) elTot.querySelector('.stat-num').textContent = registros.length;
+        if (elAct) elAct.querySelector('.stat-num').textContent = activas;
+        if (elCer) elCer.querySelector('.stat-num').textContent = cerradas;
+    }
+
+    /**
+     * Renderiza la tabla de escritorio.
+     */
+    function _renderTablaAsistencia(registros) {
+        var tbody = document.getElementById('asis-tabla-body');
+        if (!tbody) return;
+
+        if (!registros || registros.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-10 text-slate-500 text-xs italic">' +
+                '<div class="flex flex-col items-center gap-2">' +
+                '<span class="material-symbols-outlined text-3xl">search_off</span>' +
+                '<span>Sin registros para mostrar</span></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = registros.map(function(r) {
+            var esActiva = r.estado === 'ACTIVO';
+            var badge = esActiva
+                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-lg">' +
+                  '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>ACTIVA</span>'
+                : '<span class="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-lg">' +
+                  '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>CERRADA</span>';
+
+            var fotoEntrada = r.fotoEntrada && r.fotoEntrada !== 'Sin foto'
+                ? '<a href="' + _esc(r.fotoEntrada) + '" target="_blank" class="text-primary underline text-[10px]">📷 Entrada</a>'
+                : '<span class="text-slate-600 text-[10px]">Sin foto</span>';
+            var fotoSalida = r.fotoSalida && r.fotoSalida !== 'Sin foto' && r.fotoSalida !== ''
+                ? '<a href="' + _esc(r.fotoSalida) + '" target="_blank" class="text-primary underline text-[10px]">📷 Salida</a>'
+                : '<span class="text-slate-600 text-[10px]">Sin foto</span>';
+
+            var tipoBadge = r.tipoDia === 'HABIL'
+                ? '<span class="text-slate-400 text-[10px]">' + _esc(r.tipoDia) + '</span>'
+                : '<span class="text-amber-400 font-bold text-[10px]">' + _esc(r.tipoDia) + '</span>';
+
+            return '<tr class="border-b border-white/5 hover:bg-white/5 transition-colors' + (esActiva ? ' bg-amber-500/3' : '') + '">' +
+                '<td class="px-3 py-2.5 text-[10px] font-mono whitespace-nowrap" style="color:var(--color-primario)">' + _esc(r.id) + '</td>' +
+                '<td class="px-3 py-2.5 text-xs font-bold text-white whitespace-nowrap">' + _esc(r.nombre) + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(r.email) + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-300 whitespace-nowrap">' + _esc(r.fecha) + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-green-400 font-bold whitespace-nowrap">' + (_esc(r.horaEntrada) || '-') + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + (r.horaSalida ? _esc(r.horaSalida) : '<span class="text-amber-400 font-bold">En curso</span>') + '</td>' +
+                '<td class="px-3 py-2.5 whitespace-nowrap">' + tipoBadge + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap max-w-[140px] truncate" title="' + _escAttr(r.obra) + '">' + _esc(r.obra || '-') + '</td>' +
+                '<td class="px-3 py-2.5 whitespace-nowrap"><div class="flex flex-col gap-0.5">' + fotoEntrada + fotoSalida + '</div></td>' +
+                '<td class="px-3 py-2.5 whitespace-nowrap">' + badge + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    /**
+     * Renderiza tarjetas para la vista móvil.
+     */
+    function _renderCardsAsistenciaMovil(registros) {
+        var lista = document.getElementById('asis-lista-mobile');
+        if (!lista) return;
+
+        if (!registros || registros.length === 0) {
+            lista.innerHTML = '<div class="text-center py-8 text-slate-500 text-xs italic">Sin registros para mostrar</div>';
+            return;
+        }
+
+        lista.innerHTML = registros.map(function(r) {
+            var esActiva = r.estado === 'ACTIVO';
+            var borderClass = esActiva ? 'border-amber-500/30' : 'border-green-500/20';
+            var estadoBadge = esActiva
+                ? '<span class="text-[9px] font-black text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-lg flex items-center gap-1">' +
+                  '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>ACTIVA</span>'
+                : '<span class="text-[9px] font-black text-green-400 bg-green-500/15 border border-green-500/30 px-2 py-0.5 rounded-lg">CERRADA</span>';
+
+            return '<div class="bg-white/5 border ' + borderClass + ' rounded-xl p-3 animate-fade-in">' +
+                '<div class="flex items-start justify-between gap-2 mb-2">' +
+                '<div>' +
+                '<p class="text-[10px] font-black uppercase tracking-tight" style="color:var(--color-primario)">' + _esc(r.id) + '</p>' +
+                '<p class="text-xs font-bold text-white">' + _esc(r.nombre) + '</p>' +
+                '<p class="text-[10px] text-slate-500">' + _esc(r.email) + '</p>' +
+                '</div>' + estadoBadge + '</div>' +
+                '<div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">' +
+                '<span class="text-slate-500">Fecha:</span><span class="text-slate-300">' + _esc(r.fecha) + '</span>' +
+                '<span class="text-slate-500">Entrada:</span><span class="text-green-400 font-bold">' + (_esc(r.horaEntrada) || '-') + '</span>' +
+                '<span class="text-slate-500">Salida:</span><span class="' + (r.horaSalida ? 'text-slate-300' : 'text-amber-400 font-bold') + '">' + (r.horaSalida ? _esc(r.horaSalida) : 'En curso') + '</span>' +
+                '<span class="text-slate-500">Obra:</span><span class="text-slate-300 truncate">' + _esc(r.obra || '-') + '</span>' +
+                '</div></div>';
+        }).join('');
+    }
+
+    /**
+     * Genera y descarga un archivo CSV con los datos de asistencia visibles.
+     */
+    function exportarCSVAsistencia() {
+        if (!_asistenciaTotal || _asistenciaTotal.length === 0) {
+            mostrarNotificacion('⚠️ No hay datos de asistencia para exportar.', 'warning');
+            return;
+        }
+
+        var encabezado = ['ID_Asistencia', 'Nombre', 'Email', 'Fecha', 'Hora_Entrada', 'Hora_Salida',
+                          'Tipo_Dia', 'Obra_Proyecto', 'Estado', 'Foto_Entrada', 'Foto_Salida'];
+
+        // Usar los datos actualmente filtrados
+        var query = (document.getElementById('asis-filtro-nombre') || {}).value || '';
+        var q = query.trim().toLowerCase();
+        var datos = _asistenciaTotal.filter(function(r) {
+            var t = !q || r.nombre.toLowerCase().includes(q) || r.email.toLowerCase().includes(q);
+            var e = _filtroEstadoAsist === 'todos' || r.estado === _filtroEstadoAsist;
+            return t && e;
+        });
+
+        var csv = encabezado.join(',') + '\n';
+        csv += datos.map(function(r) {
+            return [r.id, r.nombre, r.email, r.fecha, r.horaEntrada, r.horaSalida,
+                    r.tipoDia, r.obra, r.estado, r.fotoEntrada, r.fotoSalida]
+                .map(function(v) {
+                    var s = (v || '').toString().replace(/"/g, '""');
+                    return '"' + s + '"';
+                }).join(',');
+        }).join('\n');
+
+        var blob     = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        var url      = URL.createObjectURL(blob);
+        var link     = document.createElement('a');
+        var fecha    = new Date().toISOString().slice(0, 10);
+        link.href    = url;
+        link.download = 'Asistencia_SST_' + fecha + '.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        mostrarNotificacion('✅ CSV exportado con ' + datos.length + ' registros.', 'success');
     }
 
     function onExito(response) {
