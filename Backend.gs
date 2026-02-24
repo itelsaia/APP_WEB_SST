@@ -289,11 +289,16 @@ function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpet
 }
 
 /**
- * Obtiene la lista de clientes registrados en DB_CLIENTES.
- * Schema real: ID_Cliente | Nombre_Empresa | Direccion | NIT | Correo_Gerente
- *              | Nombre_Contacto | Celular_Whatsapp | Nombre_Obra
- * Retorna todos los registros que tengan ID y Nombre_Empresa no vacíos.
- * @return {Object} Respuesta con la lista de clientes.
+ * Schema DB_CLIENTES (9 columnas):
+ * A(0):ID_Cliente | B(1):Nombre_Empresa | C(2):Direccion | D(3):NIT
+ * E(4):Correo_Gerente | F(5):Nombre_Contacto | G(6):Celular_Whatsapp
+ * H(7):Nombre_Obra | I(8):Estado
+ */
+
+/**
+ * Obtiene la lista de clientes ACTIVOS para el selector de supervisores.
+ * Filtra por Estado = 'ACTIVO' (también incluye registros sin estado configurado).
+ * @return {Object} Respuesta con la lista de clientes activos.
  */
 function obtenerClientesRegistrados() {
   try {
@@ -307,13 +312,179 @@ function obtenerClientesRegistrados() {
     for (let i = 1; i < datos.length; i++) {
       const id     = (datos[i][0] || '').toString().trim();
       const nombre = (datos[i][1] || '').toString().trim();
-      if (id && nombre) {
+      const estado = (datos[i][8] || 'ACTIVO').toString().trim().toUpperCase();
+      // Solo empresas activas (las sin estado configurado se consideran activas)
+      if (id && nombre && estado !== 'INACTIVO') {
         clientes.push({ id: id, nombre: nombre });
       }
     }
 
     return { status: 'success', data: clientes };
   } catch (e) {
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// ADMINISTRACIÓN DE CLIENTES/EMPRESAS
+// ══════════════════════════════════════════════════════════
+
+/**
+ * Devuelve todos los campos de DB_CLIENTES para el panel de administración.
+ * @return {Object} Lista completa de clientes con todos sus campos.
+ */
+function obtenerListaClientesAdmin() {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_CLIENTES');
+    if (!hoja) return { status: 'success', data: [] };
+
+    const datos    = hoja.getDataRange().getValues();
+    const clientes = [];
+
+    for (let i = 1; i < datos.length; i++) {
+      const id     = (datos[i][0] || '').toString().trim();
+      const nombre = (datos[i][1] || '').toString().trim();
+      if (!id && !nombre) continue; // Saltar filas completamente vacías
+
+      const estado = (datos[i][8] || '').toString().trim().toUpperCase() || 'ACTIVO';
+      clientes.push({
+        id:        id,
+        nombre:    nombre,
+        direccion: (datos[i][2] || '').toString().trim(),
+        nit:       (datos[i][3] || '').toString().trim(),
+        correo:    (datos[i][4] || '').toString().trim(),
+        contacto:  (datos[i][5] || '').toString().trim(),
+        celular:   (datos[i][6] || '').toString().trim(),
+        obra:      (datos[i][7] || '').toString().trim(),
+        estado:    estado
+      });
+    }
+
+    return { status: 'success', data: clientes };
+  } catch (e) {
+    Logger.log('Error en obtenerListaClientesAdmin: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Crea o actualiza un cliente en DB_CLIENTES.
+ * Si data.id está vacío, genera un nuevo ID autoincremental.
+ * @param {Object} data Campos del cliente.
+ * @return {Object} Respuesta estandarizada.
+ */
+function guardarCliente(data) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_CLIENTES');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_CLIENTES no encontrada.' };
+
+    const datos  = hoja.getDataRange().getValues();
+    const estado = (data.estado || 'ACTIVO').toString().toUpperCase();
+    const fila   = [
+      '',                      // A: ID (se asigna abajo)
+      data.nombre    || '',    // B: Nombre_Empresa
+      data.direccion || '',    // C: Direccion
+      data.nit       || '',    // D: NIT
+      data.correo    || '',    // E: Correo_Gerente
+      data.contacto  || '',    // F: Nombre_Contacto
+      data.celular   || '',    // G: Celular_Whatsapp
+      data.obra      || '',    // H: Nombre_Obra
+      estado                   // I: Estado
+    ];
+
+    if (data.id && data.id.toString().trim() !== '') {
+      // ── ACTUALIZAR registro existente ──────────────────────────────
+      const idBuscar = data.id.toString().trim();
+      fila[0] = idBuscar;
+      for (let i = 1; i < datos.length; i++) {
+        if ((datos[i][0] || '').toString().trim() === idBuscar) {
+          hoja.getRange(i + 1, 1, 1, 9).setValues([fila]);
+          SpreadsheetApp.flush();
+          return { status: 'success', message: 'Empresa actualizada correctamente.' };
+        }
+      }
+      return { status: 'error', message: 'No se encontró la empresa con ID: ' + idBuscar };
+    } else {
+      // ── CREAR nuevo registro ───────────────────────────────────────
+      const nuevoId = _generarIdCliente(datos);
+      fila[0] = nuevoId;
+      hoja.appendRow(fila);
+      SpreadsheetApp.flush();
+      return { status: 'success', message: 'Empresa creada con ID: ' + nuevoId, data: { id: nuevoId } };
+    }
+  } catch (e) {
+    Logger.log('Error en guardarCliente: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Genera un ID correlativo tipo CLI-001 para un nuevo cliente.
+ */
+function _generarIdCliente(datos) {
+  let maxNum = 0;
+  for (let i = 1; i < datos.length; i++) {
+    const id = (datos[i][0] || '').toString().trim();
+    const match = id.match(/CLI-(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1]);
+      if (num > maxNum) maxNum = num;
+    }
+  }
+  return 'CLI-' + (maxNum + 1).toString().padStart(3, '0');
+}
+
+/**
+ * Elimina físicamente un cliente de DB_CLIENTES.
+ * @param {string} idCliente ID del cliente a eliminar.
+ * @return {Object} Respuesta estandarizada.
+ */
+function eliminarCliente(idCliente) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_CLIENTES');
+    const datos = hoja.getDataRange().getValues();
+
+    for (let i = 1; i < datos.length; i++) {
+      if ((datos[i][0] || '').toString().trim() === idCliente.toString().trim()) {
+        hoja.deleteRow(i + 1);
+        SpreadsheetApp.flush();
+        return { status: 'success', message: 'Empresa eliminada correctamente.' };
+      }
+    }
+    return { status: 'error', message: 'No se encontró la empresa con ID: ' + idCliente };
+  } catch (e) {
+    Logger.log('Error en eliminarCliente: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Cambia el estado (ACTIVO/INACTIVO) de un cliente.
+ * Cuando se marca INACTIVO, deja de aparecer en el selector de supervisores.
+ * @param {string} idCliente  ID del cliente.
+ * @param {string} nuevoEstado 'ACTIVO' o 'INACTIVO'.
+ * @return {Object} Respuesta estandarizada.
+ */
+function cambiarEstadoCliente(idCliente, nuevoEstado) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_CLIENTES');
+    const datos = hoja.getDataRange().getValues();
+    const estado = (nuevoEstado || 'ACTIVO').toString().toUpperCase();
+
+    for (let i = 1; i < datos.length; i++) {
+      if ((datos[i][0] || '').toString().trim() === idCliente.toString().trim()) {
+        hoja.getRange(i + 1, 9).setValue(estado); // Columna I = Estado
+        SpreadsheetApp.flush();
+        return { status: 'success', message: 'Estado actualizado a ' + estado + '.' };
+      }
+    }
+    return { status: 'error', message: 'No se encontró la empresa con ID: ' + idCliente };
+  } catch (e) {
+    Logger.log('Error en cambiarEstadoCliente: ' + e.toString());
     return { status: 'error', message: e.toString() };
   }
 }

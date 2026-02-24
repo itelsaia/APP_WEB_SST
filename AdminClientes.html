@@ -1,0 +1,255 @@
+<!-- AdminClientes.html — Módulo de Gestión de Empresas/Clientes -->
+<div class="space-y-5 animate-fade-in">
+
+    <!-- ── CABECERA DEL MÓDULO ──────────────────────────────────── -->
+    <div class="flex items-center justify-between pb-4 border-b border-white/10">
+        <div class="flex items-center gap-3">
+            <button onclick="volverAlPortalAdmin()"
+                class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:bg-white/10 transition border border-white/10 shrink-0"
+                title="Volver al portal">
+                <span class="material-symbols-outlined text-base">arrow_back</span>
+            </button>
+            <div>
+                <h3 class="text-sm font-black text-white uppercase tracking-tight">Gestión de Empresas</h3>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Portafolio de
+                    clientes / contratistas</p>
+            </div>
+        </div>
+        <button onclick="abrirModalCliente(null)"
+            style="background: var(--color-primario); box-shadow: 0 4px 16px rgba(197,160,72,0.2);"
+            class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-black font-black text-[10px] uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shrink-0">
+            <span class="material-symbols-outlined text-base">add_business</span>
+            <span class="hidden sm:inline">Nueva Empresa</span>
+            <span class="sm:hidden">Nueva</span>
+        </button>
+    </div>
+
+    <!-- ── TARJETAS DE ESTADÍSTICAS ─────────────────────────────── -->
+    <div class="grid grid-cols-3 gap-3">
+        <div id="stat-total"
+            class="bg-white/5 rounded-xl border border-white/10 p-3 text-center hover:bg-white/8 transition-all">
+            <p class="stat-num text-2xl font-black text-white leading-none">-</p>
+            <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Total</p>
+        </div>
+        <div id="stat-activas"
+            class="bg-green-500/5 rounded-xl border border-green-500/20 p-3 text-center hover:bg-green-500/8 transition-all">
+            <p class="stat-num text-2xl font-black text-green-400 leading-none">-</p>
+            <p class="text-[9px] text-green-600 font-bold uppercase tracking-widest mt-1">Activas</p>
+        </div>
+        <div id="stat-inactivas"
+            class="bg-red-500/5 rounded-xl border border-red-500/20 p-3 text-center hover:bg-red-500/8 transition-all">
+            <p class="stat-num text-2xl font-black text-red-400 leading-none">-</p>
+            <p class="text-[9px] text-red-700 font-bold uppercase tracking-widest mt-1">Inactivas</p>
+        </div>
+    </div>
+
+    <!-- ── FILTROS RÁPIDOS ───────────────────────────────────────── -->
+    <div class="flex gap-2 flex-wrap">
+        <button data-filtro="todas" onclick="filtrarClientes('todas')"
+            class="filter-pill px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border">
+            Todas
+        </button>
+        <button data-filtro="activas" onclick="filtrarClientes('activas')"
+            class="filter-pill px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border">
+            Activas
+        </button>
+        <button data-filtro="inactivas" onclick="filtrarClientes('inactivas')"
+            class="filter-pill px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border">
+            Inactivas
+        </button>
+    </div>
+
+    <!-- ── TABLA PREMIUM ─────────────────────────────────────────── -->
+    <div class="overflow-x-auto rounded-xl border border-white/10 shadow-xl">
+        <table class="w-full min-w-[820px] text-left">
+            <thead>
+                <tr style="background: rgba(255,255,255,0.04);" class="border-b border-white/10">
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        ID</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Empresa</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        NIT</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Correo</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Dirección</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Contacto</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Celular</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Obra / Proyecto</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Estado</th>
+                    <th
+                        class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                        Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-clientes-body">
+                <tr>
+                    <td colspan="10" class="text-center py-10 text-slate-500 text-xs italic">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full">
+                            </div>
+                            <span>Cargando empresas...</span>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: CREAR / EDITAR EMPRESA                                 -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div id="modal-cliente"
+    class="fixed inset-0 bg-black/85 z-[70] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
+    onclick="if(event.target===this) cerrarModalCliente()">
+    <div
+        class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg border border-white/10 animate-slide-up flex flex-col"
+        style="max-height: 92vh;">
+
+        <!-- Handle mobile -->
+        <div class="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
+        </div>
+
+        <!-- Modal Header -->
+        <div class="px-6 pt-4 pb-3 border-b border-white/10 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20 shrink-0">
+                    <span class="material-symbols-outlined text-xl text-primary">domain</span>
+                </div>
+                <h3 id="modal-cliente-titulo" class="text-base font-black text-white tracking-tight">Nueva Empresa</h3>
+            </div>
+            <button onclick="cerrarModalCliente()"
+                class="text-slate-500 hover:text-white transition p-1 rounded-lg hover:bg-white/5">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Modal Body (scrollable) -->
+        <div class="px-6 py-4 space-y-3 overflow-y-auto flex-1">
+            <input type="hidden" id="mc-id">
+
+            <!-- Nombre (requerido) -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                    Nombre de la Empresa <span class="text-primary">*</span>
+                </label>
+                <input type="text" id="mc-nombre" placeholder="Ej: Constructora Argos S.A."
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                    onfocus="this.style.borderColor='rgba(197,160,72,0.5)'"
+                    onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+            </div>
+
+            <!-- NIT + Dirección -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label
+                        class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">NIT</label>
+                    <input type="text" id="mc-nit" placeholder="900123456-1"
+                        style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                        class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                        onfocus="this.style.borderColor='rgba(197,160,72,0.5)'"
+                        onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                </div>
+                <div>
+                    <label
+                        class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Dirección</label>
+                    <input type="text" id="mc-direccion" placeholder="Calle 10 # 5-20"
+                        style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                        class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                        onfocus="this.style.borderColor='rgba(197,160,72,0.5)'"
+                        onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                </div>
+            </div>
+
+            <!-- Correo Gerente -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Correo del
+                    Gerente</label>
+                <input type="email" id="mc-correo" placeholder="gerente@empresa.com"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                    onfocus="this.style.borderColor='rgba(197,160,72,0.5)'"
+                    onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+            </div>
+
+            <!-- Nombre Contacto + Celular -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label
+                        class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Contacto</label>
+                    <input type="text" id="mc-contacto" placeholder="Nombre del contacto"
+                        style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                        class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                        onfocus="this.style.borderColor='rgba(197,160,72,0.5)'"
+                        onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                </div>
+                <div>
+                    <label
+                        class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Celular
+                        WhatsApp</label>
+                    <input type="tel" id="mc-celular" placeholder="3001234567"
+                        style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                        class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                        onfocus="this.style.borderColor='rgba(197,160,72,0.5)'"
+                        onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+                </div>
+            </div>
+
+            <!-- Obra / Proyecto -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nombre de
+                    Obra / Proyecto</label>
+                <input type="text" id="mc-obra" placeholder="Ej: Edificio Torres del Norte"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                    onfocus="this.style.borderColor='rgba(197,160,72,0.5)'"
+                    onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+            </div>
+
+            <!-- Estado (solo al editar) -->
+            <div id="mc-estado-wrapper" class="hidden">
+                <label
+                    class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Estado</label>
+                <select id="mc-estado" style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all appearance-none">
+                    <option value="ACTIVO" style="background:#1a242f;">ACTIVO</option>
+                    <option value="INACTIVO" style="background:#1a242f;">INACTIVO</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="px-6 pb-5 pt-3 flex gap-3 border-t border-white/5 shrink-0">
+            <button onclick="cerrarModalCliente()"
+                class="flex-1 py-3 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">
+                Cancelar
+            </button>
+            <button onclick="guardarClienteAdmin()" id="btn-guardar-cliente"
+                style="background: var(--color-primario);"
+                class="flex-1 py-3 text-black font-black rounded-xl hover:opacity-90 transition-all active:scale-[0.98] text-sm uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50">
+                <span id="spinner-guardar-cliente"
+                    class="hidden animate-spin h-4 w-4 border-2 border-black border-t-transparent rounded-full"></span>
+                <span class="material-symbols-outlined text-base">save</span>
+                Guardar
+            </button>
+        </div>
+    </div>
+</div>

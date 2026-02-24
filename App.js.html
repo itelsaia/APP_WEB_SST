@@ -136,6 +136,8 @@
                 console.error('[SST] Error en inicialización SUP-SST:', e);
                 switchModule('asistencia');
             }
+        } else if (currentUser && currentUser.rol === 'ADMIN') {
+            switchModule('admin');
         }
 
         ocultarLoader();
@@ -193,8 +195,15 @@
             config.msg = `¡Bienvenido/a, ${nombre}! 👷`;
             config.icon = "engineering";
         } else if (rol === 'ADMIN') {
-            config.msg = `Bienvenido/a: ${nombre} 👔`;
-            config.icon = "query_stats";
+            const adminQuotes = [
+                "Una buena gestión es la base de una empresa segura.",
+                "El liderazgo administrativo impulsa la cultura SST.",
+                "Gestionar con datos, prevenir con conocimiento.",
+                "La excelencia operativa comienza desde la administración."
+            ];
+            config.msg = `¡Hola, ${nombre}! Es un gusto saludarte. 👔`;
+            config.sub = adminQuotes[Math.floor(Math.random() * adminQuotes.length)];
+            config.icon = "admin_panel_settings";
         }
 
         if (welcomeMsg) welcomeMsg.textContent = config.msg;
@@ -981,6 +990,322 @@
     /** @deprecated — reemplazado por abrirModalFirma */
     function confirmarCierrePendiente(id) {
         abrirModalFirma(id);
+    }
+
+    // ================================================================
+    // MÓDULO: ADMINISTRACIÓN DE CLIENTES/EMPRESAS
+    // ================================================================
+
+    let _clientesAdmin   = [];   // Cache completo de clientes
+    let _filtroAdmin     = 'todas'; // Filtro activo actual
+    let _clienteEditando = null; // Cliente en edición (null = nuevo)
+
+    /**
+     * Muestra el workspace del módulo admin seleccionado y oculta el portal.
+     */
+    function abrirModuloAdmin(modulo) {
+        const portal = document.getElementById('admin-portal');
+        if (modulo === 'clientes') {
+            const workspace = document.getElementById('admin-workspace-clientes');
+            if (portal)    portal.classList.add('hidden');
+            if (workspace) workspace.classList.remove('hidden');
+            cargarClientesAdmin();
+        }
+    }
+
+    /**
+     * Regresa al portal principal de módulos del administrador.
+     */
+    function volverAlPortalAdmin() {
+        const portal    = document.getElementById('admin-portal');
+        const workspace = document.getElementById('admin-workspace-clientes');
+        if (portal)    portal.classList.remove('hidden');
+        if (workspace) workspace.classList.add('hidden');
+        _filtroAdmin = 'todas'; // Resetear filtro al volver
+    }
+
+    /**
+     * Carga todos los clientes desde el servidor y actualiza la tabla.
+     */
+    function cargarClientesAdmin() {
+        const tbody = document.getElementById('tabla-clientes-body');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-10 text-slate-500 text-xs italic">' +
+                '<div class="flex flex-col items-center gap-2">' +
+                '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+                '<span>Cargando empresas...</span></div></td></tr>';
+        }
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (res.status === 'success') {
+                    _clientesAdmin = res.data || [];
+                    actualizarStatsClientes();
+                    filtrarClientes(_filtroAdmin);
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-red-400 text-xs">Error al cargar datos</td></tr>';
+                }
+            })
+            .withFailureHandler(function (err) {
+                mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
+            })
+            .obtenerListaClientesAdmin();
+    }
+
+    /**
+     * Actualiza los contadores en las tarjetas de estadísticas.
+     */
+    function actualizarStatsClientes() {
+        const total     = _clientesAdmin.length;
+        const activas   = _clientesAdmin.filter(function(c) { return c.estado === 'ACTIVO'; }).length;
+        const inactivas = _clientesAdmin.filter(function(c) { return c.estado === 'INACTIVO'; }).length;
+
+        var elTotal     = document.getElementById('stat-total');
+        var elActivas   = document.getElementById('stat-activas');
+        var elInactivas = document.getElementById('stat-inactivas');
+
+        if (elTotal)     elTotal.querySelector('.stat-num').textContent     = total;
+        if (elActivas)   elActivas.querySelector('.stat-num').textContent   = activas;
+        if (elInactivas) elInactivas.querySelector('.stat-num').textContent = inactivas;
+    }
+
+    /**
+     * Filtra la lista de clientes según el tipo y actualiza los pills.
+     * @param {string} tipo 'todas' | 'activas' | 'inactivas'
+     */
+    function filtrarClientes(tipo) {
+        _filtroAdmin = tipo;
+
+        // Actualizar estilos de los pills
+        document.querySelectorAll('[data-filtro]').forEach(function (btn) {
+            const isActive = btn.dataset.filtro === tipo;
+            btn.style.backgroundColor = isActive ? 'rgba(197,160,72,0.18)' : 'rgba(255,255,255,0.05)';
+            btn.style.borderColor     = isActive ? 'rgba(197,160,72,0.40)' : 'rgba(255,255,255,0.10)';
+            btn.style.color           = isActive ? 'var(--color-primario)'  : 'rgb(148,163,184)';
+        });
+
+        // Filtrar y renderizar
+        var filtrados = _clientesAdmin;
+        if (tipo === 'activas')   filtrados = _clientesAdmin.filter(function(c) { return c.estado === 'ACTIVO'; });
+        if (tipo === 'inactivas') filtrados = _clientesAdmin.filter(function(c) { return c.estado === 'INACTIVO'; });
+
+        renderizarTablaClientes(filtrados);
+    }
+
+    /**
+     * Genera las filas de la tabla de clientes.
+     * @param {Array} clientes Lista filtrada de clientes.
+     */
+    function renderizarTablaClientes(clientes) {
+        const tbody = document.getElementById('tabla-clientes-body');
+        if (!tbody) return;
+
+        if (!clientes || clientes.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-10 text-slate-500 text-xs italic">' +
+                '<div class="flex flex-col items-center gap-2">' +
+                '<span class="material-symbols-outlined text-3xl">search_off</span>' +
+                '<span>Sin registros para mostrar</span></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = clientes.map(function (c) {
+            const esActivo    = c.estado === 'ACTIVO';
+            const badgeClases = esActivo
+                ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                : 'bg-red-500/15 text-red-400 border border-red-500/30';
+            const toggleIcon  = esActivo ? 'toggle_on' : 'toggle_off';
+            const toggleTip   = esActivo ? 'Desactivar' : 'Activar';
+            const toggleClase = esActivo
+                ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20'
+                : 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20';
+
+            return '<tr class="border-b border-white/5 hover:bg-white/5 transition-colors' + (esActivo ? '' : ' opacity-55') + '">' +
+                '<td class="px-3 py-3 text-[11px] font-black whitespace-nowrap" style="color:var(--color-primario)">' + _esc(c.id) + '</td>' +
+                '<td class="px-3 py-3 text-xs font-bold text-white whitespace-nowrap">' + _esc(c.nombre) + '</td>' +
+                '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.nit || '<span class="text-slate-600">-</span>') + '</td>' +
+                '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.correo || '<span class="text-slate-600">-</span>') + '</td>' +
+                '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.direccion || '<span class="text-slate-600">-</span>') + '</td>' +
+                '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.contacto || '<span class="text-slate-600">-</span>') + '</td>' +
+                '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.celular || '<span class="text-slate-600">-</span>') + '</td>' +
+                '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.obra || '<span class="text-slate-600">-</span>') + '</td>' +
+                '<td class="px-3 py-3 whitespace-nowrap">' +
+                    '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ' + badgeClases + '">' + c.estado + '</span>' +
+                '</td>' +
+                '<td class="px-3 py-3 whitespace-nowrap">' +
+                    '<div class="flex items-center gap-1">' +
+                        '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
+                            'class="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all" title="Editar">' +
+                            '<span class="material-symbols-outlined text-sm">edit</span>' +
+                        '</button>' +
+                        '<button onclick="toggleEstadoCliente(\'' + _esc(c.id) + '\',\'' + c.estado + '\')" ' +
+                            'class="p-1.5 rounded-lg ' + toggleClase + ' transition-all" title="' + toggleTip + '">' +
+                            '<span class="material-symbols-outlined text-sm">' + toggleIcon + '</span>' +
+                        '</button>' +
+                        '<button onclick="confirmarEliminarCliente(\'' + _esc(c.id) + '\',\'' + _escAttr(c.nombre) + '\')" ' +
+                            'class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all" title="Eliminar">' +
+                            '<span class="material-symbols-outlined text-sm">delete</span>' +
+                        '</button>' +
+                    '</div>' +
+                '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    /** Escapa texto para insertar en contenido HTML */
+    function _esc(str) {
+        return (str || '').toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    /** Escapa texto para insertar en atributo onclick (comillas simples ya usadas) */
+    function _escAttr(str) {
+        return (str || '').toString()
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'");
+    }
+
+    /**
+     * Abre el modal de creación/edición buscando el cliente por ID en el caché.
+     */
+    function abrirModalClientePorId(id) {
+        var cliente = _clientesAdmin.find(function(c) { return c.id === id; }) || null;
+        abrirModalCliente(cliente);
+    }
+
+    /**
+     * Abre el modal de cliente.
+     * @param {Object|null} cliente null = modo creación, objeto = modo edición
+     */
+    function abrirModalCliente(cliente) {
+        _clienteEditando = cliente;
+        var modal  = document.getElementById('modal-cliente');
+        var titulo = document.getElementById('modal-cliente-titulo');
+        var estadoWrapper = document.getElementById('mc-estado-wrapper');
+        if (!modal) return;
+
+        // Poblar campos
+        document.getElementById('mc-id').value        = cliente ? cliente.id        : '';
+        document.getElementById('mc-nombre').value    = cliente ? cliente.nombre    : '';
+        document.getElementById('mc-direccion').value = cliente ? cliente.direccion : '';
+        document.getElementById('mc-nit').value       = cliente ? cliente.nit       : '';
+        document.getElementById('mc-correo').value    = cliente ? cliente.correo    : '';
+        document.getElementById('mc-contacto').value  = cliente ? cliente.contacto  : '';
+        document.getElementById('mc-celular').value   = cliente ? cliente.celular   : '';
+        document.getElementById('mc-obra').value      = cliente ? cliente.obra      : '';
+        var selectEstado = document.getElementById('mc-estado');
+        if (selectEstado) selectEstado.value = cliente ? cliente.estado : 'ACTIVO';
+
+        if (titulo) titulo.textContent = cliente ? 'Editar Empresa' : 'Nueva Empresa';
+
+        // El campo Estado solo es editable al editar (no al crear)
+        if (estadoWrapper) estadoWrapper.classList.toggle('hidden', !cliente);
+
+        modal.classList.remove('hidden');
+    }
+
+    /**
+     * Cierra el modal de cliente y limpia el estado.
+     */
+    function cerrarModalCliente() {
+        var modal = document.getElementById('modal-cliente');
+        if (modal) modal.classList.add('hidden');
+        _clienteEditando = null;
+    }
+
+    /**
+     * Envía el formulario de creación/edición al servidor.
+     */
+    function guardarClienteAdmin() {
+        var nombre = (document.getElementById('mc-nombre').value || '').trim();
+        if (!nombre) {
+            mostrarNotificacion('⚠️ El nombre de la empresa es obligatorio.', 'error');
+            return;
+        }
+
+        var data = {
+            id:        (document.getElementById('mc-id').value || '').trim(),
+            nombre:    nombre,
+            direccion: (document.getElementById('mc-direccion').value || '').trim(),
+            nit:       (document.getElementById('mc-nit').value || '').trim(),
+            correo:    (document.getElementById('mc-correo').value || '').trim(),
+            contacto:  (document.getElementById('mc-contacto').value || '').trim(),
+            celular:   (document.getElementById('mc-celular').value || '').trim(),
+            obra:      (document.getElementById('mc-obra').value || '').trim(),
+            estado:    (document.getElementById('mc-estado') ? document.getElementById('mc-estado').value : 'ACTIVO')
+        };
+
+        var btn     = document.getElementById('btn-guardar-cliente');
+        var spinner = document.getElementById('spinner-guardar-cliente');
+        if (btn)     btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (btn)     btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                if (res.status === 'success') {
+                    cerrarModalCliente();
+                    mostrarNotificacion('✅ ' + res.message, 'success');
+                    cargarClientesAdmin();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function (err) {
+                if (btn)     btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .guardarCliente(data);
+    }
+
+    /**
+     * Solicita confirmación antes de eliminar un cliente.
+     */
+    function confirmarEliminarCliente(id, nombre) {
+        if (!confirm('¿Está seguro de eliminar la empresa "' + nombre + '"?\nEsta acción no se puede deshacer.')) return;
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (res.status === 'success') {
+                    mostrarNotificacion('✅ ' + res.message, 'success');
+                    cargarClientesAdmin();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function (err) {
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .eliminarCliente(id);
+    }
+
+    /**
+     * Alterna el estado ACTIVO/INACTIVO de una empresa.
+     * Si se desactiva, ya no aparecerá en el selector de supervisores.
+     */
+    function toggleEstadoCliente(id, estadoActual) {
+        var nuevoEstado = estadoActual === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
+        var msg = nuevoEstado === 'INACTIVO'
+            ? '¿Desactivar esta empresa?\nLos supervisores ya no podrán iniciar jornadas para ella.'
+            : '¿Reactivar esta empresa?';
+        if (!confirm(msg)) return;
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (res.status === 'success') {
+                    mostrarNotificacion('✅ ' + res.message, 'success');
+                    cargarClientesAdmin();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function (err) {
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .cambiarEstadoCliente(id, nuevoEstado);
     }
 
     function onExito(response) {

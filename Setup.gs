@@ -309,7 +309,7 @@ function inicializarBaseDeDatos() {
   
   const hojasRequeridas = [
     { nombre: 'PARAM_SISTEMA',    encabezados: ['Parametro', 'Valor', 'Descripcion'] },
-    { nombre: 'DB_CLIENTES',      encabezados: ['ID_Cliente', 'Nombre_Empresa', 'NIT', 'Correo_Gerente', 'Estado'] },
+    { nombre: 'DB_CLIENTES',      encabezados: ['ID_Cliente', 'Nombre_Empresa', 'Direccion', 'NIT', 'Correo_Gerente', 'Nombre_Contacto', 'Celular_Whatsapp', 'Nombre_Obra', 'Estado'] },
     { nombre: 'DB_USUARIOS',      encabezados: ['Email', 'Nombre_Completo', 'Rol', 'Password', 'ID_Cliente_Asociado', 'Cedula', 'Celular_Whatsapp'] },
     { nombre: 'LISTAS_FORMATOS',  encabezados: ['ID_Formato', 'Descripcion', 'Empresa_Contratista', 'Estado'] },
     { nombre: 'DB_INSPECCIONES',  encabezados: ['Id_formato', 'Consecutivo', 'Descripcion_Formato', 'Fecha_Hora', 'Empresa_Contratista', 'Foto_Formato_URL', 'Reportado_Por', 'Estado', 'Foto_Firma_URL', 'Fecha_Cierre'] },
