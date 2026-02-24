@@ -388,6 +388,192 @@ function obtenerAsistenciaAdmin() {
 }
 
 // ══════════════════════════════════════════════════════════
+// ADMINISTRACIÓN DE USUARIOS
+// Esquema DB_USUARIOS: A=ID_Usuario B=Email C=Nombre_Completo D=Rol
+//                      E=Password F=ID_Cliente_Asociado G=Cedula
+//                      H=Celular_Whatsapp I=Estado (ACTIVO/INACTIVO)
+// ══════════════════════════════════════════════════════════
+
+/**
+ * Devuelve todos los usuarios (sin contraseña) para el panel admin.
+ */
+function obtenerUsuariosAdmin() {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_USUARIOS');
+    if (!hoja) return { status: 'success', data: [] };
+
+    const datos    = hoja.getDataRange().getValues();
+    const usuarios = [];
+    for (let i = 1; i < datos.length; i++) {
+      const id = (datos[i][0] || '').toString().trim();
+      if (!id) continue;
+      usuarios.push({
+        id:        id,
+        email:     (datos[i][1] || '').toString().trim(),
+        nombre:    (datos[i][2] || '').toString().trim(),
+        rol:       (datos[i][3] || '').toString().trim(),
+        idCliente: (datos[i][5] || '').toString().trim(),
+        cedula:    (datos[i][6] || '').toString().trim(),
+        celular:   (datos[i][7] || '').toString().trim(),
+        estado:    (datos[i][8] || 'ACTIVO').toString().trim().toUpperCase()
+      });
+    }
+    return { status: 'success', data: usuarios };
+  } catch (e) {
+    Logger.log('Error en obtenerUsuariosAdmin: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Genera el próximo ID de usuario según el prefijo del rol.
+ * Ej: rol "SUP-SST" → prefijo "SUP" → "SUP-003"
+ */
+function _generarIdUsuario_(rol, hoja) {
+  const prefijo = (rol || '').split('-')[0].toUpperCase() || 'USR';
+  const datos   = hoja.getDataRange().getValues();
+  let   contador = 0;
+  for (let i = 1; i < datos.length; i++) {
+    const id = (datos[i][0] || '').toString().trim();
+    if (id.startsWith(prefijo + '-')) contador++;
+  }
+  return prefijo + '-' + String(contador + 1).padStart(3, '0');
+}
+
+/**
+ * Crea un nuevo usuario. Valida email duplicado y genera ID automático.
+ */
+function crearUsuario(datos) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_USUARIOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
+
+    const emailNuevo = (datos.email || '').toString().trim().toLowerCase();
+    if (!emailNuevo) return { status: 'error', message: 'El email es obligatorio.' };
+    if (!datos.password) return { status: 'error', message: 'La contraseña es obligatoria.' };
+
+    // Verificar email duplicado
+    const filas = hoja.getDataRange().getValues();
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][1] || '').toString().trim().toLowerCase() === emailNuevo) {
+        return { status: 'error', message: 'Ya existe un usuario con ese email.' };
+      }
+    }
+
+    const nuevoId = _generarIdUsuario_(datos.rol, hoja);
+    hoja.appendRow([
+      nuevoId,                                        // A: ID_Usuario
+      emailNuevo,                                     // B: Email
+      (datos.nombre    || '').toString().trim(),      // C: Nombre_Completo
+      (datos.rol       || '').toString().trim(),      // D: Rol
+      (datos.password  || '').toString(),             // E: Password
+      (datos.idCliente || '').toString().trim(),      // F: ID_Cliente_Asociado
+      (datos.cedula    || '').toString().trim(),      // G: Cedula
+      (datos.celular   || '').toString().trim(),      // H: Celular_Whatsapp
+      'ACTIVO'                                        // I: Estado
+    ]);
+    SpreadsheetApp.flush();
+    CacheService.getScriptCache().remove('db_usuarios_v1');
+    return { status: 'success', message: 'Usuario ' + nuevoId + ' creado correctamente.', data: { id: nuevoId } };
+  } catch (e) {
+    Logger.log('Error en crearUsuario: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Actualiza los datos de un usuario (sin cambiar contraseña ni email).
+ */
+function actualizarUsuario(datos) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_USUARIOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
+
+    const filas = hoja.getDataRange().getValues();
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim() === datos.id) {
+        const fila = i + 1;
+        hoja.getRange(fila, 3).setValue((datos.nombre    || '').toString().trim()); // C
+        hoja.getRange(fila, 4).setValue((datos.rol       || '').toString().trim()); // D
+        hoja.getRange(fila, 6).setValue((datos.idCliente || '').toString().trim()); // F
+        hoja.getRange(fila, 7).setValue((datos.cedula    || '').toString().trim()); // G
+        hoja.getRange(fila, 8).setValue((datos.celular   || '').toString().trim()); // H
+        hoja.getRange(fila, 9).setValue((datos.estado    || 'ACTIVO').toString().trim().toUpperCase()); // I
+        SpreadsheetApp.flush();
+        CacheService.getScriptCache().remove('db_usuarios_v1');
+        return { status: 'success', message: 'Usuario actualizado correctamente.' };
+      }
+    }
+    return { status: 'error', message: 'Usuario no encontrado.' };
+  } catch (e) {
+    Logger.log('Error en actualizarUsuario: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Resetea la contraseña de un usuario.
+ */
+function resetPasswordUsuario(idUsuario, newPassword) {
+  try {
+    if (!newPassword || newPassword.toString().length < 4) {
+      return { status: 'error', message: 'La contraseña debe tener al menos 4 caracteres.' };
+    }
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_USUARIOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
+
+    const filas = hoja.getDataRange().getValues();
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim() === idUsuario) {
+        hoja.getRange(i + 1, 5).setValue(newPassword.toString()); // E: Password
+        SpreadsheetApp.flush();
+        CacheService.getScriptCache().remove('db_usuarios_v1');
+        return { status: 'success', message: 'Contraseña actualizada correctamente.' };
+      }
+    }
+    return { status: 'error', message: 'Usuario no encontrado.' };
+  } catch (e) {
+    Logger.log('Error en resetPasswordUsuario: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Alterna el estado ACTIVO/INACTIVO de un usuario.
+ */
+function toggleEstadoUsuario(idUsuario) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_USUARIOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
+
+    const filas = hoja.getDataRange().getValues();
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim() === idUsuario) {
+        const estadoActual = (filas[i][8] || 'ACTIVO').toString().trim().toUpperCase();
+        const nuevoEstado  = estadoActual === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
+        hoja.getRange(i + 1, 9).setValue(nuevoEstado); // I: Estado
+        SpreadsheetApp.flush();
+        CacheService.getScriptCache().remove('db_usuarios_v1');
+        return { status: 'success', message: 'Estado cambiado a ' + nuevoEstado + '.', data: { estado: nuevoEstado } };
+      }
+    }
+    return { status: 'error', message: 'Usuario no encontrado.' };
+  } catch (e) {
+    Logger.log('Error en toggleEstadoUsuario: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 // ADMINISTRACIÓN DE CLIENTES/EMPRESAS
 // ══════════════════════════════════════════════════════════
 
@@ -576,16 +762,20 @@ function validarCredenciales(email, password) {
       const hoja = ss.getSheetByName('DB_USUARIOS');
       if (!hoja) return { status: 'error', message: 'La hoja DB_USUARIOS no existe.' };
 
+      // Esquema DB_USUARIOS: A=ID_Usuario B=Email C=Nombre D=Rol E=Password F=ID_Cliente G=Cedula H=Celular I=Estado
       const datos = hoja.getDataRange().getValues();
       usuarios    = [];
       for (let i = 1; i < datos.length; i++) {
+        const id = (datos[i][0] || '').toString().trim();
+        if (!id) continue;
         usuarios.push({
-          email:     (datos[i][0] || '').toString().trim().toLowerCase(),
-          nombre:    datos[i][1],
-          rol:       datos[i][2],
-          password:  (datos[i][3] || '').toString(),
-          idCliente: datos[i][4] || '',
-          estado:    (datos[i][5] || '').toString().toLowerCase()
+          id:        id,
+          email:     (datos[i][1] || '').toString().trim().toLowerCase(),
+          nombre:    datos[i][2],
+          rol:       datos[i][3],
+          password:  (datos[i][4] || '').toString(),
+          idCliente: datos[i][5] || '',
+          estado:    (datos[i][8] || 'activo').toString().toLowerCase()
         });
       }
       // Guardar por 5 minutos (300s)

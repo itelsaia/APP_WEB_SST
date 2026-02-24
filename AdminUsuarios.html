@@ -1,0 +1,287 @@
+<!-- AdminUsuarios.html — Módulo Gestión de Usuarios -->
+<div class="space-y-5 animate-fade-in">
+
+    <!-- ── CABECERA ───────────────────────────────────────────────── -->
+    <div class="flex items-center justify-between pb-4 border-b border-white/10">
+        <div class="flex items-center gap-3">
+            <button onclick="volverAlPortalAdmin()"
+                class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:bg-white/10 transition border border-white/10 shrink-0"
+                title="Volver al portal">
+                <span class="material-symbols-outlined text-base">arrow_back</span>
+            </button>
+            <div>
+                <h3 class="text-sm font-black text-white uppercase tracking-tight">Gestión de Usuarios</h3>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Control de Accesos · CRUD · Contraseñas</p>
+            </div>
+        </div>
+        <button onclick="abrirModalUsuario(null)"
+            style="background:rgba(197,160,72,0.12); border:1.5px solid rgba(197,160,72,0.35);"
+            class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-primary font-black text-[10px] uppercase tracking-widest hover:opacity-80 transition-all active:scale-95 shrink-0">
+            <span class="material-symbols-outlined text-base">person_add</span>
+            <span class="hidden sm:inline">Nuevo Usuario</span>
+            <span class="sm:hidden">Nuevo</span>
+        </button>
+    </div>
+
+    <!-- ── TARJETAS DE ESTADÍSTICAS ──────────────────────────────── -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div id="usr-stat-total"
+            class="bg-white/5 rounded-xl border border-white/10 p-3 text-center hover:bg-white/8 transition-all">
+            <p class="stat-num text-2xl font-black text-white leading-none">-</p>
+            <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Total</p>
+        </div>
+        <div id="usr-stat-activos"
+            class="bg-green-500/5 rounded-xl border border-green-500/20 p-3 text-center hover:bg-green-500/8 transition-all">
+            <p class="stat-num text-2xl font-black text-green-400 leading-none">-</p>
+            <p class="text-[9px] text-green-600 font-bold uppercase tracking-widest mt-1">Activos</p>
+        </div>
+        <div id="usr-stat-inactivos"
+            class="bg-red-500/5 rounded-xl border border-red-500/20 p-3 text-center hover:bg-red-500/8 transition-all">
+            <p class="stat-num text-2xl font-black text-red-400 leading-none">-</p>
+            <p class="text-[9px] text-red-600 font-bold uppercase tracking-widest mt-1">Inactivos</p>
+        </div>
+        <div id="usr-stat-roles"
+            class="bg-primary/5 rounded-xl border border-primary/20 p-3 text-center hover:bg-primary/8 transition-all">
+            <p class="stat-num text-2xl font-black text-primary leading-none">-</p>
+            <p class="text-[9px] text-primary/60 font-bold uppercase tracking-widest mt-1">Roles</p>
+        </div>
+    </div>
+
+    <!-- ── FILTROS ────────────────────────────────────────────────── -->
+    <div class="flex flex-col sm:flex-row gap-2">
+        <!-- Búsqueda por nombre / email -->
+        <div class="relative flex-1">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">search</span>
+            <input type="text" id="usr-filtro-texto"
+                placeholder="Buscar por nombre o email..."
+                oninput="filtrarUsuarios()"
+                style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+        </div>
+        <!-- Selector de rol -->
+        <div class="relative shrink-0 min-w-[160px]">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">badge</span>
+            <select id="usr-filtro-rol"
+                onchange="filtrarUsuarios()"
+                style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer">
+                <option value="" style="background:#1a242f;">Todos los roles</option>
+            </select>
+        </div>
+        <!-- Selector de estado -->
+        <div class="relative shrink-0 min-w-[160px]">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">radio_button_checked</span>
+            <select id="usr-filtro-estado"
+                onchange="filtrarUsuarios()"
+                style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer">
+                <option value="" style="background:#1a242f;">Todos los estados</option>
+                <option value="ACTIVO" style="background:#1a242f;">Activos</option>
+                <option value="INACTIVO" style="background:#1a242f;">Inactivos</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- ── VISTA MÓVIL: TARJETAS ─────────────────────────────────── -->
+    <div id="usr-lista-mobile" class="sm:hidden space-y-3">
+        <div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">
+            <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>
+            <span>Cargando usuarios...</span>
+        </div>
+    </div>
+
+    <!-- ── VISTA ESCRITORIO: TABLA ───────────────────────────────── -->
+    <div class="hidden sm:block overflow-x-auto rounded-xl border border-white/10 shadow-xl">
+        <table class="w-full min-w-[860px] text-left">
+            <thead>
+                <tr style="background:rgba(255,255,255,0.04);" class="border-b border-white/10">
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">ID</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Nombre</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Email</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Rol</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Cliente</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Cédula</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Celular</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Estado</th>
+                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="usr-tabla-body">
+                <tr>
+                    <td colspan="9" class="text-center py-10 text-slate-500 text-xs italic">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>
+                            <span>Cargando usuarios...</span>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MODAL: CREAR / EDITAR USUARIO                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="usr-modal"
+    class="fixed inset-0 bg-black/85 z-[70] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
+    onclick="if(event.target===this) cerrarModalUsuario()">
+    <div class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg border border-white/10 animate-slide-up">
+
+        <!-- Handle móvil -->
+        <div class="sm:hidden flex justify-center pt-3 pb-1">
+            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
+        </div>
+
+        <!-- Cabecera modal -->
+        <div class="px-6 pt-4 pb-3 border-b border-white/10 flex items-center gap-3">
+            <div class="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20 shrink-0">
+                <span class="material-symbols-outlined text-2xl text-primary">manage_accounts</span>
+            </div>
+            <div>
+                <h3 id="usr-modal-titulo" class="text-base font-black text-white tracking-tight">Nuevo Usuario</h3>
+                <p id="usr-modal-id" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest"></p>
+            </div>
+        </div>
+
+        <!-- Cuerpo del formulario -->
+        <div class="px-6 py-4 space-y-3 overflow-y-auto" style="max-height:60vh;">
+
+            <!-- Nombre Completo -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Nombre Completo *</label>
+                <input type="text" id="usr-inp-nombre" placeholder="Ej: Juan Pérez García"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+            </div>
+
+            <!-- Email -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Email *</label>
+                <input type="email" id="usr-inp-email" placeholder="usuario@correo.com"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+            </div>
+
+            <!-- Rol -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Rol *</label>
+                <select id="usr-inp-rol" onchange="onCambioRolUsuario()"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none">
+                    <option value="" style="background:#1a242f;">Seleccione un rol...</option>
+                    <option value="ADMIN" style="background:#1a242f;">ADMIN — Administrador</option>
+                    <option value="SUP-SST" style="background:#1a242f;">SUP-SST — Supervisor SST</option>
+                </select>
+            </div>
+
+            <!-- Contraseña (solo en creación) -->
+            <div id="usr-campo-password">
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Contraseña *</label>
+                <input type="text" id="usr-inp-password" placeholder="Contraseña inicial..."
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+            </div>
+
+            <!-- Cliente Asociado (solo para SUP-SST) -->
+            <div id="usr-campo-cliente" class="hidden">
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Cliente / Empresa Asociada</label>
+                <select id="usr-inp-cliente"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none">
+                    <option value="" style="background:#1a242f;">Sin cliente asociado</option>
+                </select>
+            </div>
+
+            <!-- Cédula -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Cédula</label>
+                <input type="text" id="usr-inp-cedula" placeholder="Número de cédula..."
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+            </div>
+
+            <!-- Celular / WhatsApp -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Celular / WhatsApp</label>
+                <input type="tel" id="usr-inp-celular" placeholder="Ej: 3001234567"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+            </div>
+
+            <!-- Estado (solo en edición) -->
+            <div id="usr-campo-estado" class="hidden">
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Estado</label>
+                <select id="usr-inp-estado"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none">
+                    <option value="ACTIVO" style="background:#1a242f;">ACTIVO</option>
+                    <option value="INACTIVO" style="background:#1a242f;">INACTIVO</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 pb-5 pt-3 flex gap-3 border-t border-white/5">
+            <button onclick="cerrarModalUsuario()"
+                class="flex-1 py-3 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">
+                Cancelar
+            </button>
+            <button onclick="guardarUsuario()" id="usr-btn-guardar"
+                style="background:var(--color-primario); box-shadow:0 4px 14px rgba(197,160,72,0.25);"
+                class="flex-1 py-3 text-black font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
+                <span id="usr-spinner-guardar" class="hidden animate-spin border-2 border-black border-t-transparent rounded-full w-4 h-4"></span>
+                <span class="material-symbols-outlined text-base">save</span>
+                Guardar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MODAL: RESET DE CONTRASEÑA                                -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="usr-reset-modal"
+    class="fixed inset-0 bg-black/85 z-[80] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
+    onclick="if(event.target===this) cerrarModalResetPassword()">
+    <div class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-sm border border-white/10 animate-slide-up">
+
+        <div class="sm:hidden flex justify-center pt-3 pb-1">
+            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
+        </div>
+
+        <div class="px-6 pt-4 pb-3 border-b border-white/10 flex items-center gap-3">
+            <div class="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center border border-amber-500/20 shrink-0">
+                <span class="material-symbols-outlined text-2xl text-amber-400">key</span>
+            </div>
+            <div>
+                <h3 class="text-base font-black text-white tracking-tight">Reset de Contraseña</h3>
+                <p id="usr-reset-nombre" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest"></p>
+            </div>
+        </div>
+
+        <div class="px-6 py-4 space-y-3">
+            <p class="text-xs text-slate-400">Ingrese la nueva contraseña para este usuario. El usuario deberá usarla en su próximo inicio de sesión.</p>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Nueva Contraseña *</label>
+                <input type="text" id="usr-reset-inp" placeholder="Nueva contraseña..."
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-amber-400/50 transition-all">
+            </div>
+        </div>
+
+        <div class="px-6 pb-5 pt-2 flex gap-3 border-t border-white/5">
+            <button onclick="cerrarModalResetPassword()"
+                class="flex-1 py-3 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">
+                Cancelar
+            </button>
+            <button onclick="confirmarResetPassword()" id="usr-btn-reset"
+                style="background:rgba(245,158,11,0.15); border:1.5px solid rgba(245,158,11,0.4);"
+                class="flex-1 py-3 text-amber-400 font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
+                <span id="usr-spinner-reset" class="hidden animate-spin border-2 border-amber-400 border-t-transparent rounded-full w-4 h-4"></span>
+                <span class="material-symbols-outlined text-base">lock_reset</span>
+                Confirmar
+            </button>
+        </div>
+    </div>
+</div>

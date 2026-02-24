@@ -1083,6 +1083,11 @@
             if (workspace) workspace.classList.remove('hidden');
             actualizarModuloHeader('Control de Asistencia');
             cargarAsistenciaAdmin();
+        } else if (modulo === 'usuarios') {
+            const workspace = document.getElementById('admin-workspace-usuarios');
+            if (workspace) workspace.classList.remove('hidden');
+            actualizarModuloHeader('Gestión de Usuarios');
+            cargarUsuariosAdmin();
         }
     }
 
@@ -1094,7 +1099,7 @@
         if (portal) portal.classList.remove('hidden');
 
         // Ocultar todos los workspaces
-        ['admin-workspace-clientes', 'admin-workspace-asistencia'].forEach(function(id) {
+        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios'].forEach(function(id) {
             var ws = document.getElementById(id);
             if (ws) ws.classList.add('hidden');
         });
@@ -1710,6 +1715,384 @@
         URL.revokeObjectURL(url);
 
         mostrarNotificacion('✅ CSV exportado con ' + datos.length + ' registros.', 'success');
+    }
+
+    // ================================================================
+    // MÓDULO: GESTIÓN DE USUARIOS
+    // ================================================================
+
+    let _usuariosTotal   = [];   // Cache completo
+    let _clientesParaUSR = [];   // Cache de clientes para el select del modal
+    let _usrEditandoId   = null; // ID del usuario en edición (null = nuevo)
+    let _usrResetId      = null; // ID del usuario en reset de contraseña
+
+    function cargarUsuariosAdmin() {
+        var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
+                     '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+                     '<span>Cargando usuarios...</span></div>';
+        var tbody = document.getElementById('usr-tabla-body');
+        var movil = document.getElementById('usr-lista-mobile');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="py-10 text-center">' + loader + '</td></tr>';
+        if (movil) movil.innerHTML = loader;
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res.status === 'success') {
+                    _usuariosTotal = res.data || [];
+                    _poblarSelectRoles();
+                    filtrarUsuarios();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
+            })
+            .obtenerUsuariosAdmin();
+
+        // Cargar clientes para el select del modal (si no están en cache)
+        if (_clientesParaUSR.length === 0) {
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res.status === 'success') _clientesParaUSR = res.data || [];
+                })
+                .obtenerListaClientesAdmin();
+        }
+    }
+
+    function _poblarSelectRoles() {
+        var sel = document.getElementById('usr-filtro-rol');
+        if (!sel) return;
+        var valActual = sel.value;
+        var roles = {};
+        _usuariosTotal.forEach(function(u) { if (u.rol) roles[u.rol] = true; });
+        sel.innerHTML = '<option value="" style="background:#1a242f;">Todos los roles</option>';
+        Object.keys(roles).sort().forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r; opt.textContent = r; opt.style.background = '#1a242f';
+            sel.appendChild(opt);
+        });
+        if (valActual) sel.value = valActual;
+    }
+
+    function filtrarUsuarios() {
+        var q      = ((document.getElementById('usr-filtro-texto')  || {}).value || '').trim().toLowerCase();
+        var rol    = ((document.getElementById('usr-filtro-rol')    || {}).value || '').trim();
+        var estado = ((document.getElementById('usr-filtro-estado') || {}).value || '').trim();
+
+        var filtrados = _usuariosTotal.filter(function(u) {
+            var coincideTexto  = !q      || u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+            var coincideRol    = !rol    || u.rol === rol;
+            var coincideEstado = !estado || u.estado === estado;
+            return coincideTexto && coincideRol && coincideEstado;
+        });
+
+        _actualizarStatsUsuarios(filtrados);
+        _renderTablaUsuarios(filtrados);
+        _renderCardsUsuariosMobil(filtrados);
+    }
+
+    function _actualizarStatsUsuarios(registros) {
+        var activos   = registros.filter(function(u) { return u.estado === 'ACTIVO'; }).length;
+        var inactivos = registros.filter(function(u) { return u.estado === 'INACTIVO'; }).length;
+        var roles     = {};
+        registros.forEach(function(u) { if (u.rol) roles[u.rol] = true; });
+
+        var elTot = document.getElementById('usr-stat-total');
+        var elAct = document.getElementById('usr-stat-activos');
+        var elIna = document.getElementById('usr-stat-inactivos');
+        var elRol = document.getElementById('usr-stat-roles');
+        if (elTot) elTot.querySelector('.stat-num').textContent = registros.length;
+        if (elAct) elAct.querySelector('.stat-num').textContent = activos;
+        if (elIna) elIna.querySelector('.stat-num').textContent = inactivos;
+        if (elRol) elRol.querySelector('.stat-num').textContent = Object.keys(roles).length;
+    }
+
+    function _renderTablaUsuarios(registros) {
+        var tbody = document.getElementById('usr-tabla-body');
+        if (!tbody) return;
+
+        if (!registros || registros.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-500 text-xs italic">' +
+                '<div class="flex flex-col items-center gap-2">' +
+                '<span class="material-symbols-outlined text-3xl">search_off</span>' +
+                '<span>Sin usuarios para mostrar</span></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = registros.map(function(u) {
+            var esActivo = u.estado === 'ACTIVO';
+            var estadoBadge = esActivo
+                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-lg">' +
+                  '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>ACTIVO</span>'
+                : '<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-lg">' +
+                  '<span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>INACTIVO</span>';
+
+            var rolBadge = '<span class="text-[9px] font-black px-2 py-0.5 rounded-lg" style="background:rgba(197,160,72,0.12);color:var(--color-primario);border:1px solid rgba(197,160,72,0.3)">' +
+                _esc(u.rol) + '</span>';
+
+            return '<tr class="border-b border-white/5 hover:bg-white/5 transition-colors">' +
+                '<td class="px-3 py-2.5 text-[10px] font-mono whitespace-nowrap" style="color:var(--color-primario)">' + _esc(u.id) + '</td>' +
+                '<td class="px-3 py-2.5 text-xs font-bold text-white whitespace-nowrap">' + _esc(u.nombre) + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(u.email) + '</td>' +
+                '<td class="px-3 py-2.5 whitespace-nowrap">' + rolBadge + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap max-w-[120px] truncate" title="' + _escAttr(u.idCliente) + '">' + _esc(u.idCliente || '-') + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(u.cedula || '-') + '</td>' +
+                '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(u.celular || '-') + '</td>' +
+                '<td class="px-3 py-2.5 whitespace-nowrap">' + estadoBadge + '</td>' +
+                '<td class="px-3 py-2.5 whitespace-nowrap">' +
+                    '<div class="flex items-center gap-1.5">' +
+                    '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" title="Editar" ' +
+                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-primary/20 border border-white/10 hover:border-primary/30 flex items-center justify-center transition-all">' +
+                        '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-primary">edit</span></button>' +
+                    '<button onclick="abrirModalResetPassword(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" title="Reset contraseña" ' +
+                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/30 flex items-center justify-center transition-all">' +
+                        '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-amber-400">key</span></button>' +
+                    '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" title="' + (esActivo ? 'Desactivar' : 'Activar') + '" ' +
+                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-' + (esActivo ? 'red' : 'green') + '-500/20 border border-white/10 flex items-center justify-center transition-all">' +
+                        '<span class="material-symbols-outlined text-sm ' + (esActivo ? 'text-green-400 hover:text-red-400' : 'text-red-400 hover:text-green-400') + '">' + (esActivo ? 'toggle_on' : 'toggle_off') + '</span></button>' +
+                    '</div>' +
+                '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    function _renderCardsUsuariosMobil(registros) {
+        var lista = document.getElementById('usr-lista-mobile');
+        if (!lista) return;
+
+        if (!registros || registros.length === 0) {
+            lista.innerHTML = '<div class="text-center py-8 text-slate-500 text-xs italic">Sin usuarios para mostrar</div>';
+            return;
+        }
+
+        lista.innerHTML = registros.map(function(u) {
+            var esActivo = u.estado === 'ACTIVO';
+            var estadoBadge = esActivo
+                ? '<span class="text-[9px] font-black text-green-400 bg-green-500/15 border border-green-500/30 px-2 py-0.5 rounded-lg">ACTIVO</span>'
+                : '<span class="text-[9px] font-black text-red-400 bg-red-500/15 border border-red-500/30 px-2 py-0.5 rounded-lg">INACTIVO</span>';
+
+            return '<div class="bg-white/5 border border-white/10 rounded-xl p-3 animate-fade-in">' +
+                '<div class="flex items-start justify-between gap-2 mb-2">' +
+                '<div><p class="text-[10px] font-black uppercase tracking-tight" style="color:var(--color-primario)">' + _esc(u.id) + '</p>' +
+                '<p class="text-xs font-bold text-white">' + _esc(u.nombre) + '</p>' +
+                '<p class="text-[10px] text-slate-500">' + _esc(u.email) + '</p></div>' +
+                estadoBadge + '</div>' +
+                '<div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] mb-2.5">' +
+                '<span class="text-slate-500">Rol:</span><span class="text-primary font-bold">' + _esc(u.rol) + '</span>' +
+                '<span class="text-slate-500">Cédula:</span><span class="text-slate-300">' + _esc(u.cedula || '-') + '</span>' +
+                '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
+                '<span class="text-slate-500">Cliente:</span><span class="text-slate-300 truncate">' + _esc(u.idCliente || '-') + '</span>' +
+                '</div>' +
+                '<div class="flex gap-2 border-t border-white/5 pt-2">' +
+                '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" ' +
+                    'class="flex-1 py-1.5 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center gap-1">' +
+                    '<span class="material-symbols-outlined text-xs">edit</span>Editar</button>' +
+                '<button onclick="abrirModalResetPassword(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" ' +
+                    'class="flex-1 py-1.5 text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center gap-1">' +
+                    '<span class="material-symbols-outlined text-xs">key</span>Password</button>' +
+                '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" ' +
+                    'class="flex-1 py-1.5 text-[10px] font-black ' + (esActivo ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20') + ' border rounded-lg flex items-center justify-center gap-1">' +
+                    '<span class="material-symbols-outlined text-xs">' + (esActivo ? 'toggle_off' : 'toggle_on') + '</span>' + (esActivo ? 'Desactivar' : 'Activar') + '</button>' +
+                '</div></div>';
+        }).join('');
+    }
+
+    // ── Modal crear / editar ──────────────────────────────────────────
+
+    function abrirModalUsuario(id) {
+        _usrEditandoId = id || null;
+        var modal    = document.getElementById('usr-modal');
+        var titulo   = document.getElementById('usr-modal-titulo');
+        var subId    = document.getElementById('usr-modal-id');
+        var fldPwd   = document.getElementById('usr-campo-password');
+        var fldEst   = document.getElementById('usr-campo-estado');
+
+        // Poblar select de clientes
+        var selCliente = document.getElementById('usr-inp-cliente');
+        if (selCliente && _clientesParaUSR.length > 0) {
+            selCliente.innerHTML = '<option value="" style="background:#1a242f;">Sin cliente asociado</option>';
+            _clientesParaUSR.forEach(function(c) {
+                var opt = document.createElement('option');
+                opt.value = c.id; opt.textContent = c.nombre; opt.style.background = '#1a242f';
+                selCliente.appendChild(opt);
+            });
+        }
+
+        if (!id) {
+            // NUEVO
+            titulo.textContent = 'Nuevo Usuario';
+            subId.textContent  = 'ID se asignará automáticamente';
+            document.getElementById('usr-inp-nombre').value   = '';
+            document.getElementById('usr-inp-email').value    = '';
+            document.getElementById('usr-inp-email').readOnly = false;
+            document.getElementById('usr-inp-email').style.opacity = '1';
+            document.getElementById('usr-inp-rol').value     = '';
+            document.getElementById('usr-inp-password').value = '';
+            document.getElementById('usr-inp-cedula').value  = '';
+            document.getElementById('usr-inp-celular').value = '';
+            if (selCliente) selCliente.value = '';
+            fldPwd.classList.remove('hidden');
+            fldEst.classList.add('hidden');
+            document.getElementById('usr-campo-cliente').classList.add('hidden');
+        } else {
+            // EDICIÓN
+            var u = _usuariosTotal.find(function(x) { return x.id === id; });
+            if (!u) return;
+            titulo.textContent = 'Editar Usuario';
+            subId.textContent  = u.id;
+            document.getElementById('usr-inp-nombre').value   = u.nombre;
+            document.getElementById('usr-inp-email').value    = u.email;
+            document.getElementById('usr-inp-email').readOnly = true;
+            document.getElementById('usr-inp-email').style.opacity = '0.5';
+            document.getElementById('usr-inp-rol').value     = u.rol;
+            document.getElementById('usr-inp-cedula').value  = u.cedula || '';
+            document.getElementById('usr-inp-celular').value = u.celular || '';
+            if (selCliente) selCliente.value = u.idCliente || '';
+            document.getElementById('usr-inp-estado').value  = u.estado;
+            fldPwd.classList.add('hidden');
+            fldEst.classList.remove('hidden');
+            // Mostrar campo cliente según rol
+            var fldCli = document.getElementById('usr-campo-cliente');
+            if (u.rol && u.rol !== 'ADMIN') fldCli.classList.remove('hidden');
+            else fldCli.classList.add('hidden');
+        }
+
+        modal.classList.remove('hidden');
+    }
+
+    function cerrarModalUsuario() {
+        var modal = document.getElementById('usr-modal');
+        if (modal) modal.classList.add('hidden');
+        _usrEditandoId = null;
+    }
+
+    function onCambioRolUsuario() {
+        var rol    = (document.getElementById('usr-inp-rol') || {}).value || '';
+        var fldCli = document.getElementById('usr-campo-cliente');
+        if (fldCli) {
+            if (rol && rol !== 'ADMIN') fldCli.classList.remove('hidden');
+            else fldCli.classList.add('hidden');
+        }
+    }
+
+    function guardarUsuario() {
+        var nombre   = (document.getElementById('usr-inp-nombre')   || {}).value || '';
+        var email    = (document.getElementById('usr-inp-email')    || {}).value || '';
+        var rol      = (document.getElementById('usr-inp-rol')      || {}).value || '';
+        var password = (document.getElementById('usr-inp-password') || {}).value || '';
+        var cedula   = (document.getElementById('usr-inp-cedula')   || {}).value || '';
+        var celular  = (document.getElementById('usr-inp-celular')  || {}).value || '';
+        var idCliente = (document.getElementById('usr-inp-cliente') || {}).value || '';
+        var estado   = (document.getElementById('usr-inp-estado')   || {}).value || 'ACTIVO';
+
+        if (!nombre.trim()) { mostrarNotificacion('⚠️ El nombre es obligatorio.', 'warning'); return; }
+        if (!email.trim())  { mostrarNotificacion('⚠️ El email es obligatorio.', 'warning'); return; }
+        if (!rol)           { mostrarNotificacion('⚠️ Seleccione un rol.', 'warning'); return; }
+        if (!_usrEditandoId && !password.trim()) { mostrarNotificacion('⚠️ La contraseña es obligatoria.', 'warning'); return; }
+
+        var btn     = document.getElementById('usr-btn-guardar');
+        var spinner = document.getElementById('usr-spinner-guardar');
+        if (btn)     btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        var datos = { nombre: nombre.trim(), email: email.trim(), rol: rol.trim(),
+                      idCliente: idCliente.trim(), cedula: cedula.trim(), celular: celular.trim() };
+
+        var fnExito = function(res) {
+            if (btn)     btn.disabled = false;
+            if (spinner) spinner.classList.add('hidden');
+            if (res.status === 'success') {
+                mostrarNotificacion('✅ ' + res.message, 'success');
+                cerrarModalUsuario();
+                cargarUsuariosAdmin();
+            } else {
+                mostrarNotificacion('❌ ' + res.message, 'error');
+            }
+        };
+        var fnError = function(err) {
+            if (btn)     btn.disabled = false;
+            if (spinner) spinner.classList.add('hidden');
+            mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+        };
+
+        if (_usrEditandoId) {
+            datos.id     = _usrEditandoId;
+            datos.estado = estado;
+            google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).actualizarUsuario(datos);
+        } else {
+            datos.password = password.trim();
+            google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).crearUsuario(datos);
+        }
+    }
+
+    // ── Modal reset de contraseña ─────────────────────────────────────
+
+    function abrirModalResetPassword(id, nombre) {
+        _usrResetId = id;
+        var modal = document.getElementById('usr-reset-modal');
+        var nomEl = document.getElementById('usr-reset-nombre');
+        var inp   = document.getElementById('usr-reset-inp');
+        if (nomEl) nomEl.textContent = nombre || id;
+        if (inp)   inp.value = '';
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    function cerrarModalResetPassword() {
+        var modal = document.getElementById('usr-reset-modal');
+        if (modal) modal.classList.add('hidden');
+        _usrResetId = null;
+    }
+
+    function confirmarResetPassword() {
+        var newPass = ((document.getElementById('usr-reset-inp') || {}).value || '').trim();
+        if (!newPass) { mostrarNotificacion('⚠️ Ingrese la nueva contraseña.', 'warning'); return; }
+        if (newPass.length < 4) { mostrarNotificacion('⚠️ La contraseña debe tener al menos 4 caracteres.', 'warning'); return; }
+
+        var btn     = document.getElementById('usr-btn-reset');
+        var spinner = document.getElementById('usr-spinner-reset');
+        if (btn)     btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (btn)     btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                if (res.status === 'success') {
+                    mostrarNotificacion('✅ ' + res.message, 'success');
+                    cerrarModalResetPassword();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                if (btn)     btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .resetPasswordUsuario(_usrResetId, newPass);
+    }
+
+    // ── Toggle estado usuario ─────────────────────────────────────────
+
+    function toggleEstadoUsuario(id) {
+        var u = _usuariosTotal.find(function(x) { return x.id === id; });
+        var accion = u && u.estado === 'ACTIVO' ? 'desactivar' : 'activar';
+        if (!confirm('¿Desea ' + accion + ' este usuario?')) return;
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res.status === 'success') {
+                    mostrarNotificacion('✅ ' + res.message, 'success');
+                    cargarUsuariosAdmin();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .toggleEstadoUsuario(id);
     }
 
     function onExito(response) {

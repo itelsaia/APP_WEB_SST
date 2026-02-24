@@ -496,18 +496,18 @@
                         <p class="text-[9px] text-slate-500 font-bold mt-0.5">Control Personal SST</p>
                     </div>
                 </button>
-                <!-- Módulo futuro: Reportes -->
-                <div
-                    class="flex flex-col items-center justify-center gap-2.5 p-5 bg-white/3 border border-white/5 rounded-2xl opacity-35 cursor-not-allowed text-center">
+                <!-- Módulo 3: Gestión de Usuarios -->
+                <button onclick="abrirModuloAdmin('usuarios')"
+                    class="group flex flex-col items-center justify-center gap-2.5 p-5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 rounded-2xl transition-all active:scale-95 text-center">
                     <div
-                        class="w-12 h-12 bg-slate-500/10 border border-slate-500/20 rounded-xl flex items-center justify-center">
-                        <span class="material-symbols-outlined text-2xl text-slate-500">bar_chart</span>
+                        class="w-12 h-12 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-2xl text-primary">manage_accounts</span>
                     </div>
                     <div>
-                        <p class="text-xs font-black text-slate-500 uppercase tracking-tight leading-none">Reportes</p>
-                        <p class="text-[9px] text-slate-600 font-bold mt-0.5">Próximamente</p>
+                        <p class="text-xs font-black text-white uppercase tracking-tight leading-none">Usuarios</p>
+                        <p class="text-[9px] text-slate-500 font-bold mt-0.5">Gestión de Accesos</p>
                     </div>
-                </div>
+                </button>
                 <!-- Módulo futuro: Configuración -->
                 <div
                     class="flex flex-col items-center justify-center gap-2.5 p-5 bg-white/3 border border-white/5 rounded-2xl opacity-35 cursor-not-allowed text-center">
@@ -532,6 +532,11 @@
         <!-- ══ WORKSPACE: CONTROL DE ASISTENCIA ══ -->
         <div id="admin-workspace-asistencia" class="hidden">
             <?!= include('AdminAsistencia'); ?>
+        </div>
+
+        <!-- ══ WORKSPACE: GESTIÓN DE USUARIOS ══ -->
+        <div id="admin-workspace-usuarios" class="hidden">
+            <?!= include('AdminUsuarios'); ?>
         </div>
     </template>
     <template id="tpl-error">
