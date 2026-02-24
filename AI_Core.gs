@@ -126,21 +126,26 @@ const AI_CORE = {
   
   /**
    * Obtiene datos de la inspección original para la notificación.
+   * Schema DB_INSPECCIONES:
+   *   [0]Id_formato | [1]Consecutivo | [2]Descripcion_Formato | [3]Fecha_Hora
+   *   [4]Empresa_Contratista | [5]Foto_Formato_URL | [6]Reportado_Por
+   *   [7]Estado | [8]Foto_Firma_URL | [9]Fecha_Cierre
    */
   obtenerDatosInspeccion: function(idRegistro) {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const hoja = ss.getSheetByName('DB_INSPECCIONES');
+    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja  = ss.getSheetByName('DB_INSPECCIONES');
     const datos = hoja.getDataRange().getValues();
     for (let i = 1; i < datos.length; i++) {
-      if (datos[i][0] === idRegistro) {
+      if (datos[i][1] === idRegistro) {  // Buscar por Consecutivo (col B)
         return {
-          id: datos[i][0],
-          fecha: datos[i][1],
-          email: datos[i][2],
-          idCliente: datos[i][3],
-          tipo: datos[i][4],
-          detalle: datos[i][5],
-          url: datos[i][6]
+          id:          datos[i][1],  // Consecutivo (FMT-ATS-0001)
+          idFormato:   datos[i][0],  // Id_formato (ATS)
+          descripcion: datos[i][2],  // Descripcion_Formato
+          empresa:     datos[i][4],  // Empresa_Contratista
+          fecha:       datos[i][3],  // Fecha_Hora
+          supervisor:  datos[i][6],  // Reportado_Por
+          url:         datos[i][5],  // Foto_Formato_URL
+          estado:      datos[i][7]   // Estado
         };
       }
     }

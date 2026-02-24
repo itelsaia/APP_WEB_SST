@@ -5,76 +5,229 @@
  */
 
 /**
- * Función principal para guardar una nueva inspección.
- * @param {Object} data Objeto enviado desde el formulario con los campos de inspección.
+ * Función principal para guardar un nuevo registro de formato.
+ * Reemplaza la funcionalidad de guardarInspeccion.
+ * 
+ * @param {Object} data Objeto enviado desde el formulario.
  * @return {Object} Respuesta estandarizada JSON.
  */
 function guardarInspeccion(data) {
+  return guardarRegistroFormato(data);
+}
+
+function guardarRegistroFormato(data) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000); // Esperar hasta 10s para evitar duplicados en concurrencia
+
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_INSPECCIONES');
+    const nombreEmpresa = data.nombreCliente || "Empresa_General";
+
+    // 1. Generar ID bajo lock para garantizar unicidad
+    const idRegistro = _generarProximoIdRegistro(data.idFormato, ss);
+    const fechaHora  = new Date();
+
+    // 2. Guardar evidencia inicial en Drive → [Empresa]/FORMATOS_GESTIONADOS/
+    let urlFoto = "Sin foto";
+    if (data.archivoBase64) {
+      const params        = getParametros().data || {};
+      const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
+      const nombreArchivo = `${idRegistro}_${nombreEmpresa}_INICIAL.png`;
+      urlFoto = guardarImagenEnDrive(
+        data.archivoBase64, nombreArchivo, nombreEmpresa, idCarpetaRaiz, 'FORMATOS_GESTIONADOS'
+      );
+    }
+
+    // 3. Preparar fila — orden exacto del sheet DB_INSPECCIONES:
+    // A:Id_formato | B:Consecutivo | C:Descripcion_Formato | D:Fecha_Hora
+    // E:Empresa_Contratista | F:Foto_Formato_URL | G:Reportado_Por | H:Estado
+    // I:Foto_Firma_URL | J:Fecha_Cierre
+    const nuevaFila = [
+      data.idFormato,              // A: Id_formato        (ATS)
+      idRegistro,                  // B: Consecutivo       (FMT-ATS-0001)
+      data.descripcionRegistro || "", // C: Descripcion_Formato
+      fechaHora,                   // D: Fecha_Hora
+      nombreEmpresa,               // E: Empresa_Contratista
+      urlFoto,                     // F: Foto_Formato_URL
+      data.userCode || "",         // G: Reportado_Por     (SUP-001)
+      "PENDIENTE",                 // H: Estado
+      "",                          // I: Foto_Firma_URL — se rellena al cerrar
+      ""                           // J: Fecha_Cierre   — se rellena al cerrar
+    ];
+
+    hoja.appendRow(nuevaFila);
+    SpreadsheetApp.flush();
+
+    return {
+      status: "success",
+      message: "Formato registrado correctamente con ID: " + idRegistro,
+      data: { id: idRegistro }
+    };
+
+  } catch (e) {
+    Logger.log("Error en guardarRegistroFormato: " + e.toString());
+    return { status: "error", message: "Error al guardar el registro: " + e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Genera el próximo ID correlativo para un formato específico.
+ */
+function _generarProximoIdRegistro(idFormato, ss) {
+  const hoja = ss.getSheetByName('DB_INSPECCIONES');
+  const data = hoja.getDataRange().getValues();
+  let contador = 0;
+
+  // Columna A (índice 0) = Id_formato (ej: "ATS")
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === String(idFormato).trim()) {
+      contador++;
+    }
+  }
+
+  const correlativo = (contador + 1).toString().padStart(4, '0');
+  return `FMT-${idFormato}-${correlativo}`;
+}
+
+/**
+ * Obtiene los formatos disponibles para una empresa específica.
+ */
+/**
+ * Obtiene los formatos disponibles para una empresa específica.
+ * Schema LISTAS_FORMATOS: Id_Formato | Descripcion_Formato | Tipo_Documento | Empresa_Contratista
+ * Filtra por Empresa_Contratista (col D, índice 3).
+ * Si no hay empresa o la celda está vacía, retorna el formato para todos.
+ */
+function obtenerFormatosPorEmpresa(nombreEmpresa) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('LISTAS_FORMATOS');
+    if (!hoja) return { status: "success", data: [] };
+
+    const data     = hoja.getDataRange().getValues();
+    const formatos = [];
+    const empresaBuscar = (nombreEmpresa || '').toString().trim().toLowerCase();
+
+    for (let i = 1; i < data.length; i++) {
+      const idFormato   = (data[i][0] || '').toString().trim();
+      const descripcion = (data[i][1] || '').toString().trim();
+      const empresa     = (data[i][3] || '').toString().trim().toLowerCase();
+
+      if (!idFormato) continue; // Saltar filas vacías
+
+      // Incluir si la empresa coincide O si la celda empresa está vacía (formato global)
+      if (!empresa || empresa === empresaBuscar) {
+        formatos.push({ id: idFormato, descripcion: descripcion });
+      }
+    }
+
+    return { status: "success", data: formatos };
+  } catch (e) {
+    return { status: "error", message: e.toString() };
+  }
+}
+
+/**
+ * Cierra un registro de formato, captura la foto de firma y actualiza la hoja.
+ * @param {string} idRegistro   ID del registro a cerrar (ej: FMT-ATS-001-0001).
+ * @param {string} [archivoBase64] Foto del formato firmado en base64 (opcional).
+ * @return {Object} Respuesta estandarizada.
+ */
+function cerrarRegistroFormato(idRegistro, archivoBase64) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_INSPECCIONES');
+    const data = hoja.getDataRange().getValues();
+
+    // Schema: A(1)=Id_formato | B(2)=Consecutivo | C(3)=Desc | D(4)=Fecha
+    //         E(5)=Empresa | F(6)=Foto_URL | G(7)=Reportado_Por
+    //         H(8)=Estado | I(9)=Foto_Firma_URL | J(10)=Fecha_Cierre
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][1] === idRegistro) {  // Buscar en col B (Consecutivo = FMT-ATS-0001)
+        const fila        = i + 1;
+        const empresa     = data[i][4]; // E: Empresa_Contratista
+        const fechaCierre = new Date();
+
+        let urlFirma = '';
+        if (archivoBase64) {
+          try {
+            const params        = getParametros().data || {};
+            const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
+            const nombreArchivo = `${idRegistro}_${empresa}_FIRMA.png`;
+            urlFirma = guardarImagenEnDrive(
+              archivoBase64, nombreArchivo, empresa, idCarpetaRaiz, 'FORMATOS_GESTIONADOS'
+            );
+          } catch (eDrive) {
+            Logger.log('Advertencia: no se pudo guardar foto de firma: ' + eDrive.toString());
+          }
+        }
+
+        // H(8)=Estado | I(9)=Foto_Firma_URL | J(10)=Fecha_Cierre
+        hoja.getRange(fila, 8).setValue("CERRADO CON FIRMA");
+        hoja.getRange(fila, 9).setValue(urlFirma || 'Sin foto firma');
+        hoja.getRange(fila, 10).setValue(fechaCierre);
+        SpreadsheetApp.flush();
+
+        return { status: "success", message: "Registro cerrado con firma exitosamente." };
+      }
+    }
+    return { status: "error", message: "No se encontró el registro con ID: " + idRegistro };
+  } catch (e) {
+    Logger.log("Error en cerrarRegistroFormato: " + e.toString());
+    return { status: "error", message: e.toString() };
+  }
+}
+
+/**
+ * Obtiene los registros pendientes de un supervisor para una fecha específica.
+ */
+function obtenerRegistrosPendientes(email, fecha) {
   try {
     const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const hoja = ss.getSheetByName('DB_INSPECCIONES');
+    if (!hoja) return { status: "success", data: [] };
     
-    // 1. Manejo de la Evidencia (Imagen en Base64)
-    let urlEvidencia = "Sin evidencia";
-    if (data.archivoBase64) {
-      // Obtener el ID de la carpeta raíz de la configuración
-      const params = getParametros().data || {};
-      const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
-      
-      // Nombre del cliente final (el de la constructora, ej: Argos SA)
-      const nombreClienteFinal = data.nombreCliente || "Cliente_Desconocido";
-      
-      // Crear un nombre descriptivo para el archivo: [CLIENTE]_[TIPO]_[TIMESTAMP]
-      const clienteLimpio = nombreClienteFinal.replace(/[^a-z0-9]/gi, '_');
-      const hallazgoLimpio = (data.tipoActividad || "HALLAZGO").replace(/[^a-z0-9]/gi, '_');
-      const nombreDescriptivo = `${clienteLimpio}_${hallazgoLimpio}_${new Date().getTime()}.png`;
-      
-      urlEvidencia = guardarImagenEnDrive(data.archivoBase64, nombreDescriptivo, nombreClienteFinal, idCarpetaRaiz);
+    const datos = hoja.getDataRange().getValues();
+    const user = getUserDataFromApp(email);
+    const code = user.codigo || "";
+    
+    const pendientes = [];
+    const fechaBusqueda = fecha || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy");
+    
+    // Schema: A(0)=Id_formato | B(1)=Consecutivo | C(2)=Descripcion_Formato
+    //         D(3)=Fecha_Hora | E(4)=Empresa_Contratista | F(5)=Foto_Formato_URL
+    //         G(6)=Reportado_Por | H(7)=Estado | I(8)=Foto_Firma_URL | J(9)=Fecha_Cierre
+    for (let i = 1; i < datos.length; i++) {
+      const idFormato   = (datos[i][0] || '').toString().trim();
+      const consecutivo = (datos[i][1] || '').toString().trim();
+      if (!consecutivo) continue; // saltar filas vacías
+
+      let fechaFila = '';
+      try {
+        fechaFila = Utilities.formatDate(datos[i][3], Session.getScriptTimeZone(), "dd/MM/yyyy");
+      } catch(e) {
+        fechaFila = datos[i][3] ? datos[i][3].toString() : '';
+      }
+
+      const reportadoPor = (datos[i][6] || '').toString().trim(); // G: Reportado_Por
+      const estado       = (datos[i][7] || '').toString().trim(); // H: Estado
+
+      if (reportadoPor === code && estado === "PENDIENTE") {
+        pendientes.push({
+          id:          consecutivo,    // FMT-ATS-0001
+          formato:     idFormato,      // ATS
+          descripcion: datos[i][2],    // Descripcion_Formato
+          empresa:     datos[i][4],    // Empresa_Contratista
+          fecha:       fechaFila
+        });
+      }
     }
-    
-    // 2. Generar ID Único para el registro (Basado en timestamp + random)
-    const idRegistro = "REG-" + new Date().getTime();
-    const fechaHora = new Date();
-    
-    // 4. Preparar la fila para insertar
-    // Orden Original + Codigo al final
-    const nuevaFila = [
-      idRegistro,
-      fechaHora,
-      data.userEmail || "Sistema",
-      data.idCliente || "CLIENTE-GENERAL",
-      data.tipoActividad,
-      data.hallazgoDetalle,
-      urlEvidencia,
-      data.prioridadInicial,
-      data.userCode || "" // Código del supervisor al final (Columna I)
-    ];
-    
-    // 4. Insertar datos en la hoja
-    hoja.appendRow(nuevaFila);
-    
-    // 5. [INTEGRACIÓN CON IA]
-    // Llamado al módulo AI_Core.gs para analizar el hallazgo de forma asíncrona (opcional con Trigger) 
-    // o directa. Para esta versión, lo ejecutamos directamente.
-    try {
-      const analisis = AI_CORE.analizarHallazgo(data.hallazgoDetalle, urlEvidencia);
-      AI_CORE.guardarAnalisis(idRegistro, analisis);
-    } catch (aiError) {
-      Logger.log("Error al procesar IA: " + aiError.toString());
-    }
-    
-    return {
-      status: "success",
-      message: "Inspección guardada correctamente con ID: " + idRegistro,
-      data: { id: idRegistro }
-    };
-    
+    return { status: "success", data: pendientes };
   } catch (e) {
-    Logger.log("Error en guardarInspeccion: " + e.toString());
-    return {
-      status: "error",
-      message: "No se pudo guardar el reporte: " + e.toString()
-    };
+    return { status: "error", message: e.toString() };
   }
 }
 
@@ -88,70 +241,80 @@ function guardarInspeccion(data) {
  * @param {String} idCarpetaRaiz ID de la carpeta principal de Security Work.
  * @return {String} URL pública de visualización de la imagen.
  */
-function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpetaRaiz) {
+/**
+ * Guarda una imagen Base64 en Drive dentro de [Raíz]/[Empresa]/[subCarpeta (opcional)].
+ * @param {string} base64Data   Datos base64 (data:image/...;base64,...).
+ * @param {string} nombreArchivo Nombre del archivo a crear.
+ * @param {string} nombreEmpresa Nombre de la empresa (subcarpeta de cliente).
+ * @param {string} idCarpetaRaiz ID de la carpeta raíz en Drive.
+ * @param {string} [subCarpeta] Nombre de subcarpeta adicional (ej: 'FORMATOS_GESTIONADOS').
+ * @return {string} URL pública del archivo creado.
+ */
+function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpetaRaiz, subCarpeta) {
   // 1. Decodificar la imagen
   const partes = base64Data.split(',');
   const contentType = partes[0].split(':')[1].split(';')[0];
   const decodedData = Utilities.base64Decode(partes[1]);
   const blob = Utilities.newBlob(decodedData, contentType, nombreArchivo);
-  
-  // 2. Obtener la carpeta RAÍZ (donde Security Work guarda todo)
+
+  // 2. Carpeta raíz
   let carpetaRaiz;
   try {
     carpetaRaiz = DriveApp.getFolderById(idCarpetaRaiz);
   } catch (e) {
     Logger.log("Error al acceder a la carpeta raíz: " + e.toString());
-    // Backup: crear una carpeta en la raíz de Drive si el ID falla
     const iterador = DriveApp.getFoldersByName("SST_RESPALDO_EV");
     carpetaRaiz = iterador.hasNext() ? iterador.next() : DriveApp.createFolder("SST_RESPALDO_EV");
   }
-  
-  // 3. Obtener o crear SUB-CARPETA por Cliente Final (ej: Argos SA)
-  let carpetaCliente;
-  const iteradorCliente = carpetaRaiz.getFoldersByName(nombreEmpresa);
-  
-  if (iteradorCliente.hasNext()) {
-    carpetaCliente = iteradorCliente.next();
-  } else {
-    carpetaCliente = carpetaRaiz.createFolder(nombreEmpresa);
-    Logger.log("Nueva subcarpeta creada para el cliente: " + nombreEmpresa);
+
+  // 3. Subcarpeta por cliente
+  const iterCliente = carpetaRaiz.getFoldersByName(nombreEmpresa);
+  const carpetaCliente = iterCliente.hasNext()
+    ? iterCliente.next()
+    : carpetaRaiz.createFolder(nombreEmpresa);
+
+  // 4. Subcarpeta adicional si se especificó (ej: FORMATOS_GESTIONADOS)
+  let carpetaDestino = carpetaCliente;
+  if (subCarpeta) {
+    const iterSub = carpetaCliente.getFoldersByName(subCarpeta);
+    carpetaDestino = iterSub.hasNext()
+      ? iterSub.next()
+      : carpetaCliente.createFolder(subCarpeta);
   }
-  
-  // 4. Guardar archivo y dar permisos
-  const archivo = carpetaCliente.createFile(blob);
+
+  // 5. Crear archivo y dar permisos de lectura
+  const archivo = carpetaDestino.createFile(blob);
   archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  
   return archivo.getUrl();
 }
 
 /**
  * Obtiene la lista de clientes registrados en DB_CLIENTES.
+ * Schema real: ID_Cliente | Nombre_Empresa | Direccion | NIT | Correo_Gerente
+ *              | Nombre_Contacto | Celular_Whatsapp | Nombre_Obra
+ * Retorna todos los registros que tengan ID y Nombre_Empresa no vacíos.
  * @return {Object} Respuesta con la lista de clientes.
  */
 function obtenerClientesRegistrados() {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const hoja = ss.getSheetByName('DB_CLIENTES');
-    const datos = hoja.getDataRange().getValues();
-    
-    // Obviamos encabezados (ID_Cliente, Nombre_Empresa, NIT, Correo_Gerente, Estado)
+    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja  = ss.getSheetByName('DB_CLIENTES');
+    if (!hoja) return { status: 'success', data: [] };
+
+    const datos    = hoja.getDataRange().getValues();
     const clientes = [];
+
     for (let i = 1; i < datos.length; i++) {
-       const estado = (datos[i][4] || "").toString().toLowerCase();
-       if (estado === 'activo') { // Comparación insensible a mayúsculas
-         clientes.push({
-           id: datos[i][0],
-           nombre: datos[i][1]
-         });
-       }
+      const id     = (datos[i][0] || '').toString().trim();
+      const nombre = (datos[i][1] || '').toString().trim();
+      if (id && nombre) {
+        clientes.push({ id: id, nombre: nombre });
+      }
     }
-    
-    return {
-      status: "success",
-      data: clientes
-    };
+
+    return { status: 'success', data: clientes };
   } catch (e) {
-    return { status: "error", message: e.toString() };
+    return { status: 'error', message: e.toString() };
   }
 }
 
@@ -201,7 +364,7 @@ function validarCredenciales(email, password) {
     for (let i = 0; i < usuarios.length; i++) {
       const u = usuarios[i];
       if (u.email === emailLower) {
-        if (u.estado !== 'activo') {
+        if (u.estado === 'inactivo') {
           return { status: 'error', message: 'Usuario inactivo. Contacte al administrador.' };
         }
         if (u.password === password.toString()) {
@@ -367,10 +530,17 @@ function getUserDataFromApp(email) {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   const hoja = ss.getSheetByName('DB_USUARIOS');
   const datos = hoja.getDataRange().getValues();
+  const emailLower = (email || '').toString().trim().toLowerCase();
   for (let i = 1; i < datos.length; i++) {
-    if (datos[i][0] === email) return { email: datos[i][0], nombre: datos[i][1] };
+    if ((datos[i][0] || '').toString().trim().toLowerCase() === emailLower) {
+      return {
+        email:  datos[i][0],
+        nombre: datos[i][1],
+        codigo: (datos[i][4] || '').toString()   // ID_Cliente_Asociado → Codigo_Supervisor
+      };
+    }
   }
-  return { email: email, nombre: "Supervisor" };
+  return { email: email, nombre: "Supervisor", codigo: '' };
 }
 
 /**

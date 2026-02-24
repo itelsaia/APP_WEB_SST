@@ -21,7 +21,7 @@ const NOTIFICACIONES = {
         emailGerente: params.EMAIL_NOTIFICACIONES || "gerencia@ejemplo.com"
       };
 
-      const asunto = `🚨 ALERTA SST: Riesgo ${analisis.nivel_riesgo} Detectado - ${inspeccion.tipo}`;
+      const asunto = `🚨 ALERTA SST: Riesgo ${analisis.nivel_riesgo} Detectado - Formato ${inspeccion.idFormato}`;
       
       const htmlBody = `
         <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
@@ -38,12 +38,16 @@ const NOTIFICACIONES = {
                 <td style="padding: 10px; border-bottom: 1px solid #eee;">${inspeccion.id}</td>
               </tr>
               <tr>
-                <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Actividad:</td>
-                <td style="padding: 10px; border-bottom: 1px solid #eee;">${inspeccion.tipo}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Formato SST:</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">${inspeccion.idFormato}</td>
               </tr>
               <tr>
-                <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Detalle Reportado:</td>
-                <td style="padding: 10px; border-bottom: 1px solid #eee;">${inspeccion.detalle}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Empresa / Obra:</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">${inspeccion.empresa}</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold;">Descripción del Registro:</td>
+                <td style="padding: 10px; border-bottom: 1px solid #eee;">${inspeccion.descripcion}</td>
               </tr>
             </table>
 

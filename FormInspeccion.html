@@ -1,97 +1,182 @@
-<!-- FormInspeccion.html -->
-<div id="form-container" class="space-y-6">
+<!-- FormInspeccion.html — v2.0 -->
+<div id="form-container" class="space-y-5">
+
+    <!-- ── CABECERA ─────────────────────────────────────── -->
     <div class="border-b border-white/10 pb-4">
-        <h3 class="text-xl font-bold leading-6 text-white tracking-tight">Nueva Inspección de Seguridad</h3>
-        <p class="mt-1 text-sm text-slate-400 font-medium">Complete los detalles del hallazgo encontrado en campo.</p>
+        <h3 class="text-lg font-bold leading-6 text-white tracking-tight">Nueva Inspección de Seguridad</h3>
+        <p class="mt-0.5 text-xs text-slate-400 font-medium">Complete los detalles del hallazgo encontrado en campo.</p>
     </div>
 
+    <!-- ── FORMULARIO PRINCIPAL ──────────────────────────── -->
     <form id="sst-form" class="space-y-4">
-        <!-- Empresa / Cliente Final -->
+
+        <!-- Empresa / Proyecto (bloqueado por JS cuando hay jornada activa) -->
         <div>
             <div class="flex justify-between items-center mb-2">
-                <label for="idCliente" class="block text-xs font-bold text-slate-300 uppercase tracking-widest">Empresa
-                    / Proyecto</label>
-                <button type="button" onclick="cargarClientes()"
-                    class="text-[10px] text-primary hover:text-primary/80 font-bold uppercase tracking-widest flex items-center transition-colors">
-                    <span class="material-symbols-outlined text-xs mr-1">refresh</span>
-                    Actualizar
-                </button>
+                <label for="idCliente"
+                    class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest">Empresa / Proyecto</label>
             </div>
             <select id="idCliente" name="idCliente" required
                 style="background-color:#1a242f; color:#f8fafc; color-scheme: dark;"
-                class="block w-full rounded-xl border border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm p-3 text-white outline-none appearance-none transition-all">
-                <option value="" style="background:#1a242f; color:#f8fafc;">Cargando empresas...</option>
+                class="block w-full rounded-xl border border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary text-sm p-3 text-white outline-none appearance-none transition-all">
+                <option value="" style="background:#1a242f; color:#f8fafc;">Cargando...</option>
             </select>
         </div>
 
-        <!-- Tipo de Actividad -->
+        <!-- Formato SST -->
         <div>
-            <label for="tipoActividad"
-                class="block text-xs font-bold text-slate-300 uppercase tracking-widest mb-2">Tipo de Actividad</label>
-            <select id="tipoActividad" name="tipoActividad" required
+            <label for="idFormato"
+                class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-2">Seleccione el
+                Formato</label>
+            <select id="idFormato" name="idFormato" required onchange="onCambioFormato(this)"
                 style="background-color:#1a242f; color:#f8fafc; color-scheme: dark;"
-                class="block w-full rounded-xl border border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm p-3 border text-white outline-none appearance-none transition-all">
-                <option value="" style="background:#1a242f; color:#f8fafc;">Seleccione actividad...</option>
+                class="block w-full rounded-xl border border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary text-sm p-3 text-white outline-none appearance-none transition-all">
+                <option value="" style="background:#1a242f; color:#f8fafc;">Seleccione un formato...</option>
             </select>
         </div>
 
-        <!-- Detalle del Hallazgo -->
-        <div>
-            <label for="hallazgoDetalle"
-                class="block text-xs font-bold text-slate-300 uppercase tracking-widest mb-2">Detalle del
-                Hallazgo</label>
-            <textarea id="hallazgoDetalle" name="hallazgoDetalle" rows="4" required
-                class="block w-full rounded-xl bg-white/5 border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm p-3 border text-white outline-none placeholder-slate-600 transition-all"
-                placeholder="Describa lo observado, ubicación y riesgos potenciales..."></textarea>
+        <!-- Descripción auto-rellenada -->
+        <div id="formato-descripcion-container" class="hidden animate-fade-in">
+            <div class="bg-primary/5 border border-primary/20 rounded-xl p-3">
+                <p class="text-[9px] text-primary font-bold uppercase tracking-widest mb-1 flex items-center">
+                    <span class="material-symbols-outlined text-[11px] mr-1">info</span> Descripción del Formato
+                </p>
+                <p id="formato-descripcion-text" class="text-xs text-slate-300 leading-relaxed italic"></p>
+            </div>
         </div>
 
-        <!-- Prioridad e Imagen -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label for="prioridadInicial"
-                    class="block text-xs font-bold text-slate-300 uppercase tracking-widest mb-2">Prioridad
-                    Inicial</label>
-                <select id="prioridadInicial" name="prioridadInicial" required
-                    style="background-color:#1a242f; color:#f8fafc; color-scheme: dark;"
-                    class="block w-full rounded-xl border border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm p-3 border text-white outline-none appearance-none transition-all">
-                    <option value="" style="background:#1a242f; color:#f8fafc;">Cargando...</option>
-                </select>
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold text-slate-300 uppercase tracking-widest mb-2">Evidencia
-                    Fotográfica</label>
-                <div class="mt-1 flex items-center space-x-2">
-                    <label
-                        class="cursor-pointer bg-white/5 py-3 px-4 border border-white/10 rounded-xl shadow-sm text-xs font-bold text-slate-300 hover:bg-white/10 flex items-center space-x-3 transition-colors group">
-                        <span
-                            class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">photo_camera</span>
-                        <span>CAPTURAR</span>
-                        <input type="file" id="fotoEvidencia" accept="image/*" capture="camera" class="hidden"
-                            onchange="previewImagen(this)">
-                    </label>
-                    <div id="preview-container" class="hidden">
-                        <img id="img-preview" src=""
-                            class="h-12 w-12 rounded-xl object-cover border-2 border-primary shadow-lg shadow-primary/20">
-                    </div>
+        <!-- Captura de foto del formato físico -->
+        <div>
+            <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-2">Capturar Formato
+                Físico</label>
+            <div class="flex items-center space-x-3">
+                <label
+                    class="flex-1 cursor-pointer bg-white/5 py-4 px-4 border border-white/10 border-dashed rounded-xl text-xs font-black text-slate-300 hover:bg-white/10 flex items-center justify-center space-x-2 transition-all group hover:border-primary/50">
+                    <span
+                        class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">qr_code_scanner</span>
+                    <span>TOMAR FOTO O ESCANEAR</span>
+                    <input type="file" id="fotoEvidencia" name="fotoEvidencia" accept="image/*" capture="camera"
+                        class="hidden" required onchange="previewImagen(this)">
+                </label>
+                <div id="preview-container"
+                    class="hidden h-14 w-14 rounded-xl overflow-hidden border-2 border-primary shadow-lg shadow-primary/20 shrink-0">
+                    <img id="img-preview" src="" class="h-full w-full object-cover">
                 </div>
             </div>
         </div>
 
-        <!-- Botón de Envío -->
-        <div class="pt-4">
+        <!-- Botón enviar -->
+        <div class="pt-2">
             <button type="submit" id="btn-enviar"
                 style="background: var(--color-primario); box-shadow: 0 8px 24px rgba(197,160,72,0.25);"
-                class="w-full flex justify-center py-4 px-4 border-0 rounded-xl text-sm font-black text-black hover:opacity-90 focus:outline-none transition-all disabled:opacity-50 uppercase tracking-widest">
-                <span id="btn-text">ENVIAR REPORTE AHORA</span>
-                <svg id="spinner" class="hidden animate-spin ml-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg"
-                    fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                    </path>
-                </svg>
+                class="w-full flex justify-center items-center gap-2 py-4 px-4 border-0 rounded-xl text-sm font-black text-black hover:opacity-90 transition-all disabled:opacity-50 uppercase tracking-widest">
+                <span id="spinner"
+                    class="hidden animate-spin h-4 w-4 border-2 border-black border-t-transparent rounded-full"></span>
+                <span class="material-symbols-outlined text-base">assignment_add</span>
+                <span id="btn-text">REGISTRAR PENDIENTE</span>
             </button>
         </div>
     </form>
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- LISTADO DE REGISTROS PENDIENTES DE FIRMA                  -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div id="pendientes-container" class="mt-6 pt-5 border-t border-white/10 hidden animate-slide-up">
+
+        <!-- Cabecera + contador -->
+        <div class="flex items-center justify-between mb-3">
+            <div>
+                <h4 class="text-sm font-black text-white uppercase tracking-tight">Formatos Pendientes</h4>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Esperando firma de jefe
+                    de obra</p>
+            </div>
+            <span id="badge-pendientes"
+                class="bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider"></span>
+        </div>
+
+        <!-- Barra de búsqueda -->
+        <div class="relative mb-3">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none">search</span>
+            <input type="text" id="filtro-pendientes" placeholder="Buscar por ID o descripción..."
+                oninput="filtrarPendientes(this.value)"
+                style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all placeholder-slate-600">
+        </div>
+
+        <!-- Lista de tarjetas -->
+        <div id="lista-pendientes" class="space-y-2.5"></div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MODAL: CAPTURAR FIRMA (fixed — cubre toda la pantalla)   -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="firma-modal"
+    class="fixed inset-0 bg-black/85 z-[70] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
+    onclick="if(event.target===this) cerrarModalFirma()">
+    <div
+        class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden animate-slide-up border border-white/10">
+
+        <!-- Handle mobile -->
+        <div class="sm:hidden flex justify-center pt-3 pb-1">
+            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
+        </div>
+
+        <!-- Cabecera modal -->
+        <div class="px-6 pt-4 pb-3 border-b border-white/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-500/10 rounded-xl flex items-center justify-center border border-green-500/20 shrink-0">
+                    <span class="material-symbols-outlined text-2xl text-green-400">verified</span>
+                </div>
+                <div>
+                    <h3 class="text-base font-black text-white tracking-tight">Capturar Firma</h3>
+                    <p id="firma-modal-id" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-4 space-y-4">
+            <p class="text-xs text-slate-400 font-medium leading-relaxed">
+                Fotografíe el formato físico <strong class="text-white">ya firmado</strong> por el jefe de obra para
+                cerrar el registro.
+            </p>
+
+            <!-- Preview foto firma -->
+            <div id="firma-preview-container"
+                class="hidden rounded-xl overflow-hidden shadow-xl border-2 border-green-500/30 relative"
+                style="max-height:150px;">
+                <img id="firma-img-preview" src="" alt="Firma" class="w-full h-full object-cover">
+                <div
+                    class="absolute bottom-2 right-2 bg-green-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full flex items-center">
+                    <span class="material-symbols-outlined text-[10px] mr-0.5">check_circle</span>LISTA
+                </div>
+            </div>
+
+            <!-- Botón captura -->
+            <label for="firma-foto" id="firma-foto-label"
+                class="cursor-pointer border-2 border-dashed border-white/10 rounded-xl py-5 flex flex-col items-center hover:border-green-500/40 hover:bg-white/5 transition-all group">
+                <div class="bg-green-500/10 p-2.5 rounded-full group-hover:scale-110 transition-transform border border-green-500/20">
+                    <span class="material-symbols-outlined text-2xl text-green-400">add_a_photo</span>
+                </div>
+                <span class="mt-2 text-[11px] font-semibold text-slate-400">Toque para fotografiar el formato firmado</span>
+                <input type="file" id="firma-foto" accept="image/*" capture="camera" class="hidden"
+                    onchange="previewFirma(this)">
+            </label>
+
+            <!-- Botones de acción -->
+            <div class="flex gap-3 pt-1">
+                <button onclick="cerrarModalFirma()"
+                    class="flex-1 py-3 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">
+                    Cancelar
+                </button>
+                <button onclick="submitFirma()" id="btn-submit-firma"
+                    class="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-black rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
+                    <span id="firma-spinner"
+                        class="hidden animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
+                    <span class="material-symbols-outlined text-base">verified</span>
+                    Confirmar Firma
+                </button>
+            </div>
+        </div>
+    </div>
 </div>

@@ -11,6 +11,7 @@
     let nombreArchivo = '';
     let _obraSeleccionada = ''; // Obra elegida en el formulario de jornada
     let _clientesCargados = false; // Flag: ¿ya se cargó el select de clientes?
+    let _formatosDisponibles = []; // Cache de formatos del cliente seleccionado
 
     window.addEventListener('load', function () {
         verificarSesion();
@@ -126,12 +127,15 @@
         mostrarBienvenidaPersonalizada();
 
         if (currentUser && currentUser.rol === 'SUP-SST') {
-            cargarObrasAsistencia();
-            configurarAsistencia();
-            cargarOtrasOpciones();
-
-            // Verificar si ya tiene jornada activa
-            verificarEstadoAsistencia();
+            try {
+                cargarObrasAsistencia();
+                configurarAsistencia();
+                cargarOtrasOpciones();
+                verificarEstadoAsistencia();
+            } catch (e) {
+                console.error('[SST] Error en inicialización SUP-SST:', e);
+                switchModule('asistencia');
+            }
         }
 
         ocultarLoader();
@@ -563,7 +567,6 @@
     }
 
     function cargarOtrasOpciones() {
-        google.script.run.withSuccessHandler(llenarSelectores).obtenerOpcionesFormulario();
         google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
         configurarFormulario();
     }
@@ -571,10 +574,6 @@
     // ================================================================
     // MÓDULO: INSPECCIÓN
     // ================================================================
-
-    function cargarOpciones() {
-        google.script.run.withSuccessHandler(llenarSelectores).obtenerOpcionesFormulario();
-    }
 
     function cargarClientes() {
         google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
@@ -600,6 +599,57 @@
     }
 
     /**
+     * Carga los formatos específicos de una empresa/obra.
+     */
+    function cargarFormatos(nombreObra) {
+        const selectFmt = document.getElementById('idFormato');
+        if (!selectFmt) return;
+        selectFmt.innerHTML = '<option value="">Cargando formatos...</option>';
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (res.status === 'success') {
+                    _formatosDisponibles = res.data;
+                    selectFmt.innerHTML = '<option value="">Seleccione un formato...</option>';
+                    if (_formatosDisponibles.length === 0) {
+                        selectFmt.innerHTML = '<option value="">Sin formatos registrados</option>';
+                    }
+                    _formatosDisponibles.forEach(function (f) {
+                        const op = document.createElement('option');
+                        op.value = f.id;
+                        op.textContent = f.id + ' - ' + f.descripcion;
+                        selectFmt.appendChild(op);
+                    });
+                } else {
+                    selectFmt.innerHTML = '<option value="">Error al cargar formatos</option>';
+                }
+            })
+            .obtenerFormatosPorEmpresa(nombreObra);
+
+        // Cargar también los pendientes para cierre
+        cargarPendientes();
+    }
+
+    /**
+     * Se dispara al seleccionar un formato en el combo.
+     */
+    function onCambioFormato(select) {
+        const descCont = document.getElementById('formato-descripcion-container');
+        const descText = document.getElementById('formato-descripcion-text');
+        if (!descCont || !descText) return;
+
+        const fmtId = select.value;
+        const fmtData = _formatosDisponibles.find(f => f.id === fmtId);
+
+        if (fmtData) {
+            descText.textContent = fmtData.descripcion;
+            descCont.classList.remove('hidden');
+        } else {
+            descCont.classList.add('hidden');
+        }
+    }
+
+    /**
      * Coordinador: bloquea el campo empresa SOLO cuando ya se
      * cargaron los clientes Y se conoce la obra de la jornada activa.
      * Resuelve la race-condition entre llenarClientes() y verificarEstadoAsistencia().
@@ -620,6 +670,9 @@
         }
         // Ahora bloquear visualmente
         bloquearCampoEmpresa(select);
+
+        // DISPARAR CARGA DE FORMATOS PARA ESTA OBRA
+        cargarFormatos(_obraSeleccionada);
     }
 
     /**
@@ -690,27 +743,6 @@
         console.log('[SST] Campo empresa BLOQUEADO. ID:', id, '| Obra:', texto);
     }
 
-    function llenarSelectores(response) {
-        if (response.status === "success") {
-            const opts = response.data;
-            const selectTipo = document.getElementById('tipoActividad');
-            if (selectTipo) {
-                selectTipo.innerHTML = '<option value="">Seleccione una actividad...</option>';
-                opts.TIPO_ACTIVIDAD.forEach(item => {
-                    const op = document.createElement('option'); op.value = item; op.textContent = item;
-                    selectTipo.appendChild(op);
-                });
-            }
-            const selectPrio = document.getElementById('prioridadInicial');
-            if (selectPrio) {
-                selectPrio.innerHTML = '<option value="">Seleccione prioridad...</option>';
-                opts.PRIORIDAD.forEach(item => {
-                    const op = document.createElement('option'); op.value = item; op.textContent = item;
-                    selectPrio.appendChild(op);
-                });
-            }
-        }
-    }
 
     function previewImagen(input) {
         if (input.files && input.files[0]) {
@@ -737,57 +769,250 @@
             const btnText = document.getElementById('btn-text');
             if (btn) btn.disabled = true;
             if (spinner) spinner.classList.remove('hidden');
-            if (btnText) btnText.textContent = "PROCESANDO REPORTE...";
+            if (btnText) btnText.textContent = "REGISTRANDO...";
 
             const selectCliente = document.getElementById('idCliente');
+            const selectFormato = document.getElementById('idFormato');
+            const fmtData = _formatosDisponibles.find(f => f.id === selectFormato.value);
+
             const formData = {
-                userEmail: currentUser.email,
                 userCode: currentUser.codigo || '',
-                idCliente: selectCliente ? selectCliente.value : '',
-                nombreCliente: selectCliente ? selectCliente.options[selectCliente.selectedIndex].text : '',
-                tipoActividad: document.getElementById('tipoActividad').value,
-                hallazgoDetalle: document.getElementById('hallazgoDetalle').value,
-                prioridadInicial: document.getElementById('prioridadInicial').value,
-                archivoBase64: archivoBase64,
-                nombreArchivo: nombreArchivo
+                nombreCliente: selectCliente ? selectCliente.options[selectCliente.selectedIndex].text : _obraSeleccionada,
+                idFormato: selectFormato ? selectFormato.value : '',
+                descripcionRegistro: fmtData ? fmtData.descripcion : '',
+                archivoBase64: archivoBase64
             };
 
+            if (!formData.idFormato || !formData.archivoBase64) {
+                mostrarNotificacion('⚠️ Por favor seleccione un formato y capture la foto.', 'warning');
+                if (btn) btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                if (btnText) btnText.textContent = "REGISTRAR PENDIENTE";
+                return;
+            }
+
             google.script.run
-                .withSuccessHandler(onExito)
-                .withFailureHandler(onError)
-                .guardarInspeccion(formData);
+                .withSuccessHandler(function (res) {
+                    if (res.status === 'success') {
+                        onExito(res);
+                        cargarPendientes();
+                    } else {
+                        onError(res.message);
+                    }
+                })
+                .withFailureHandler(function (err) {
+                    onError(err.toString());
+                })
+                .guardarRegistroFormato(formData);
+        });
+    }
+    /**
+     * Gestión de registros pendientes
+     */
+    function cargarPendientes() {
+        if (!currentUser || !currentUser.email) return;
+        const cont = document.getElementById('pendientes-container');
+        const list = document.getElementById('lista-pendientes');
+        if (!list) return;
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (res.status === 'success' && res.data.length > 0) {
+                    if (cont) cont.classList.remove('hidden');
+                    renderizarPendientes(res.data);
+                } else {
+                    if (cont) cont.classList.add('hidden');
+                }
+            })
+            .obtenerRegistrosPendientes(currentUser.email);
+    }
+
+    // Cache para filtrado
+    let _registrosPendientes = [];
+
+    function renderizarPendientes(registros) {
+        _registrosPendientes = registros;
+        const badge = document.getElementById('badge-pendientes');
+        if (badge) badge.textContent = registros.length + ' pendiente' + (registros.length !== 1 ? 's' : '');
+        _renderCards(registros);
+    }
+
+    function _renderCards(registros) {
+        const list = document.getElementById('lista-pendientes');
+        if (!list) return;
+        list.innerHTML = '';
+
+        if (registros.length === 0) {
+            list.innerHTML = '<p class="text-center text-xs text-slate-600 italic py-4">Sin resultados</p>';
+            return;
+        }
+
+        registros.forEach(function (reg) {
+            const card = document.createElement('div');
+            card.className = 'pendiente-card bg-white/5 border border-amber-500/20 rounded-xl p-3 animate-fade-in';
+            card.dataset.id  = reg.id;
+            card.dataset.fmt = (reg.formato + ' ' + reg.descripcion).toLowerCase();
+
+            card.innerHTML = `
+                <div class="flex items-start justify-between gap-2">
+                    <div style="min-width:0; flex:1;">
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <span class="inline-block w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                            <p class="text-[10px] font-black text-amber-400 uppercase tracking-tight">${reg.id}</p>
+                        </div>
+                        <p class="text-xs font-bold text-white truncate leading-tight">${reg.formato}</p>
+                        <p class="text-[10px] text-slate-400 truncate leading-tight">${reg.descripcion}</p>
+                        <p class="text-[9px] text-slate-600 font-bold mt-1 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[10px]">schedule</span>${reg.fecha}
+                        </p>
+                    </div>
+                    <button onclick="abrirModalFirma('${reg.id}')"
+                        class="shrink-0 flex items-center gap-1 bg-green-600/15 hover:bg-green-600/30 text-green-400 border border-green-500/30 px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all active:scale-95">
+                        <span class="material-symbols-outlined text-sm">verified</span>Firmar
+                    </button>
+                </div>
+            `;
+            list.appendChild(card);
         });
     }
 
+    /**
+     * Filtra las tarjetas de pendientes en tiempo real (client-side).
+     */
+    function filtrarPendientes(query) {
+        if (!query || query.trim() === '') {
+            _renderCards(_registrosPendientes);
+            return;
+        }
+        const q = query.trim().toLowerCase();
+        const filtrados = _registrosPendientes.filter(function (r) {
+            return r.id.toLowerCase().includes(q)
+                || r.formato.toLowerCase().includes(q)
+                || r.descripcion.toLowerCase().includes(q);
+        });
+        _renderCards(filtrados);
+    }
+
+    // ── Estado interno del modal de firma ──────────────────────────────────────
+    let _firmaBase64 = null;
+    let _firmaIdRegistro = '';
+
+    /**
+     * Abre el modal de captura de firma para un registro pendiente.
+     */
+    function abrirModalFirma(idRegistro) {
+        _firmaBase64 = null;
+        _firmaIdRegistro = idRegistro;
+
+        // Reset visual del modal
+        const preview = document.getElementById('firma-preview-container');
+        const label   = document.getElementById('firma-foto-label');
+        const input   = document.getElementById('firma-foto');
+        const idLabel = document.getElementById('firma-modal-id');
+        if (preview) preview.classList.add('hidden');
+        if (label)   label.classList.remove('hidden');
+        if (input)   input.value = '';
+        if (idLabel) idLabel.textContent = 'Registro: ' + idRegistro;
+
+        const modal = document.getElementById('firma-modal');
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    function cerrarModalFirma() {
+        _firmaBase64 = null;
+        _firmaIdRegistro = '';
+        const modal = document.getElementById('firma-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    /**
+     * Muestra la preview de la foto de firma.
+     */
+    function previewFirma(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                _firmaBase64 = e.target.result;
+                const prev  = document.getElementById('firma-img-preview');
+                const cont  = document.getElementById('firma-preview-container');
+                const label = document.getElementById('firma-foto-label');
+                if (prev)  prev.src = e.target.result;
+                if (cont)  cont.classList.remove('hidden');
+                if (label) label.classList.add('hidden');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    /**
+     * Envía el cierre con firma al backend.
+     */
+    function submitFirma() {
+        if (!_firmaBase64) {
+            mostrarNotificacion('⚠️ Capture la foto del formato firmado antes de confirmar.', 'error');
+            return;
+        }
+
+        const btn     = document.getElementById('btn-submit-firma');
+        const spinner = document.getElementById('firma-spinner');
+        if (btn)     btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (btn)     btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                cerrarModalFirma();
+                if (res.status === 'success') {
+                    mostrarNotificacion('✅ ' + res.message, 'success');
+                    cargarPendientes();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function (err) {
+                if (btn)     btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .cerrarRegistroFormato(_firmaIdRegistro, _firmaBase64);
+    }
+
+    /** @deprecated — reemplazado por abrirModalFirma */
+    function confirmarCierrePendiente(id) {
+        abrirModalFirma(id);
+    }
+
     function onExito(response) {
+        mostrarNotificacion('✅ ' + response.message, 'success');
+        const form = document.getElementById('sst-form');
+        if (form) form.reset();
+
+        archivoBase64 = null;
+        const prev = document.getElementById('preview-container');
+        if (prev) prev.classList.add('hidden');
+
+        // Re-bloquear empresa e intentar cargar formatos de nuevo (por si acaso)
+        _intentarBloqueoEmpresa();
+
+        const descCont = document.getElementById('formato-descripcion-container');
+        if (descCont) descCont.classList.add('hidden');
+
         const btn = document.getElementById('btn-enviar');
         const spinner = document.getElementById('spinner');
         const btnText = document.getElementById('btn-text');
-        if (response.status === 'success') {
-            mostrarNotificacion('✅ ' + response.message, 'success');
-            document.getElementById('sst-form').reset();
-            const pc = document.getElementById('preview-container');
-            if (pc) pc.classList.add('hidden');
-            archivoBase64 = null;
-            // Re-bloquear el campo empresa tras el reset() del formulario
-            if (_obraSeleccionada) {
-                setTimeout(function () { bloquearCampoEmpresa(null); }, 50);
-            }
-        } else {
-            alert('❌ Error: ' + response.message);
-        }
         if (btn) btn.disabled = false;
         if (spinner) spinner.classList.add('hidden');
-        if (btnText) btnText.textContent = "ENVIAR REPORTE AHORA";
+        if (btnText) btnText.textContent = "REGISTRAR PENDIENTE";
     }
 
-    function onError(err) {
-        alert("❌ Error crítico en el servidor: " + err.toString());
+    function onError(message) {
+        mostrarNotificacion('❌ Error: ' + message, 'error');
         const btn = document.getElementById('btn-enviar');
+        const spinner = document.getElementById('spinner');
+        const btnText = document.getElementById('btn-text');
         if (btn) btn.disabled = false;
-        const sp = document.getElementById('spinner');
-        if (sp) sp.classList.add('hidden');
-        const bt = document.getElementById('btn-text');
-        if (bt) bt.textContent = "ENVIAR REPORTE AHORA";
+        if (spinner) spinner.classList.add('hidden');
+        if (btnText) btnText.textContent = "REGISTRAR PENDIENTE";
     }
 </script>

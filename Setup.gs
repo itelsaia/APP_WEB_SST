@@ -310,8 +310,9 @@ function inicializarBaseDeDatos() {
   const hojasRequeridas = [
     { nombre: 'PARAM_SISTEMA',    encabezados: ['Parametro', 'Valor', 'Descripcion'] },
     { nombre: 'DB_CLIENTES',      encabezados: ['ID_Cliente', 'Nombre_Empresa', 'NIT', 'Correo_Gerente', 'Estado'] },
-    { nombre: 'DB_USUARIOS',      encabezados: ['Email', 'Nombre_Completo', 'Rol', 'Password', 'ID_Cliente_Asociado', 'Estado'] },
-    { nombre: 'DB_INSPECCIONES',  encabezados: ['ID_Registro', 'Fecha_Hora', 'Email_Supervisor', 'ID_Cliente', 'Tipo_Actividad', 'Hallazgo_Detalle', 'URL_Evidencia', 'Prioridad_Inicial', 'Codigo_Supervisor'] },
+    { nombre: 'DB_USUARIOS',      encabezados: ['Email', 'Nombre_Completo', 'Rol', 'Password', 'ID_Cliente_Asociado', 'Cedula', 'Celular_Whatsapp'] },
+    { nombre: 'LISTAS_FORMATOS',  encabezados: ['ID_Formato', 'Descripcion', 'Empresa_Contratista', 'Estado'] },
+    { nombre: 'DB_INSPECCIONES',  encabezados: ['Id_formato', 'Consecutivo', 'Descripcion_Formato', 'Fecha_Hora', 'Empresa_Contratista', 'Foto_Formato_URL', 'Reportado_Por', 'Estado', 'Foto_Firma_URL', 'Fecha_Cierre'] },
     { nombre: 'DB_ANALISIS_IA',   encabezados: ['ID_Registro_Padre', 'Diagnostico_IA', 'Plan_Accion_Recomendado', 'Nivel_Riesgo_IA'] },
     { nombre: 'LISTAS_SISTEMA',   encabezados: ['Categoria', 'Item'] },
     { nombre: 'DB_ASISTENCIA',    encabezados: ['ID_Asistencia', 'Email_Supervisor', 'Nombre_Completo', 'Fecha', 'Hora_Entrada', 'Hora_Salida', 'Tipo_Dia', 'Obra_Proyecto', 'Foto_Entrada_URL', 'Foto_Salida_URL', 'Estado'] }
@@ -361,4 +362,72 @@ function inicializarBaseDeDatos() {
   }
 
   Logger.log('✅ Inicialización completada.');
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESET TOTAL DB_INSPECCIONES — ELIMINA Y RECREA LA HOJA
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Elimina la hoja DB_INSPECCIONES por completo y la crea de nuevo
+ * con SOLO los 8 campos nuevos. No hay datos que preservar.
+ *
+ * CÓMO EJECUTAR:
+ *   1. Abre el spreadsheet APP_WEB_STT_MAESTRO en Google Sheets
+ *   2. Menú → Extensiones → Apps Script
+ *   3. Selecciona la función "reinicializarHojaInspecciones"
+ *   4. Clic en ▶ Ejecutar
+ */
+function reinicializarHojaInspecciones() {
+  // Usar la hoja activa del script (funciona tanto vinculado como standalone)
+  var ss;
+  try {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    // Fallback: abrir por ID hardcodeado
+    ss = SpreadsheetApp.openById('1ggeg2PW6Xv8GGTrAlKXDO1IEcCTTWeAp5E0Qdkd5fPo');
+  }
+
+  var NOMBRE_HOJA   = 'DB_INSPECCIONES';
+  var ENCABEZADOS   = [
+    'Id_formato',
+    'Consecutivo',
+    'Descripcion_Formato',
+    'Fecha_Hora',
+    'Empresa_Contratista',
+    'Foto_Formato_URL',
+    'Reportado_Por',
+    'Estado',
+    'Foto_Firma_URL',
+    'Fecha_Cierre'
+  ];
+
+  // ── 1. Eliminar la hoja existente (con todos sus datos y formato) ──────────
+  var hojaVieja = ss.getSheetByName(NOMBRE_HOJA);
+  if (hojaVieja) {
+    // Insertar hoja temporal para que GAS no se queje de eliminar la única hoja
+    var tmp = ss.insertSheet('__tmp__');
+    ss.deleteSheet(hojaVieja);
+    Logger.log('[SETUP] Hoja antigua eliminada.');
+  }
+
+  // ── 2. Crear hoja nueva limpia ─────────────────────────────────────────────
+  var nueva = ss.insertSheet(NOMBRE_HOJA);
+
+  // ── 3. Escribir encabezados ────────────────────────────────────────────────
+  var header = nueva.getRange(1, 1, 1, ENCABEZADOS.length);
+  header.setValues([ENCABEZADOS]);
+  header
+    .setBackground('#1a237e')
+    .setFontColor('#ffffff')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+
+  nueva.setFrozenRows(1);
+
+  // ── 4. Eliminar hoja temporal si se creó ──────────────────────────────────
+  var tmpHoja = ss.getSheetByName('__tmp__');
+  if (tmpHoja) ss.deleteSheet(tmpHoja);
+
+  Logger.log('[SETUP] ✅ DB_INSPECCIONES recreada con campos: ' + ENCABEZADOS.join(' | '));
 }
