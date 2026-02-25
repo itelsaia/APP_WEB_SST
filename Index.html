@@ -444,84 +444,143 @@
     </template>
     <template id="tpl-admin">
         <!-- ══ PORTAL DE MÓDULOS (visible al entrar) ══════════════════ -->
-        <div id="admin-portal" class="space-y-4 animate-fade-in">
+        <div id="admin-portal" class="space-y-5 animate-fade-in">
 
-            <!-- ── BIENVENIDA INLINE (se llena desde JS con el nombre y frase) ── -->
-            <div class="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-                <div class="w-10 h-10 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center shrink-0">
-                    <span id="admin-welcome-icon" class="material-symbols-outlined text-2xl text-primary">admin_panel_settings</span>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <p id="admin-welcome-msg" class="text-sm font-black text-white tracking-tight">¡Bienvenido/a!</p>
-                    <p id="admin-welcome-sub" class="text-[10px] text-slate-400 font-medium italic mt-0.5">Portal de Administración</p>
+            <!-- Estilos de la cuadrícula de módulos -->
+            <style>
+                .adm-card {
+                    background: rgba(197,160,72,0.04);
+                    border: 1.5px solid rgba(197,160,72,0.14);
+                    transition: background .18s, border-color .18s, box-shadow .18s, transform .12s;
+                }
+                .adm-card:hover {
+                    background: rgba(197,160,72,0.09);
+                    border-color: rgba(197,160,72,0.42);
+                    box-shadow: 0 0 22px rgba(197,160,72,0.13);
+                }
+                .adm-card:active { transform: scale(.96); }
+                .adm-icon {
+                    background: rgba(197,160,72,0.10);
+                    border: 1.5px solid rgba(197,160,72,0.25);
+                    transition: transform .18s;
+                }
+                .adm-card:hover .adm-icon { transform: scale(1.10); }
+            </style>
+
+            <!-- ── BIENVENIDA HERO ──────────────────────────────────────── -->
+            <div class="relative overflow-hidden rounded-2xl"
+                style="background:linear-gradient(135deg,#0f1a10 0%,#101922 55%,#0c1520 100%);border:1.5px solid rgba(197,160,72,0.28);box-shadow:0 0 32px rgba(197,160,72,0.10),0 2px 14px rgba(0,0,0,0.45);">
+                <!-- Brillo radial dorado -->
+                <div class="absolute -top-10 -right-10 w-52 h-52 rounded-full pointer-events-none"
+                    style="background:radial-gradient(circle,rgba(197,160,72,0.16),transparent 70%);"></div>
+                <div class="absolute -bottom-8 -left-8 w-36 h-36 rounded-full pointer-events-none"
+                    style="background:radial-gradient(circle,rgba(197,160,72,0.08),transparent 70%);"></div>
+                <!-- Línea superior dorada -->
+                <div class="absolute top-0 left-0 right-0 h-px pointer-events-none"
+                    style="background:linear-gradient(90deg,transparent 5%,rgba(197,160,72,0.75) 50%,transparent 95%);"></div>
+
+                <div class="relative flex items-center gap-4 px-5 py-5 sm:px-7 sm:py-6">
+                    <div class="shrink-0 rounded-2xl flex items-center justify-center"
+                        style="width:60px;height:60px;background:rgba(197,160,72,0.12);border:1.5px solid rgba(197,160,72,0.38);box-shadow:0 0 18px rgba(197,160,72,0.20);">
+                        <span id="admin-welcome-icon" class="material-symbols-outlined text-3xl sm:text-4xl text-primary">admin_panel_settings</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p id="admin-welcome-msg" class="text-base sm:text-xl font-black text-white tracking-tight leading-snug">¡Bienvenido/a!</p>
+                        <p id="admin-welcome-sub" class="text-xs sm:text-sm text-slate-400 font-medium italic mt-1">Una buena gestión es la base de una empresa segura.</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- Cabecera del portal -->
-            <div class="border-b border-white/10 pb-4">
-                <div class="flex items-center gap-3 mb-1">
-                    <div
-                        class="w-9 h-9 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center shrink-0">
-                        <span class="material-symbols-outlined text-xl text-primary">admin_panel_settings</span>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-black text-white uppercase tracking-tight">Portal de Administración</h3>
-                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Seleccione un módulo
-                        </p>
-                    </div>
+            <!-- ── CABECERA DEL PORTAL ──────────────────────────────────── -->
+            <div class="relative overflow-hidden rounded-2xl flex flex-col items-center text-center gap-3 py-6 sm:py-8 px-6"
+                style="background:linear-gradient(160deg,rgba(197,160,72,0.07) 0%,rgba(197,160,72,0.04) 50%,rgba(197,160,72,0.07) 100%);border:1.5px solid rgba(197,160,72,0.25);box-shadow:0 0 26px rgba(197,160,72,0.09), inset 0 1px 0 rgba(197,160,72,0.18);">
+                <!-- Líneas decorativas doradas -->
+                <div class="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-px pointer-events-none"
+                    style="background:linear-gradient(90deg,transparent,rgba(197,160,72,0.70),transparent);"></div>
+                <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-1/2 h-px pointer-events-none"
+                    style="background:linear-gradient(90deg,transparent,rgba(197,160,72,0.30),transparent);"></div>
+                <!-- Icono central -->
+                <div class="rounded-2xl sm:rounded-3xl flex items-center justify-center"
+                    style="width:68px;height:68px;background:rgba(197,160,72,0.11);border:1.5px solid rgba(197,160,72,0.35);box-shadow:0 0 24px rgba(197,160,72,0.18);">
+                    <span class="material-symbols-outlined text-4xl text-primary">shield_person</span>
+                </div>
+                <div>
+                    <h2 class="text-lg sm:text-2xl font-black text-white uppercase tracking-tight"
+                        style="text-shadow:0 0 22px rgba(197,160,72,0.40);">Portal de Administración</h2>
+                    <p class="text-[10px] sm:text-xs font-bold uppercase tracking-widest mt-1.5 text-primary opacity-70">Seleccione un módulo para continuar</p>
                 </div>
             </div>
-            <!-- Cuadrícula de módulos -->
-            <div class="grid grid-cols-2 gap-3">
-                <!-- Módulo 1: Gestión de Empresas -->
+
+            <!-- ── CUADRÍCULA DE MÓDULOS (2×2 + 1 full) ───────────────── -->
+            <div class="grid grid-cols-2 gap-3 sm:gap-4">
+
+                <!-- Módulo 1: Empresas -->
                 <button onclick="abrirModuloAdmin('clientes')"
-                    class="group flex flex-col items-center justify-center gap-2.5 p-5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 rounded-2xl transition-all active:scale-95 text-center">
-                    <div
-                        class="w-12 h-12 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl text-primary">domain</span>
+                    class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                    <div class="adm-icon rounded-2xl flex items-center justify-center"
+                        style="width:52px;height:52px;">
+                        <span class="material-symbols-outlined text-3xl text-primary">domain</span>
                     </div>
                     <div>
-                        <p class="text-xs font-black text-white uppercase tracking-tight leading-none">Empresas</p>
-                        <p class="text-[9px] text-slate-500 font-bold mt-0.5">Gestión de Clientes</p>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Empresas</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Gestión de Clientes</p>
                     </div>
                 </button>
-                <!-- Módulo 2: Control de Asistencia -->
+
+                <!-- Módulo 2: Asistencia -->
                 <button onclick="abrirModuloAdmin('asistencia')"
-                    class="group flex flex-col items-center justify-center gap-2.5 p-5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 rounded-2xl transition-all active:scale-95 text-center">
-                    <div
-                        class="w-12 h-12 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl text-primary">groups</span>
+                    class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                    <div class="adm-icon rounded-2xl flex items-center justify-center"
+                        style="width:52px;height:52px;">
+                        <span class="material-symbols-outlined text-3xl text-primary">groups</span>
                     </div>
                     <div>
-                        <p class="text-xs font-black text-white uppercase tracking-tight leading-none">Asistencia</p>
-                        <p class="text-[9px] text-slate-500 font-bold mt-0.5">Control Personal SST</p>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Asistencia</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Control Personal SST</p>
                     </div>
                 </button>
-                <!-- Módulo 3: Gestión de Usuarios -->
+
+                <!-- Módulo 3: Usuarios -->
                 <button onclick="abrirModuloAdmin('usuarios')"
-                    class="group flex flex-col items-center justify-center gap-2.5 p-5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 rounded-2xl transition-all active:scale-95 text-center">
-                    <div
-                        class="w-12 h-12 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl text-primary">manage_accounts</span>
+                    class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                    <div class="adm-icon rounded-2xl flex items-center justify-center"
+                        style="width:52px;height:52px;">
+                        <span class="material-symbols-outlined text-3xl text-primary">manage_accounts</span>
                     </div>
                     <div>
-                        <p class="text-xs font-black text-white uppercase tracking-tight leading-none">Usuarios</p>
-                        <p class="text-[9px] text-slate-500 font-bold mt-0.5">Gestión de Accesos</p>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Usuarios</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Gestión de Accesos</p>
                     </div>
                 </button>
-                <!-- Módulo 4: Gestor de Formatos -->
+
+                <!-- Módulo 4: Formatos -->
                 <button onclick="abrirModuloAdmin('formatos')"
-                    class="group flex flex-col items-center justify-center gap-2.5 p-5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 rounded-2xl transition-all active:scale-95 text-center">
-                    <div
-                        class="w-12 h-12 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-2xl text-primary">description</span>
+                    class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                    <div class="adm-icon rounded-2xl flex items-center justify-center"
+                        style="width:52px;height:52px;">
+                        <span class="material-symbols-outlined text-3xl text-primary">description</span>
                     </div>
                     <div>
-                        <p class="text-xs font-black text-white uppercase tracking-tight leading-none">Formatos</p>
-                        <p class="text-[9px] text-slate-500 font-bold mt-0.5">Por Empresa</p>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Formatos</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Por Empresa</p>
                     </div>
                 </button>
+
+                <!-- Módulo 5: Gestión Supervisor SST — ancho completo, mismo estilo vertical -->
+                <button onclick="abrirModuloAdmin('supervisor-stt')"
+                    class="adm-card col-span-2 group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                    <div class="adm-icon rounded-2xl flex items-center justify-center"
+                        style="width:52px;height:52px;">
+                        <span class="material-symbols-outlined text-3xl text-primary">supervisor_account</span>
+                    </div>
+                    <div>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Gestión Supervisor SST</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Dashboard de Rendimiento · Evaluación de Desempeño</p>
+                    </div>
+                </button>
+
             </div>
+
         </div>
 
         <!-- ══ WORKSPACE: GESTIÓN DE CLIENTES ══ -->
@@ -542,6 +601,11 @@
         <!-- ══ WORKSPACE: GESTOR DE FORMATOS ══ -->
         <div id="admin-workspace-formatos" class="hidden">
             <?!= include('AdminFormatos'); ?>
+        </div>
+
+        <!-- ══ WORKSPACE: GESTIÓN SUPERVISOR STT ══ -->
+        <div id="admin-workspace-supervisor-stt" class="hidden">
+            <?!= include('AdminSupervisorSTT'); ?>
         </div>
     </template>
     <template id="tpl-error">

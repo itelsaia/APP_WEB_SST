@@ -1542,3 +1542,346 @@ function obtenerHallazgo(idHallazgo) {
     return { status: 'error', message: e.toString() };
   }
 }
+
+/**
+ * Obtiene métricas de gestión para todos los supervisores SUP-SST.
+ * Agrega datos de DB_INSPECCIONES y DB_HALLAZGOS por supervisor.
+ * @return {Object} { status, data: { supervisores: [...], kpis: {...} } }
+ */
+function obtenerMetricasSupervisoresSTT() {
+  try {
+    const ss  = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const tz  = Session.getScriptTimeZone();
+    const hoy = new Date();
+
+    // ── Helper: días transcurridos desde una fecha ────────────────────
+    function _diasDesde_(val) {
+      if (!val && val !== 0) return 0;
+      var d;
+      if (val instanceof Date) {
+        d = val;
+      } else {
+        var str = val.toString().trim();
+        // "dd/MM/yyyy" → "yyyy-MM-dd"
+        if (str.includes('/')) {
+          var parts = str.split('/');
+          str = parts[2] + '-' + parts[1] + '-' + parts[0];
+        }
+        d = new Date(str);
+      }
+      return isNaN(d) ? 0 : Math.max(0, Math.floor((hoy - d) / 86400000));
+    }
+
+    // ── Helper: formatear fecha ───────────────────────────────────────
+    function _fmtFecha_(val) {
+      if (!val) return '';
+      if (val instanceof Date) {
+        try { return Utilities.formatDate(val, tz, 'dd/MM/yyyy'); } catch(e) {}
+      }
+      return val.toString().trim();
+    }
+
+    // 1. Leer todos los supervisores SUP-SST de DB_USUARIOS
+    // Schema: Email(0) | Nombre_Completo(1) | Rol(2) | Password(3) | ID_Cliente_Asociado(4) | Cedula(5) | Celular_Whatsapp(6)
+    var hojaUsr = ss.getSheetByName('DB_USUARIOS');
+    if (!hojaUsr) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
+    var datosUsr = hojaUsr.getDataRange().getValues();
+
+    var supervisores = [];
+    for (var i = 1; i < datosUsr.length; i++) {
+      if ((datosUsr[i][2] || '').toString().trim().toUpperCase() === 'SUP-SST') {
+        supervisores.push({
+          email:   (datosUsr[i][0] || '').toString().trim(),
+          nombre:  (datosUsr[i][1] || '').toString().trim(),
+          codigo:  (datosUsr[i][4] || '').toString().trim(), // ID_Cliente_Asociado = Codigo_Supervisor
+          celular: (datosUsr[i][6] || '').toString().trim()
+        });
+      }
+    }
+
+    // 2. Leer empresas activas de DB_CLIENTES para el filtro
+    // Schema: ID_Cliente(0)|Nombre_Empresa(1)|Direccion(2)|NIT(3)|Correo_Gerente(4)|Nombre_Contacto(5)|Celular_Whatsapp(6)|Nombre_Obra(7)|Estado(8)
+    var hojaClientes = ss.getSheetByName('DB_CLIENTES');
+    var listaEmpresas = [];
+    if (hojaClientes) {
+      var datosClientes = hojaClientes.getDataRange().getValues();
+      for (var j = 1; j < datosClientes.length; j++) {
+        var nomEmp  = (datosClientes[j][1] || '').toString().trim();
+        var estadoEmp = (datosClientes[j][8] || '').toString().trim().toUpperCase();
+        if (nomEmp && estadoEmp === 'ACTIVO') {
+          listaEmpresas.push(nomEmp);
+        }
+      }
+      listaEmpresas.sort();
+    }
+
+    // 3. Leer DB_INSPECCIONES de una sola vez
+    // Schema: Id_formato(0)|Consecutivo(1)|Descripcion_Formato(2)|Fecha_Hora(3)|Empresa_Contratista(4)|Foto_Formato_URL(5)|Reportado_Por(6)|Estado(7)|Foto_Firma_URL(8)|Fecha_Cierre(9)
+    var hojaInsp = ss.getSheetByName('DB_INSPECCIONES');
+    var datosInsp = hojaInsp ? hojaInsp.getDataRange().getValues().slice(1) : [];
+
+    // 3. Leer DB_HALLAZGOS de una sola vez
+    // Schema: Id_hallazgo(0)|Fecha(1)|Hora(2)|Ubicacion(3)|Descripcion_hallazgo(4)|Foto_URL_Hallazgo(5)|Empresa_Contratista(6)|Reportado_Por(7)|Reportado_A(8)|Numero_contacto(9)|Gestion_Realizada(10)|Estado(11)|Fecha_cierre(12)|Hora_cierre(13)|Foto_URL_Cierre(14)
+    var hojaHall = ss.getSheetByName('DB_HALLAZGOS');
+    var datosHall = hojaHall ? hojaHall.getDataRange().getValues().slice(1) : [];
+
+    // 4. Agregar métricas por supervisor
+    var resultado = supervisores.map(function(sup) {
+      // Formatos del supervisor (Reportado_Por col 6)
+      var formatos = datosInsp.filter(function(r) { return (r[6]||'').toString().trim() === sup.codigo; });
+      var fPend    = formatos.filter(function(r) { return (r[7]||'').toString().trim() === 'PENDIENTE'; });
+      var fCerr    = formatos.filter(function(r) { return (r[7]||'').toString().trim() === 'CERRADO CON FIRMA'; });
+
+      // Hallazgos del supervisor (Reportado_Por col 7)
+      var hallazgos = datosHall.filter(function(r) { return (r[7]||'').toString().trim() === sup.codigo; });
+      var hAbie     = hallazgos.filter(function(r) { return (r[11]||'').toString().trim() === 'ABIERTO'; });
+      var hCerr     = hallazgos.filter(function(r) { return (r[11]||'').toString().trim() === 'CERRADO'; });
+
+      // Obras únicas del supervisor
+      var obrasSet = {};
+      formatos.forEach(function(r) { var o = (r[4]||'').toString().trim(); if (o) obrasSet[o] = true; });
+      hallazgos.forEach(function(r) { var o = (r[6]||'').toString().trim(); if (o) obrasSet[o] = true; });
+      var obras = Object.keys(obrasSet);
+
+      // Alertas: formatos pendientes con días de antigüedad (más antiguos primero)
+      var alertasFormatos = fPend.map(function(r) {
+        return {
+          consecutivo: (r[1]||'').toString(),
+          descripcion: (r[2]||'').toString(),
+          empresa:     (r[4]||'').toString(),
+          fecha:       _fmtFecha_(r[3]),
+          dias:        _diasDesde_(r[3])
+        };
+      }).sort(function(a, b) { return b.dias - a.dias; });
+
+      // Alertas: hallazgos abiertos con días de antigüedad
+      var alertasHallazgos = hAbie.map(function(r) {
+        return {
+          id:          (r[0]||'').toString(),
+          descripcion: (r[4]||'').toString(),
+          empresa:     (r[6]||'').toString(),
+          fecha:       (r[1]||'').toString(),
+          dias:        _diasDesde_(r[1])
+        };
+      }).sort(function(a, b) { return b.dias - a.dias; });
+
+      // Tasa de cumplimiento global: considera formatos cerrados + hallazgos cerrados
+      // sobre el total de actividad (formatos + hallazgos). Si no hay actividad → 100%.
+      var totalActividad  = formatos.length + hallazgos.length;
+      var cerradoTotal    = fCerr.length + hCerr.length;
+      var tasaGlobal      = totalActividad > 0 ? Math.round((cerradoTotal / totalActividad) * 100) : 100;
+
+      return {
+        email:   sup.email,
+        nombre:  sup.nombre,
+        celular: sup.celular,
+        obras:   obras,
+        formatos: {
+          total:    formatos.length,
+          pendiente: fPend.length,
+          cerrado:  fCerr.length,
+          tasa:     tasaGlobal
+        },
+        hallazgos: {
+          total:    hallazgos.length,
+          abiertos: hAbie.length,
+          cerrados: hCerr.length
+        },
+        alertasFormatos:  alertasFormatos,
+        alertasHallazgos: alertasHallazgos
+      };
+    });
+
+    // 5. KPIs globales — tasa combinada: (formatos cerrados + hallazgos cerrados) / (formatos + hallazgos)
+    var totActGlobal  = resultado.reduce(function(a, s) { return a + s.formatos.total + s.hallazgos.total; }, 0);
+    var cerrGlobal    = resultado.reduce(function(a, s) { return a + s.formatos.cerrado + s.hallazgos.cerrados; }, 0);
+    var kpis = {
+      totalSupervisores:  resultado.length,
+      formatosPendientes: resultado.reduce(function(a, s) { return a + s.formatos.pendiente; }, 0),
+      hallazgosAbiertos:  resultado.reduce(function(a, s) { return a + s.hallazgos.abiertos; }, 0),
+      tasaGlobal:         totActGlobal > 0 ? Math.round((cerrGlobal / totActGlobal) * 100) : 100
+    };
+
+    return { status: 'success', data: { supervisores: resultado, kpis: kpis, empresas: listaEmpresas } };
+
+  } catch (e) {
+    Logger.log('Error en obtenerMetricasSupervisoresSTT: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Obtiene reporte de desempeño por período para informe individual o ranking.
+ * @param {Object} params
+ *   params.fechaInicio      {string} "yyyy-MM-dd"
+ *   params.fechaFin         {string} "yyyy-MM-dd"
+ *   params.emailSupervisor  {string} email del supervisor (vacío = todos → ranking)
+ *   params.empresa          {string} filtro opcional de empresa para el ranking
+ * @return {Object} { status, data: { tipo, periodo, supervisor|ranking } }
+ */
+function obtenerReporteDesempenoSTT(params) {
+  try {
+    var ss  = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var tz  = Session.getScriptTimeZone();
+
+    // Leer logo desde PARAM_SISTEMA (clave URL_LOGO)
+    var logoUrl = '';
+    try {
+      var hojaParam = ss.getSheetByName('PARAM_SISTEMA');
+      if (hojaParam && hojaParam.getLastRow() >= 2) {
+        var paramData = hojaParam.getRange(2, 1, hojaParam.getLastRow() - 1, 2).getValues();
+        for (var p = 0; p < paramData.length; p++) {
+          if ((paramData[p][0] || '').toString().trim() === 'URL_LOGO') {
+            logoUrl = (paramData[p][1] || '').toString().trim();
+            break;
+          }
+        }
+      }
+    } catch(eLogo) { Logger.log('Logo read error: ' + eLogo); }
+
+    // Parsear fechas del período (vienen como "yyyy-MM-dd")
+    var dInicio = new Date(params.fechaInicio + 'T00:00:00');
+    var dFin    = new Date(params.fechaFin    + 'T23:59:59');
+    if (isNaN(dInicio) || isNaN(dFin)) {
+      return { status: 'error', message: 'Fechas inválidas.' };
+    }
+
+    // Helper: ¿la fecha cae dentro del período?
+    function _enPeriodo_(val) {
+      if (!val && val !== 0) return false;
+      var d;
+      if (val instanceof Date) {
+        d = val;
+      } else {
+        var str = val.toString().trim();
+        if (str.includes('/')) { var p = str.split('/'); str = p[2]+'-'+p[1]+'-'+p[0]; }
+        d = new Date(str);
+      }
+      return !isNaN(d) && d >= dInicio && d <= dFin;
+    }
+
+    function _fmtF_(val) {
+      if (!val) return '';
+      if (val instanceof Date) {
+        try { return Utilities.formatDate(val, tz, 'dd/MM/yyyy'); } catch(e) {}
+      }
+      return val.toString().trim();
+    }
+
+    // 1. Leer supervisores SUP-SST de DB_USUARIOS
+    var hojaUsr  = ss.getSheetByName('DB_USUARIOS');
+    var datosUsr = hojaUsr ? hojaUsr.getDataRange().getValues() : [];
+    var todosSupMap = {}; // codigo → { email, nombre, celular, codigo }
+    for (var i = 1; i < datosUsr.length; i++) {
+      if ((datosUsr[i][2]||'').toString().trim().toUpperCase() === 'SUP-SST') {
+        var cod = (datosUsr[i][4]||'').toString().trim();
+        todosSupMap[cod] = {
+          email:   (datosUsr[i][0]||'').toString().trim(),
+          nombre:  (datosUsr[i][1]||'').toString().trim(),
+          celular: (datosUsr[i][6]||'').toString().trim(),
+          codigo:  cod
+        };
+      }
+    }
+
+    // 2. Leer DB_INSPECCIONES y DB_HALLAZGOS filtrados por período
+    var hojaInsp  = ss.getSheetByName('DB_INSPECCIONES');
+    var hojaHall  = ss.getSheetByName('DB_HALLAZGOS');
+    var rawInsp   = hojaInsp ? hojaInsp.getDataRange().getValues().slice(1) : [];
+    var rawHall   = hojaHall ? hojaHall.getDataRange().getValues().slice(1) : [];
+
+    var insp = rawInsp.filter(function(r) { return _enPeriodo_(r[3]); }); // r[3]=Fecha_Hora
+    var hall = rawHall.filter(function(r) { return _enPeriodo_(r[1]); }); // r[1]=Fecha (string)
+
+    // 3. Filtrar por empresa si se indicó
+    var emp = (params.empresa || '').toString().trim();
+    if (emp) {
+      insp = insp.filter(function(r) { return (r[4]||'').toString().trim() === emp; });
+      hall = hall.filter(function(r) { return (r[6]||'').toString().trim() === emp; });
+    }
+
+    // 4. Función de métricas por código de supervisor
+    function _metricas_(codigo) {
+      var fmts   = insp.filter(function(r){ return (r[6]||'').toString().trim()===codigo; });
+      var halls  = hall.filter(function(r){ return (r[7]||'').toString().trim()===codigo; });
+      var fCerr  = fmts.filter(function(r){ return (r[7]||'').toString().trim()==='CERRADO CON FIRMA'; });
+      var fPend  = fmts.filter(function(r){ return (r[7]||'').toString().trim()==='PENDIENTE'; });
+      var hCerr  = halls.filter(function(r){ return (r[11]||'').toString().trim()==='CERRADO'; });
+      var hAbie  = halls.filter(function(r){ return (r[11]||'').toString().trim()==='ABIERTO'; });
+      var totAct = fmts.length + halls.length;
+      var cerr   = fCerr.length + hCerr.length;
+      var tasa   = totAct > 0 ? Math.round((cerr / totAct) * 100) : 100;
+
+      var detFormatos = fmts.map(function(r){
+        return {
+          consecutivo: (r[1]||'').toString(),
+          descripcion: (r[2]||'').toString(),
+          empresa:     (r[4]||'').toString(),
+          fecha:       _fmtF_(r[3]),
+          estado:      (r[7]||'').toString()
+        };
+      });
+      var detHallazgos = halls.map(function(r){
+        return {
+          id:          (r[0]||'').toString(),
+          descripcion: (r[4]||'').toString(),
+          empresa:     (r[6]||'').toString(),
+          fecha:       _fmtF_(r[1]),
+          estado:      (r[11]||'').toString()
+        };
+      });
+      return {
+        formatos:    { total:fmts.length, cerrado:fCerr.length, pendiente:fPend.length },
+        hallazgos:   { total:halls.length, cerrado:hCerr.length, abiertos:hAbie.length },
+        tasa:        tasa,
+        detFormatos: detFormatos,
+        detHallazgos: detHallazgos
+      };
+    }
+
+    var periodo = {
+      inicio: Utilities.formatDate(dInicio, tz, 'dd/MM/yyyy'),
+      fin:    Utilities.formatDate(dFin,    tz, 'dd/MM/yyyy')
+    };
+
+    // 5a. Informe individual
+    if (params.emailSupervisor) {
+      var supEnc = null;
+      for (var c in todosSupMap) {
+        if (todosSupMap[c].email === params.emailSupervisor) { supEnc = todosSupMap[c]; break; }
+      }
+      if (!supEnc) return { status:'error', message:'Supervisor no encontrado.' };
+      var met = _metricas_(supEnc.codigo);
+      return { status:'success', data:{
+        tipo:'individual', periodo:periodo, logoUrl:logoUrl,
+        supervisor:{ nombre:supEnc.nombre, email:supEnc.email, celular:supEnc.celular },
+        metricas: met
+      }};
+    }
+
+    // 5b. Ranking global/empresa
+    var ranking = [];
+    for (var k in todosSupMap) {
+      var s = todosSupMap[k];
+      var m = _metricas_(s.codigo);
+      ranking.push({
+        nombre:    s.nombre,
+        email:     s.email,
+        celular:   s.celular,
+        formatos:  m.formatos,
+        hallazgos: m.hallazgos,
+        tasa:      m.tasa
+      });
+    }
+    // Ordenar: mayor tasa primero; empate → más actividad
+    ranking.sort(function(a,b){
+      if (b.tasa !== a.tasa) return b.tasa - a.tasa;
+      return (b.formatos.total + b.hallazgos.total) - (a.formatos.total + a.hallazgos.total);
+    });
+    return { status:'success', data:{ tipo:'ranking', periodo:periodo, empresa:emp, ranking:ranking } };
+
+  } catch(e) {
+    Logger.log('Error en obtenerReporteDesempenoSTT: '+e.toString());
+    return { status:'error', message: e.toString() };
+  }
+}

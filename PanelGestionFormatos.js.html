@@ -1,0 +1,368 @@
+<script>
+    // ── Variables locales del panel ──────────────────────────────────
+    let listaFormatosCache = [];
+    let listaPendientesCache = [];
+    let fotoFormatoBase64 = null;
+    let fotoFirmaBase64 = null;
+
+    // Datos del formato que se está cerrando
+    let formatoEnCierre = { row: null, consecutivo: '', descripcion: '', empresa: '' };
+
+    /**
+     * Punto de entrada llamado desde App.js.html:inicializarAppConSesion().
+     * Nombre EXACTO requerido — no renombrar.
+     */
+    function inicializarPanelFormatos() {
+        console.log("[SST] Inicializando Panel de Formatos v2...");
+        console.log("[SST] Sesion actual:", currentUser);
+        cargarFormatosSST();
+        actualizarListaPendientes();
+        configurarEnvioFormato();
+    }
+
+    // ── CARGA DE CATÁLOGO ────────────────────────────────────────────
+
+    function cargarFormatosSST() {
+        if (!currentUser) {
+            console.warn("[SST] Intentando cargar catálogo sin usuario logueado.");
+            return;
+        }
+        console.log("[SST] Iniciando carga de catálogo de formatos para:", currentUser.email);
+
+        // Resetear select
+        const select = document.getElementById('idFormato');
+        if (select) select.innerHTML = '<option value="">Cargando formatos...</option>';
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                console.log("[SST] Respuesta obtenerFormatosSST:", res);
+                const select = document.getElementById('idFormato');
+                if (!select) return;
+
+                if (res.status === "success") {
+                    listaFormatosCache = res.data;
+                    if (res.data.length === 0) {
+                        select.innerHTML = '<option value="">Sin formatos disponibles</option>';
+                        console.warn("[SST] El catálogo de formatos está vacío para esta empresa.");
+                    } else {
+                        select.innerHTML = '<option value="">Seleccione un formato...</option>';
+                        res.data.forEach(f => {
+                            const opt = document.createElement('option');
+                            opt.value = f.id;
+                            opt.textContent = `${f.id} - ${f.descripcion}`;
+                            select.appendChild(opt);
+                        });
+                    }
+                } else {
+                    console.error("[SST] Error del servidor:", res.message);
+                    select.innerHTML = '<option value="">Error: ' + res.message + '</option>';
+                    mostrarNotificacion("⚠️ " + res.message, "error");
+                }
+            })
+            .withFailureHandler(function (err) {
+                console.error("[SST] Fallo crítico en obtenerFormatosSST:", err);
+                const select = document.getElementById('idFormato');
+                if (select) select.innerHTML = '<option value="">Error de conexión</option>';
+                mostrarNotificacion("❌ Error de conexión con el servidor", "error");
+            })
+            .obtenerFormatosSST(currentUser.email);
+    }
+
+    function actualizarDescripcionFormato(select) {
+        const descContainer = document.getElementById('desc-container');
+        const label = document.getElementById('label-descripcion');
+        const id = select.value;
+        if (id) {
+            const formato = listaFormatosCache.find(f => f.id === id);
+            if (formato) {
+                label.textContent = `${formato.id} - ${formato.descripcion}`;
+                descContainer.classList.remove('hidden');
+            }
+        } else {
+            descContainer.classList.add('hidden');
+        }
+    }
+
+    // ── FOTO INICIAL ─────────────────────────────────────────────────
+
+    function previewFotoFormato(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                fotoFormatoBase64 = e.target.result;
+                document.getElementById('format-img-preview').src = e.target.result;
+                document.getElementById('format-preview-container').classList.remove('hidden');
+                document.getElementById('format-foto-label').classList.add('hidden');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function cancelarFotoFormato() {
+        fotoFormatoBase64 = null;
+        const container = document.getElementById('format-preview-container');
+        const label = document.getElementById('format-foto-label');
+        const input = document.getElementById('fotoFormato');
+
+        if (container) container.classList.add('hidden');
+        if (label) label.classList.remove('hidden');
+        if (input) input.value = "";
+    }
+
+    // ── ENVÍO DE NUEVO FORMATO ───────────────────────────────────────
+
+    function configurarEnvioFormato() {
+        const form = document.getElementById('format-form');
+        if (!form) return;
+
+        // Remover listener anterior si existe para evitar duplicados si se llama varias veces inicializarPanelFormatos
+        const newForm = form.cloneNode(true);
+        form.parentNode.replaceChild(newForm, form);
+
+        newForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            if (!fotoFormatoBase64) {
+                mostrarNotificacion("⚠️ Por favor capture la foto del formato.", "error");
+                return;
+            }
+
+            const btn = document.getElementById('btn-save-format');
+            const spinner = document.getElementById('format-spinner');
+            const btnText = document.getElementById('format-btn-text');
+
+            if (btn) btn.disabled = true;
+            if (spinner) spinner.classList.remove('hidden');
+            if (btnText) btnText.textContent = "GUARDANDO...";
+
+            const idF = document.getElementById('idFormato').value;
+            const fmt = listaFormatosCache.find(f => f.id === idF);
+
+            // Nombre de empresa: desde catálogo o desde la obra seleccionada
+            let nombreEmpresa = fmt ? fmt.empresa : "General";
+            if (!nombreEmpresa || nombreEmpresa === "Todas") {
+                const obraSelect = document.getElementById('idObraAsistencia');
+                if (obraSelect && obraSelect.selectedIndex > 0) {
+                    nombreEmpresa = obraSelect.options[obraSelect.selectedIndex].text;
+                }
+            }
+
+            const payload = {
+                idFormato: idF,
+                descripcionFormato: fmt ? fmt.descripcion : "",
+                nombreEmpresa: nombreEmpresa,
+                archivoBase64: fotoFormatoBase64,
+                userCode: (currentUser && (currentUser.codigo || currentUser.email)) || ""
+            };
+
+            google.script.run
+                .withSuccessHandler(function (res) {
+                    if (res.status === "success") {
+                        mostrarNotificacion("✅ " + res.message, "success");
+                        newForm.reset();
+                        cancelarFotoFormato();
+                        const desc = document.getElementById('desc-container');
+                        if (desc) desc.classList.add('hidden');
+                        actualizarListaPendientes();
+                    } else {
+                        mostrarNotificacion("❌ " + res.message, "error");
+                    }
+                    if (btn) btn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (btnText) btnText.textContent = "GUARDAR COMO PENDIENTE";
+                })
+                .withFailureHandler(function (err) {
+                    mostrarNotificacion("❌ Error crítico: " + err.toString(), "error");
+                    if (btn) btn.disabled = false;
+                    if (spinner) spinner.classList.add('hidden');
+                    if (btnText) btnText.textContent = "GUARDAR COMO PENDIENTE";
+                })
+                .guardarGestionFormato(payload);
+        });
+    }
+
+    // ── LISTA DE PENDIENTES ──────────────────────────────────────────
+
+    function actualizarListaPendientes() {
+        if (!currentUser) {
+            console.warn("[SST] Intentando actualizar pendientes sin usuario logueado.");
+            return;
+        }
+        const contenedor = document.getElementById('lista-pendientes');
+        const badge = document.getElementById('count-pendientes');
+        if (!contenedor) return;
+
+        const userCode = currentUser.codigo || currentUser.email;
+
+        console.log("[SST] Consultando formatos pendientes para:", userCode);
+        contenedor.innerHTML = `<div class="text-center py-6 text-gray-400 italic text-xs">Actualizando lista...</div>`;
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                console.log("[SST] Respuesta obtenerFormatosPendientes:", res);
+                if (res.status === "success") {
+                    listaPendientesCache = res.data;
+                    if (badge) badge.textContent = res.data.length;
+                    renderizarPendientes(res.data);
+
+                    // Limpiar filtro al recargar
+                    const filtro = document.getElementById('filtro-pendientes');
+                    if (filtro) filtro.value = '';
+                } else {
+                    console.error("[SST] Error del servidor en pendientes:", res.message);
+                    contenedor.innerHTML = `<p class="text-red-400 text-xs text-center py-4">Error: ${res.message}</p>`;
+                }
+            })
+            .withFailureHandler(function (err) {
+                console.error("[SST] Fallo crítico en obtenerFormatosPendientes:", err);
+                contenedor.innerHTML = `<p class="text-red-400 text-xs text-center py-4">Error de conexión al cargar pendientes.</p>`;
+            })
+            .obtenerFormatosPendientes(userCode);
+    }
+
+    function filtrarPendientes(texto) {
+        const termino = texto.toLowerCase().trim();
+        if (!termino) {
+            renderizarPendientes(listaPendientesCache);
+            return;
+        }
+        const filtrados = listaPendientesCache.filter(p =>
+            (p.consecutivo || '').toLowerCase().includes(termino) ||
+            (p.descripcion || '').toLowerCase().includes(termino) ||
+            (p.idFormato || '').toLowerCase().includes(termino)
+        );
+        renderizarPendientes(filtrados);
+    }
+
+    function renderizarPendientes(lista) {
+        const contenedor = document.getElementById('lista-pendientes');
+        if (!contenedor) return;
+
+        if (!lista || lista.length === 0) {
+            contenedor.innerHTML = `
+                <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl py-8 text-center">
+                    <span class="material-symbols-outlined text-gray-300 text-4xl mb-2">done_all</span>
+                    <p class="text-gray-400 text-xs font-medium">No hay formatos pendientes</p>
+                </div>`;
+            return;
+        }
+
+        contenedor.innerHTML = "";
+        lista.forEach(p => {
+            const card = document.createElement('div');
+            card.className = "bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden animate-fade-in";
+            card.innerHTML = `
+                <div class="flex items-stretch">
+                    <!-- Barra de color izquierda -->
+                    <div class="w-1.5 bg-amber-400 rounded-l-xl flex-shrink-0"></div>
+
+                    <!-- Contenido principal -->
+                    <div class="flex-1 p-4 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <span class="material-symbols-outlined text-amber-500">description</span>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">${p.consecutivo}</p>
+                                <p class="text-sm font-bold text-gray-800 leading-tight truncate">${p.descripcion}</p>
+                                <p class="text-[10px] text-gray-400 mt-0.5">${p.empresa}</p>
+                            </div>
+                        </div>
+                        <button onclick="abrirModalFirma(${p.row}, '${p.consecutivo}', '${(p.descripcion || '').replace(/'/g, "\\'")}', '${(p.empresa || '').replace(/'/g, "\\'")}' )"
+                            class="flex-shrink-0 bg-green-50 text-green-700 px-3 py-2.5 rounded-xl text-[10px] font-bold hover:bg-green-600 hover:text-white transition-colors flex items-center gap-1 border border-green-200 whitespace-nowrap">
+                            <span class="material-symbols-outlined text-xs">fact_check</span>
+                            CERRAR
+                        </button>
+                    </div>
+                </div>`;
+            contenedor.appendChild(card);
+        });
+    }
+
+    // ── MODAL DE FIRMA ───────────────────────────────────────────────
+
+    function abrirModalFirma(row, consecutivo, descripcion, empresa) {
+        formatoEnCierre = { row, consecutivo, descripcion, empresa };
+
+        const elCons = document.getElementById('firma-modal-consecutivo');
+        const elDesc = document.getElementById('firma-modal-descripcion');
+        const modal = document.getElementById('firma-modal');
+
+        if (elCons) elCons.textContent = consecutivo;
+        if (elDesc) elDesc.textContent = descripcion;
+
+        // Resetear estado del modal
+        cancelarFotoFirma();
+
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    function cerrarModalFirma() {
+        const modal = document.getElementById('firma-modal');
+        if (modal) modal.classList.add('hidden');
+        cancelarFotoFirma();
+        formatoEnCierre = { row: null, consecutivo: '', descripcion: '', empresa: '' };
+    }
+
+    function previewFotoFirma(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                fotoFirmaBase64 = e.target.result;
+                document.getElementById('firma-img-preview').src = e.target.result;
+                document.getElementById('firma-preview-container').classList.remove('hidden');
+                document.getElementById('firma-foto-label').classList.add('hidden');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function cancelarFotoFirma() {
+        fotoFirmaBase64 = null;
+        const container = document.getElementById('firma-preview-container');
+        const label = document.getElementById('firma-foto-label');
+        const input = document.getElementById('foto-firma');
+
+        if (container) container.classList.add('hidden');
+        if (label) label.classList.remove('hidden');
+        if (input) input.value = "";
+    }
+
+    function submitCierreFormato() {
+        if (!fotoFirmaBase64) {
+            mostrarNotificacion("⚠️ Debe capturar la foto del formato firmado.", "error");
+            return;
+        }
+
+        const btn = document.getElementById('btn-confirmar-firma');
+        const spinner = document.getElementById('firma-spinner');
+        if (btn) btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        const payload = {
+            row: formatoEnCierre.row,
+            consecutivo: formatoEnCierre.consecutivo,
+            empresa: formatoEnCierre.empresa,
+            archivoBase64: fotoFirmaBase64
+        };
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (btn) btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                if (res.status === "success") {
+                    cerrarModalFirma();
+                    mostrarNotificacion("✅ " + res.message, "success");
+                    actualizarListaPendientes();
+                } else {
+                    mostrarNotificacion("❌ " + res.message, "error");
+                }
+            })
+            .withFailureHandler(function (err) {
+                if (btn) btn.disabled = false;
+                if (spinner) spinner.classList.add('hidden');
+                mostrarNotificacion("❌ Error crítico: " + err.toString(), "error");
+            })
+            .cerrarFormato(payload);
+    }
+</script>
