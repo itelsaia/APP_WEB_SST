@@ -1235,6 +1235,12 @@
                 '</td>' +
                 '<td class="px-3 py-3 whitespace-nowrap">' +
                     '<div class="flex items-center gap-1">' +
+                        (c.carpeta
+                          ? '<a href="' + c.carpeta + '" target="_blank" rel="noopener" ' +
+                              'class="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all" title="Carpeta Drive">' +
+                              '<span class="material-symbols-outlined text-sm">folder_open</span>' +
+                            '</a>'
+                          : '') +
                         '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
                             'class="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all" title="Editar">' +
                             '<span class="material-symbols-outlined text-sm">edit</span>' +
@@ -1315,6 +1321,12 @@
                 (extras ? '<div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px] mb-3 pb-3 border-b border-white/5">' + extras + '</div>' : '') +
                 // Acciones
                 '<div class="flex gap-2">' +
+                    (c.carpeta
+                      ? '<a href="' + c.carpeta + '" target="_blank" rel="noopener" ' +
+                          'class="w-10 flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 transition-all active:scale-95" title="Carpeta Drive">' +
+                          '<span class="material-symbols-outlined text-sm">folder_open</span>' +
+                        '</a>'
+                      : '') +
                     '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
                         'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">' +
                         '<span class="material-symbols-outlined text-sm">edit</span>Editar' +
@@ -2181,12 +2193,12 @@
             .obtenerFormatosAdmin();
     }
 
-    // Puebla el filtro de empresa dinámicamente desde los datos cargados
+    // Puebla el filtro de empresa dinámicamente y siempre resetea a "todas"
+    // para que los nuevos formatos sean visibles inmediatamente tras guardar o recargar
     function _poblarFiltroEmpresasFormatos() {
         var sel = document.getElementById('fmt-filtro-empresa');
         if (!sel) return;
-        var valActual = sel.value;
-        var empresas  = {};
+        var empresas = {};
         _formatosAdminTotal.forEach(function(f) { if (f.empresa) empresas[f.empresa] = true; });
         sel.innerHTML = '<option value="" style="background:#1a242f;">Todas las empresas</option>';
         Object.keys(empresas).sort().forEach(function(e) {
@@ -2194,7 +2206,8 @@
             opt.value = e; opt.textContent = e; opt.style.background = '#1a242f';
             sel.appendChild(opt);
         });
-        if (valActual) sel.value = valActual;
+        // No restauramos el valor previo: al recargar siempre mostramos todos
+        sel.value = '';
     }
 
     function filtrarFormatos() {

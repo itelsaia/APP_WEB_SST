@@ -780,7 +780,8 @@ function obtenerListaClientesAdmin() {
         contacto:  (datos[i][5] || '').toString().trim(),
         celular:   (datos[i][6] || '').toString().trim(),
         obra:      (datos[i][7] || '').toString().trim(),
-        estado:    estado
+        estado:    estado,
+        carpeta:   (datos[i][9] || '').toString().trim()  // J(9): URL carpeta Drive
       });
     }
 
@@ -833,13 +834,82 @@ function guardarCliente(data) {
       // ── CREAR nuevo registro ───────────────────────────────────────
       const nuevoId = _generarIdCliente(datos);
       fila[0] = nuevoId;
+
+      // Crear carpeta en Google Drive con subcarpetas estándar SST
+      let carpetaUrl = '';
+      const rootFolderId = _obtenerRootFolderId_();
+      if (rootFolderId && data.nombre) {
+        carpetaUrl = _crearCarpetaCliente_(
+          (data.nombre || '').toString().trim(),
+          rootFolderId
+        );
+      }
+      fila.push(carpetaUrl); // J(9): URL carpeta Drive del cliente
+
       hoja.appendRow(fila);
       SpreadsheetApp.flush();
-      return { status: 'success', message: 'Empresa creada con ID: ' + nuevoId, data: { id: nuevoId } };
+      return {
+        status: 'success',
+        message: 'Empresa creada con ID: ' + nuevoId + (carpetaUrl ? '. Carpeta Drive generada.' : ''),
+        data: { id: nuevoId, carpetaUrl: carpetaUrl }
+      };
     }
   } catch (e) {
     Logger.log('Error en guardarCliente: ' + e.toString());
     return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Lee DRIVE_ROOT_FOLDER_ID desde PARAM_SISTEMA.
+ * Devuelve el ID de la carpeta raíz de clientes en Drive, o null si no se encuentra.
+ */
+function _obtenerRootFolderId_() {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('PARAM_SISTEMA');
+    if (!hoja) return null;
+    const datos = hoja.getDataRange().getValues();
+    for (let i = 0; i < datos.length; i++) {
+      if ((datos[i][0] || '').toString().trim() === 'DRIVE_ROOT_FOLDER_ID') {
+        const val = (datos[i][1] || '').toString().trim();
+        return val || null;
+      }
+    }
+    return null;
+  } catch (e) {
+    Logger.log('Error en _obtenerRootFolderId_: ' + e.toString());
+    return null;
+  }
+}
+
+/**
+ * Crea la carpeta del cliente en Drive con subcarpetas estándar de documentación SST.
+ * Es idempotente: si la carpeta ya existe, la reutiliza sin duplicar.
+ * Estructura: {raíz}/{nombreEmpresa}/{Inspecciones, Permisos, Registros, Ejecucion, Asistencia}
+ *
+ * @param {string} nombreEmpresa  Nombre de la empresa (nombre de la carpeta).
+ * @param {string} rootFolderId   ID de la carpeta raíz en Google Drive.
+ * @return {string} URL de la carpeta del cliente, o '' si falla.
+ */
+function _crearCarpetaCliente_(nombreEmpresa, rootFolderId) {
+  try {
+    const carpetaRaiz   = DriveApp.getFolderById(rootFolderId);
+    const iter          = carpetaRaiz.getFoldersByName(nombreEmpresa);
+    const carpetaCliente = iter.hasNext()
+      ? iter.next()
+      : carpetaRaiz.createFolder(nombreEmpresa);
+
+    // Subcarpetas estándar de documentación SST
+    ['Inspecciones', 'Permisos', 'Registros', 'Ejecucion', 'Asistencia'].forEach(function(sub) {
+      const iterSub = carpetaCliente.getFoldersByName(sub);
+      if (!iterSub.hasNext()) carpetaCliente.createFolder(sub);
+    });
+
+    return carpetaCliente.getUrl();
+  } catch (e) {
+    Logger.log('Error en _crearCarpetaCliente_: ' + e.toString());
+    return '';
   }
 }
 
