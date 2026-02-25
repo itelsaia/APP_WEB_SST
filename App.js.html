@@ -580,32 +580,43 @@
     // CARGA DE DATOS
     // ================================================================
 
+    /**
+     * Carga la lista de clientes/obras UNA SOLA VEZ y rellena ambos selects:
+     *  - idObraAsistencia (módulo asistencia)
+     *  - idCliente (módulo inspección)
+     * Antes se hacían dos llamadas RPC independientes; ahora es solo una.
+     */
     function cargarObrasAsistencia() {
-        google.script.run
-            .withSuccessHandler(function (response) {
-                const select = document.getElementById('idObraAsistencia');
-                if (!select) return;
-                if (response.status === "success" && response.data && response.data.length > 0) {
-                    select.innerHTML = '<option value="">Seleccione la obra...</option>';
-                    response.data.forEach(clie => {
-                        const opt = document.createElement('option');
-                        opt.value = clie.id;
-                        opt.textContent = clie.nombre;
-                        select.appendChild(opt);
-                    });
-                } else {
-                    select.innerHTML = '<option value="">No hay obras registradas</option>';
-                }
-            })
-            .withFailureHandler(function () {
-                const select = document.getElementById('idObraAsistencia');
-                if (select) select.innerHTML = '<option value="">Error al cargar obras</option>';
-            })
-            .obtenerClientesRegistrados();
+        // No-op: la carga real ocurre en cargarOtrasOpciones() para evitar el doble RPC.
     }
 
     function cargarOtrasOpciones() {
-        google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
+        google.script.run
+            .withSuccessHandler(function(response) {
+                // 1. Rellenar selector de inspección (idCliente)
+                llenarClientes(response);
+
+                // 2. Rellenar selector de obra en asistencia (idObraAsistencia)
+                const selectObra = document.getElementById('idObraAsistencia');
+                if (selectObra) {
+                    if (response.status === 'success' && response.data && response.data.length > 0) {
+                        selectObra.innerHTML = '<option value="">Seleccione la obra...</option>';
+                        response.data.forEach(function(clie) {
+                            const opt = document.createElement('option');
+                            opt.value = clie.id;
+                            opt.textContent = clie.nombre;
+                            selectObra.appendChild(opt);
+                        });
+                    } else {
+                        selectObra.innerHTML = '<option value="">No hay obras registradas</option>';
+                    }
+                }
+            })
+            .withFailureHandler(function() {
+                const selectObra = document.getElementById('idObraAsistencia');
+                if (selectObra) selectObra.innerHTML = '<option value="">Error al cargar obras</option>';
+            })
+            .obtenerClientesRegistrados();
         configurarFormulario();
     }
 

@@ -4,6 +4,22 @@
  * Este archivo maneja la comunicación entre el Frontend y Google Sheets / Drive.
  */
 
+// ══════════════════════════════════════════════════════════
+// SINGLETON — Spreadsheet compartido por toda la ejecución
+// Evita llamadas redundantes a openById() dentro del mismo request.
+// ══════════════════════════════════════════════════════════
+let _ss_ = null;
+function _getSpreadsheet() {
+  if (!_ss_) {
+    try {
+      _ss_ = SpreadsheetApp.getActiveSpreadsheet();
+    } catch(e) {
+      _ss_ = _getSpreadsheet();
+    }
+  }
+  return _ss_;
+}
+
 /**
  * Función principal para guardar un nuevo registro de formato.
  * Reemplaza la funcionalidad de guardarInspeccion.
@@ -20,7 +36,7 @@ function guardarRegistroFormato(data) {
   try {
     lock.waitLock(10000); // Esperar hasta 10s para evitar duplicados en concurrencia
 
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_INSPECCIONES');
     const nombreEmpresa = data.nombreCliente || "Empresa_General";
 
@@ -69,21 +85,23 @@ function guardarRegistroFormato(data) {
 
 /**
  * Genera el próximo ID correlativo para un formato específico.
+ * Lee solo la columna A para mayor eficiencia.
  */
 function _generarProximoIdRegistro(idFormato, ss) {
-  const hoja = ss.getSheetByName('DB_INSPECCIONES');
-  const data = hoja.getDataRange().getValues();
-  let contador = 0;
+  const hoja    = ss.getSheetByName('DB_INSPECCIONES');
+  const lastRow = hoja.getLastRow();
+  if (lastRow < 2) return `FMT-${idFormato}-0001`;
 
-  // Columna A (índice 0) = Id_formato (ej: "ATS")
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === String(idFormato).trim()) {
-      contador++;
-    }
+  // Solo columna A en lugar de getDataRange() completo
+  const colA     = hoja.getRange(2, 1, lastRow - 1, 1).getValues();
+  let   contador = 0;
+  const idStr    = String(idFormato).trim();
+
+  for (let i = 0; i < colA.length; i++) {
+    if (String(colA[i][0]).trim() === idStr) contador++;
   }
 
-  const correlativo = (contador + 1).toString().padStart(4, '0');
-  return `FMT-${idFormato}-${correlativo}`;
+  return `FMT-${idFormato}-${String(contador + 1).padStart(4, '0')}`;
 }
 
 /**
@@ -97,7 +115,7 @@ function _generarProximoIdRegistro(idFormato, ss) {
  */
 function obtenerFormatosPorEmpresa(nombreEmpresa) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: "success", data: [] };
 
@@ -132,7 +150,7 @@ function obtenerFormatosPorEmpresa(nombreEmpresa) {
  */
 function cerrarRegistroFormato(idRegistro, archivoBase64) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_INSPECCIONES');
     const data = hoja.getDataRange().getValues();
 
@@ -185,7 +203,7 @@ function cerrarRegistroFormato(idRegistro, archivoBase64) {
  */
 function obtenerRegistrosPendientes(email, fecha) {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_INSPECCIONES');
     if (!hoja) return { status: "success", data: [] };
     
@@ -338,7 +356,7 @@ function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpet
  */
 function obtenerClientesRegistrados() {
   try {
-    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss    = _getSpreadsheet();
     const hoja  = ss.getSheetByName('DB_CLIENTES');
     if (!hoja) return { status: 'success', data: [] };
 
@@ -381,7 +399,7 @@ function obtenerClientesRegistrados() {
  */
 function obtenerAsistenciaAdmin() {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_ASISTENCIA');
     if (!hoja) return { status: 'success', data: [] };
 
@@ -442,7 +460,7 @@ function obtenerAsistenciaAdmin() {
  */
 function obtenerUsuariosAdmin() {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_USUARIOS');
     if (!hoja) return { status: 'success', data: [] };
 
@@ -490,7 +508,7 @@ function crearUsuario(datos) {
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_USUARIOS');
     if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
 
@@ -545,7 +563,7 @@ function crearUsuario(datos) {
  */
 function actualizarUsuario(datos) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_USUARIOS');
     if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
 
@@ -578,7 +596,7 @@ function resetPasswordUsuario(idUsuario, newPassword) {
     if (!newPassword || newPassword.toString().length < 4) {
       return { status: 'error', message: 'La contraseña debe tener al menos 4 caracteres.' };
     }
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_USUARIOS');
     if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
 
@@ -603,7 +621,7 @@ function resetPasswordUsuario(idUsuario, newPassword) {
  */
 function toggleEstadoUsuario(idUsuario) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_USUARIOS');
     if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
 
@@ -633,7 +651,7 @@ function toggleEstadoUsuario(idUsuario) {
  */
 function obtenerClientesParaUsuarios() {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_CLIENTES');
     if (!hoja) return { status: 'error', message: 'Hoja DB_CLIENTES no encontrada.' };
 
@@ -669,7 +687,7 @@ function obtenerClientesParaUsuarios() {
  */
 function obtenerFormatosAdmin() {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
 
@@ -698,7 +716,7 @@ function obtenerFormatosAdmin() {
  */
 function crearFormato(datos) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
 
@@ -735,7 +753,7 @@ function crearFormato(datos) {
  */
 function actualizarFormato(datos) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
 
@@ -765,7 +783,7 @@ function actualizarFormato(datos) {
  */
 function eliminarFormato(idFormato, empresa) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
 
@@ -799,7 +817,7 @@ function eliminarFormato(idFormato, empresa) {
  */
 function obtenerListaClientesAdmin() {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_CLIENTES');
     if (!hoja) return { status: 'success', data: [] };
 
@@ -841,7 +859,7 @@ function obtenerListaClientesAdmin() {
  */
 function guardarCliente(data) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_CLIENTES');
     if (!hoja) return { status: 'error', message: 'Hoja DB_CLIENTES no encontrada.' };
 
@@ -902,22 +920,14 @@ function guardarCliente(data) {
 }
 
 /**
- * Lee DRIVE_ROOT_FOLDER_ID desde PARAM_SISTEMA.
- * Devuelve el ID de la carpeta raíz de clientes en Drive, o null si no se encuentra.
+ * Lee DRIVE_ROOT_FOLDER_ID desde los parámetros del sistema (con caché).
+ * Reutiliza getParametros() para aprovechar el CacheService en lugar de releer la hoja.
  */
 function _obtenerRootFolderId_() {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-    const hoja = ss.getSheetByName('PARAM_SISTEMA');
-    if (!hoja) return null;
-    const datos = hoja.getDataRange().getValues();
-    for (let i = 0; i < datos.length; i++) {
-      if ((datos[i][0] || '').toString().trim() === 'DRIVE_ROOT_FOLDER_ID') {
-        const val = (datos[i][1] || '').toString().trim();
-        return val || null;
-      }
-    }
-    return null;
+    const params = getParametros().data || {};
+    const val = (params.DRIVE_ROOT_FOLDER_ID || '').toString().trim();
+    return val || null;
   } catch (e) {
     Logger.log('Error en _obtenerRootFolderId_: ' + e.toString());
     return null;
@@ -977,7 +987,7 @@ function _generarIdCliente(datos) {
  */
 function eliminarCliente(idCliente) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_CLIENTES');
     const datos = hoja.getDataRange().getValues();
 
@@ -1004,7 +1014,7 @@ function eliminarCliente(idCliente) {
  */
 function cambiarEstadoCliente(idCliente, nuevoEstado) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_CLIENTES');
     const datos = hoja.getDataRange().getValues();
     const estado = (nuevoEstado || 'ACTIVO').toString().toUpperCase();
@@ -1044,7 +1054,7 @@ function validarCredenciales(email, password) {
 
     // ── Cache miss: leer hoja y guardar ─────────────────────────────
     if (!usuarios) {
-      const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+      const ss   = _getSpreadsheet();
       const hoja = ss.getSheetByName('DB_USUARIOS');
       if (!hoja) return { status: 'error', message: 'La hoja DB_USUARIOS no existe.' };
 
@@ -1104,7 +1114,7 @@ function validarCredenciales(email, password) {
  */
 function obtenerOpcionesFormulario() {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss = _getSpreadsheet();
     const hoja = ss.getSheetByName('LISTAS_SISTEMA');
     const datos = hoja.getDataRange().getValues();
     
@@ -1139,7 +1149,7 @@ function obtenerOpcionesFormulario() {
  */
 function registrarIngreso(data) {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_ASISTENCIA');
     const user = getUserDataFromApp(data.userEmail); // Función auxiliar para validar contra DB_USUARIOS
     
@@ -1186,7 +1196,7 @@ function registrarIngreso(data) {
  */
 function registrarSalida(data) {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_ASISTENCIA');
     const email = data.userEmail;
     
@@ -1233,12 +1243,30 @@ function getTipoDia(fecha) {
 
 /**
  * Obtiene datos del usuario para asegurar integridad en el registro.
+ * Reutiliza la caché de DB_USUARIOS (db_usuarios_v1) para evitar re-lectura.
  */
 function getUserDataFromApp(email) {
-  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const emailLower = (email || '').toString().trim().toLowerCase();
+
+  // ── Intentar desde caché ──────────────────────────────────────────
+  const cache  = CacheService.getScriptCache();
+  const cached = cache.get('db_usuarios_v1');
+  if (cached) {
+    try {
+      const usuarios = JSON.parse(cached);
+      for (let i = 0; i < usuarios.length; i++) {
+        if (usuarios[i].email === emailLower) {
+          return { email: usuarios[i].email, nombre: usuarios[i].nombre, codigo: usuarios[i].idCliente || '' };
+        }
+      }
+      return { email: email, nombre: 'Supervisor', codigo: '' };
+    } catch(e) { /* cache corrupto, leer de hoja */ }
+  }
+
+  // ── Cache miss: leer hoja ─────────────────────────────────────────
+  const ss   = _getSpreadsheet();
   const hoja = ss.getSheetByName('DB_USUARIOS');
   const datos = hoja.getDataRange().getValues();
-  const emailLower = (email || '').toString().trim().toLowerCase();
   for (let i = 1; i < datos.length; i++) {
     if ((datos[i][0] || '').toString().trim().toLowerCase() === emailLower) {
       return {
@@ -1264,7 +1292,7 @@ function getUserEmail() {
  */
 function obtenerEstadoAsistencia(email) {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_ASISTENCIA');
     if (!hoja) return { status: "success", data: { activo: false } };
     
@@ -1292,32 +1320,52 @@ function obtenerEstadoAsistencia(email) {
 /**
  * Obtiene los datos completos del usuario a partir de su email.
  * Usado para recuperar sesión cuando localStorage falla en el iframe de GAS.
+ * Reutiliza la caché db_usuarios_v1 para evitar re-lectura de Sheets.
  * @param {string} email - Email del usuario a buscar.
  */
 function obtenerDatosUsuario(email) {
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const emailLower = (email || '').toString().trim().toLowerCase();
+
+    // ── Intentar desde caché ────────────────────────────────────────
+    const cache  = CacheService.getScriptCache();
+    const cached = cache.get('db_usuarios_v1');
+    if (cached) {
+      try {
+        const usuarios = JSON.parse(cached);
+        for (let i = 0; i < usuarios.length; i++) {
+          const u = usuarios[i];
+          if (u.email === emailLower) {
+            return { status: 'success', data: { email: u.email, nombre: u.nombre, rol: u.rol, idCliente: u.idCliente || '', codigo: u.idCliente || '' } };
+          }
+        }
+        return { status: 'error', message: 'Usuario no encontrado.' };
+      } catch(e) { /* cache corrupto */ }
+    }
+
+    // ── Cache miss: leer hoja ───────────────────────────────────────
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_USUARIOS');
-    if (!hoja) return { status: "error", message: "Hoja DB_USUARIOS no encontrada." };
+    if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
 
     const datos = hoja.getDataRange().getValues();
     for (let i = 1; i < datos.length; i++) {
-      if (datos[i][0] === email) {
+      if ((datos[i][0] || '').toString().trim().toLowerCase() === emailLower) {
         return {
-          status: "success",
+          status: 'success',
           data: {
-            email: datos[i][0],
-            nombre: datos[i][1],
-            rol: datos[i][2],
+            email:     datos[i][0],
+            nombre:    datos[i][1],
+            rol:       datos[i][2],
             idCliente: datos[i][4] || '',
-            codigo: datos[i][4] || '' // Columna E
+            codigo:    datos[i][4] || '' // Columna E
           }
         };
       }
     }
-    return { status: "error", message: "Usuario no encontrado." };
+    return { status: 'error', message: 'Usuario no encontrado.' };
   } catch (e) {
-    return { status: "error", message: e.toString() };
+    return { status: 'error', message: e.toString() };
   }
 }
 
@@ -1368,7 +1416,7 @@ function _slugify_(str, maxLen) {
  */
 function guardarHallazgo(data) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_HALLAZGOS');
     if (!hoja) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada. Ejecute inicializarBaseDeDatos().' };
 
@@ -1442,7 +1490,7 @@ function guardarHallazgo(data) {
  */
 function cerrarHallazgo(data) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_HALLAZGOS');
     if (!hoja) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada.' };
 
@@ -1500,7 +1548,7 @@ function cerrarHallazgo(data) {
  */
 function obtenerHallazgo(idHallazgo) {
   try {
-    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_HALLAZGOS');
     if (!hoja) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada.' };
 
@@ -1553,7 +1601,7 @@ function obtenerHallazgo(idHallazgo) {
  */
 function obtenerGaleriaHallazgosAdmin() {
   try {
-    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss    = _getSpreadsheet();
     const hojaH = ss.getSheetByName('DB_HALLAZGOS');
     const hojaU = ss.getSheetByName('DB_USUARIOS');
     if (!hojaH) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada.' };
@@ -1622,7 +1670,7 @@ function obtenerGaleriaHallazgosAdmin() {
  */
 function obtenerMetricasSupervisoresSTT() {
   try {
-    const ss  = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss  = _getSpreadsheet();
     const tz  = Session.getScriptTimeZone();
     const hoy = new Date();
 
@@ -1793,7 +1841,7 @@ function obtenerMetricasSupervisoresSTT() {
  */
 function obtenerReporteDesempenoSTT(params) {
   try {
-    var ss  = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var ss  = _getSpreadsheet();
     var tz  = Session.getScriptTimeZone();
 
     // Leer logo desde PARAM_SISTEMA (clave URL_LOGO)

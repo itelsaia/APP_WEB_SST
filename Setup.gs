@@ -201,15 +201,28 @@ function normalizarUrlImagen(url) {
 
 /**
  * Lee PARAM_SISTEMA y aplica extracción de marca si corresponde.
- * Guarda los colores extraídos de vuelta en la hoja para no repetir la llamada.
+ * Usa CacheService (30 min TTL) para evitar releer Sheets en cada doGet().
  * @returns {Object} Parámetros de configuración con colores de marca siempre presentes
  */
 function getParametros() {
+  const CACHE_KEY = 'params_sistema_v1';
+  const cache     = CacheService.getScriptCache();
+
+  // ── Ruta rápida: leer desde caché ─────────────────────────────────
+  const cached = cache.get(CACHE_KEY);
+  if (cached) {
+    try {
+      Logger.log('[getParametros] Desde caché ✓');
+      return { status: 'success', data: JSON.parse(cached) };
+    } catch(e) { /* caché corrupto, seguir a lectura de hoja */ }
+  }
+
   try {
-    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const ss   = typeof _getSpreadsheet === 'function' ? _getSpreadsheet() : SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
     const hoja = ss.getSheetByName('PARAM_SISTEMA');
 
     if (!hoja || hoja.getLastRow() < 2) {
+      cache.put(CACHE_KEY, JSON.stringify(DEFAULTS_MARCA), 1800);
       return { status: 'success', data: DEFAULTS_MARCA };
     }
 
@@ -224,8 +237,8 @@ function getParametros() {
 
     // ───── LÓGICA DE EXTRACCIÓN AUTOMÁTICA ─────
     const coloresVacios = !params.COLOR_PRIMARIO || params.COLOR_PRIMARIO === '';
-    const logoValido    = params.URL_LOGO && 
-                          params.URL_LOGO.indexOf(PLACEHOLDER_LOGO) === -1 && 
+    const logoValido    = params.URL_LOGO &&
+                          params.URL_LOGO.indexOf(PLACEHOLDER_LOGO) === -1 &&
                           params.URL_LOGO.trim() !== '';
     const geminiKey     = params.GEMINI_API_KEY || '';
 
@@ -233,7 +246,7 @@ function getParametros() {
       Logger.log('[MARCA] Colores no configurados. Iniciando extracción automática...');
       const identidad = extraerIdentidadDeMarca(params.URL_LOGO, geminiKey);
 
-      // Guardar en la hoja para no repetir la llamada
+      // Guardar en la hoja para no repetir la llamada en el futuro
       _actualizarColorEnHoja(hoja, 'COLOR_PRIMARIO', identidad.COLOR_PRIMARIO);
       _actualizarColorEnHoja(hoja, 'COLOR_ACENTO',   identidad.COLOR_ACENTO);
 
@@ -241,9 +254,12 @@ function getParametros() {
       params.COLOR_ACENTO   = identidad.COLOR_ACENTO;
     }
 
-    // Si aún no hay colores (ni logo, ni vacío), usar defaults dorados
+    // Si aún no hay colores, usar defaults dorados
     if (!params.COLOR_PRIMARIO) params.COLOR_PRIMARIO = DEFAULTS_MARCA.COLOR_PRIMARIO;
     if (!params.COLOR_ACENTO)   params.COLOR_ACENTO   = DEFAULTS_MARCA.COLOR_ACENTO;
+
+    // ── Guardar en caché 30 min para siguientes peticiones ──────────
+    try { cache.put(CACHE_KEY, JSON.stringify(params), 1800); } catch(ec) {}
 
     return { status: 'success', data: params };
 
@@ -251,6 +267,15 @@ function getParametros() {
     Logger.log('[getParametros] Error: ' + e);
     return { status: 'success', data: DEFAULTS_MARCA };
   }
+}
+
+/**
+ * Invalida la caché de parámetros del sistema.
+ * Llamar cuando se modifiquen valores en PARAM_SISTEMA manualmente.
+ */
+function invalidarCacheParametros() {
+  CacheService.getScriptCache().remove('params_sistema_v1');
+  Logger.log('[getParametros] Caché invalidada.');
 }
 
 /**
