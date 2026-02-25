@@ -2241,6 +2241,9 @@
                     '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" title="' + (esActivo ? 'Desactivar' : 'Activar') + '" ' +
                         'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-' + (esActivo ? 'red' : 'green') + '-500/20 border border-white/10 flex items-center justify-center transition-all">' +
                         '<span class="material-symbols-outlined text-sm ' + (esActivo ? 'text-green-400 hover:text-red-400' : 'text-red-400 hover:text-green-400') + '">' + (esActivo ? 'toggle_on' : 'toggle_off') + '</span></button>' +
+                    '<button onclick="confirmarEliminarUsuario(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" title="Eliminar usuario" ' +
+                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-all">' +
+                        '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-red-400">delete</span></button>' +
                     '</div>' +
                 '</td>' +
                 '</tr>';
@@ -2274,16 +2277,19 @@
                 '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '</div>' +
-                '<div class="flex gap-2 border-t border-white/5 pt-2">' +
+                '<div class="grid grid-cols-2 gap-2 border-t border-white/5 pt-2">' +
                 '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" ' +
-                    'class="flex-1 py-1.5 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center gap-1">' +
+                    'class="py-1.5 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center gap-1">' +
                     '<span class="material-symbols-outlined text-xs">edit</span>Editar</button>' +
                 '<button onclick="abrirModalResetPassword(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" ' +
-                    'class="flex-1 py-1.5 text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center gap-1">' +
+                    'class="py-1.5 text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center gap-1">' +
                     '<span class="material-symbols-outlined text-xs">key</span>Password</button>' +
                 '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" ' +
-                    'class="flex-1 py-1.5 text-[10px] font-black ' + (esActivo ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20') + ' border rounded-lg flex items-center justify-center gap-1">' +
+                    'class="py-1.5 text-[10px] font-black ' + (esActivo ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20') + ' border rounded-lg flex items-center justify-center gap-1">' +
                     '<span class="material-symbols-outlined text-xs">' + (esActivo ? 'toggle_off' : 'toggle_on') + '</span>' + (esActivo ? 'Desactivar' : 'Activar') + '</button>' +
+                '<button onclick="confirmarEliminarUsuario(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" ' +
+                    'class="py-1.5 text-[10px] font-black text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-center gap-1">' +
+                    '<span class="material-symbols-outlined text-xs">delete</span>Eliminar</button>' +
                 '</div></div>';
         }).join('');
     }
@@ -2520,6 +2526,31 @@
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
             .resetPasswordUsuario(_usrResetId, newPass);
+    }
+
+    // ── Eliminar usuario ──────────────────────────────────────────────
+
+    function confirmarEliminarUsuario(id, nombre) {
+        mostrarConfirmacion(
+            'Eliminar usuario',
+            'Se eliminará permanentemente el usuario <strong>' + nombre + '</strong> (' + id + '). Esta acción no se puede deshacer.',
+            function () {
+                google.script.run
+                    .withSuccessHandler(function (res) {
+                        if (res.status === 'success') {
+                            mostrarNotificacion(res.message, 'success');
+                            cargarUsuariosAdmin();
+                        } else {
+                            mostrarNotificacion(res.message, 'error');
+                        }
+                    })
+                    .withFailureHandler(function (err) {
+                        mostrarNotificacion('Error: ' + err.toString(), 'error');
+                    })
+                    .eliminarUsuario(id);
+            },
+            { tipo: 'danger', btnConfirmar: 'Eliminar' }
+        );
     }
 
     // ── Toggle estado usuario ─────────────────────────────────────────

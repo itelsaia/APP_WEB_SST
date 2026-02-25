@@ -617,6 +617,34 @@ function resetPasswordUsuario(idUsuario, newPassword) {
 }
 
 /**
+ * Elimina físicamente un usuario de DB_USUARIOS (busca por col E = código).
+ * No se puede deshacer. Se recomienda desactivar en lugar de eliminar.
+ * @param {string} idUsuario Código del usuario (ADMIN-001, SUP-001…).
+ * @return {Object} Respuesta estandarizada.
+ */
+function eliminarUsuario(idUsuario) {
+  try {
+    const ss   = _getSpreadsheet();
+    const hoja = ss.getSheetByName('DB_USUARIOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_USUARIOS no encontrada.' };
+
+    const filas = hoja.getDataRange().getValues();
+    for (let i = filas.length - 1; i >= 1; i--) {  // De abajo hacia arriba para no desplazar índices
+      if ((filas[i][4] || '').toString().trim() === idUsuario.toString().trim()) { // col E
+        hoja.deleteRow(i + 1);
+        SpreadsheetApp.flush();
+        CacheService.getScriptCache().remove('db_usuarios_v1');
+        return { status: 'success', message: 'Usuario ' + idUsuario + ' eliminado correctamente.' };
+      }
+    }
+    return { status: 'error', message: 'Usuario no encontrado: ' + idUsuario };
+  } catch (e) {
+    Logger.log('Error en eliminarUsuario: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
  * Alterna el estado ACTIVO/INACTIVO de un usuario (busca por col E = código).
  */
 function toggleEstadoUsuario(idUsuario) {
