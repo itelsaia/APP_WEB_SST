@@ -465,7 +465,19 @@ function crearUsuario(datos) {
       }
     }
 
-    const nuevoId = _generarIdUsuario_(datos.rol, hoja);
+    // Para rol CLI se usa el ID_Cliente de DB_CLIENTES; para otros se genera automáticamente
+    let nuevoId;
+    if (datos.rol === 'CLI' && datos.idClienteAsociado) {
+      nuevoId = datos.idClienteAsociado.toString().trim();
+      // Verificar que ese código de cliente no tenga ya un usuario
+      for (let i = 1; i < filas.length; i++) {
+        if ((filas[i][4] || '').toString().trim() === nuevoId) {
+          return { status: 'error', message: 'Ya existe un usuario para el cliente ' + nuevoId + '.' };
+        }
+      }
+    } else {
+      nuevoId = _generarIdUsuario_(datos.rol, hoja);
+    }
     hoja.appendRow([
       emailNuevo,                                    // A(0): Email
       (datos.nombre  || '').toString().trim(),       // B(1): Nombre_Completo
@@ -568,6 +580,38 @@ function toggleEstadoUsuario(idUsuario) {
     return { status: 'error', message: 'Usuario no encontrado.' };
   } catch (e) {
     Logger.log('Error en toggleEstadoUsuario: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Devuelve lista reducida de DB_CLIENTES para poblar el selector de empresa
+ * al crear un usuario con rol CLI. Solo expone campos necesarios para el modal.
+ * Esquema DB_CLIENTES: A=ID_Cliente B=Nombre_Empresa C=Dirección D=NIT
+ *                      E=Correo_Gerente F=Nombre_Contacto G=Celular_Whatsapp H=Nombre_Obra
+ */
+function obtenerClientesParaUsuarios() {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_CLIENTES');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_CLIENTES no encontrada.' };
+
+    const datos    = hoja.getDataRange().getValues();
+    const clientes = [];
+    for (let i = 1; i < datos.length; i++) {
+      const id = (datos[i][0] || '').toString().trim();
+      if (!id) continue;
+      clientes.push({
+        id:       id,                                      // A: ID_Cliente (CLI-001)
+        nombre:   (datos[i][1] || '').toString().trim(),  // B: Nombre_Empresa
+        correo:   (datos[i][4] || '').toString().trim(),  // E: Correo_Gerente
+        contacto: (datos[i][5] || '').toString().trim(),  // F: Nombre_Contacto
+        celular:  (datos[i][6] || '').toString().trim()   // G: Celular_Whatsapp
+      });
+    }
+    return { status: 'success', data: clientes };
+  } catch (e) {
+    Logger.log('Error en obtenerClientesParaUsuarios: ' + e.toString());
     return { status: 'error', message: e.toString() };
   }
 }

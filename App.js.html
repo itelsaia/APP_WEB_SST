@@ -1722,8 +1722,9 @@
     // ================================================================
 
     let _usuariosTotal   = [];   // Cache completo
-    let _usrEditandoId = null; // ID del usuario en edición (null = nuevo)
-    let _usrResetId    = null; // ID del usuario en reset de contraseña
+    let _usrEditandoId    = null; // ID del usuario en edición (null = nuevo)
+    let _usrResetId       = null; // ID del usuario en reset de contraseña
+    let _clientesParaModal = [];  // Cache de clientes DB_CLIENTES para el selector CLI
 
     function cargarUsuariosAdmin() {
         var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
@@ -1897,6 +1898,8 @@
         var fldPwd   = document.getElementById('usr-campo-password');
         var fldEst   = document.getElementById('usr-campo-estado');
 
+        var fldEmpresa = document.getElementById('usr-campo-empresa');
+
         if (!id) {
             // NUEVO
             titulo.textContent = 'Nuevo Usuario';
@@ -1909,8 +1912,11 @@
             document.getElementById('usr-inp-password').value  = '';
             document.getElementById('usr-inp-cedula').value    = '';
             document.getElementById('usr-inp-celular').value   = '';
+            var selEmp = document.getElementById('usr-inp-empresa');
+            if (selEmp) selEmp.value = '';
             fldPwd.classList.remove('hidden');
             fldEst.classList.add('hidden');
+            if (fldEmpresa) fldEmpresa.classList.add('hidden'); // se mostrará al elegir CLI
         } else {
             // EDICIÓN
             var u = _usuariosTotal.find(function(x) { return x.id === id; });
@@ -1927,6 +1933,8 @@
             document.getElementById('usr-inp-estado').value    = u.estado;
             fldPwd.classList.add('hidden');
             fldEst.classList.remove('hidden');
+            // En edición nunca se muestra el selector de empresa (el código ya está asignado)
+            if (fldEmpresa) fldEmpresa.classList.add('hidden');
         }
 
         modal.classList.remove('hidden');
@@ -1938,7 +1946,76 @@
         _usrEditandoId = null;
     }
 
-    function onCambioRolUsuario() {} // sin efecto visual en schema actual
+    // Muestra/oculta el selector de empresa según el rol elegido
+    function onCambioRolUsuario() {
+        var rol          = ((document.getElementById('usr-inp-rol') || {}).value || '');
+        var campoEmpresa = document.getElementById('usr-campo-empresa');
+        if (!campoEmpresa) return;
+
+        if (rol === 'CLI') {
+            campoEmpresa.classList.remove('hidden');
+            _cargarClientesParaModal(); // carga y puebla el select
+        } else {
+            campoEmpresa.classList.add('hidden');
+            var sel = document.getElementById('usr-inp-empresa');
+            if (sel) sel.value = '';
+        }
+    }
+
+    // Carga DB_CLIENTES desde el backend (con caché en memoria)
+    function _cargarClientesParaModal() {
+        if (_clientesParaModal.length > 0) { _poblarSelectEmpresas(); return; }
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res && res.status === 'success') {
+                    _clientesParaModal = res.data || [];
+                    _poblarSelectEmpresas();
+                } else {
+                    mostrarNotificacion('❌ No se pudieron cargar las empresas.', 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                mostrarNotificacion('❌ Error cargando empresas: ' + err.toString(), 'error');
+            })
+            .obtenerClientesParaUsuarios();
+    }
+
+    // Puebla el <select> de empresas con los datos de _clientesParaModal
+    function _poblarSelectEmpresas() {
+        var sel = document.getElementById('usr-inp-empresa');
+        if (!sel) return;
+        var valActual = sel.value;
+        sel.innerHTML = '<option value="" style="background:#1a242f;">Seleccione una empresa...</option>';
+        _clientesParaModal.forEach(function(c) {
+            var opt             = document.createElement('option');
+            opt.value           = c.id;
+            opt.textContent     = c.id + ' — ' + c.nombre;
+            opt.style.background = '#1a242f';
+            // Guardamos los datos del cliente como atributos para auto-completar
+            opt.dataset.correo   = c.correo;
+            opt.dataset.contacto = c.contacto;
+            opt.dataset.celular  = c.celular;
+            sel.appendChild(opt);
+        });
+        if (valActual) sel.value = valActual;
+    }
+
+    // Auto-completa email, nombre y celular al elegir un cliente en el selector
+    function onSeleccionClienteUsuario() {
+        var sel = document.getElementById('usr-inp-empresa');
+        if (!sel || !sel.value) return;
+        var opt     = sel.options[sel.selectedIndex];
+        var correo  = opt.dataset.correo   || '';
+        var contacto = opt.dataset.contacto || '';
+        var celular = opt.dataset.celular  || '';
+
+        var inpEmail   = document.getElementById('usr-inp-email');
+        var inpNombre  = document.getElementById('usr-inp-nombre');
+        var inpCelular = document.getElementById('usr-inp-celular');
+        if (inpEmail  && !inpEmail.readOnly)  inpEmail.value   = correo;
+        if (inpNombre && !inpNombre.readOnly) inpNombre.value  = contacto;
+        if (inpCelular) inpCelular.value = celular;
+    }
 
     function guardarUsuario() {
         var nombre   = (document.getElementById('usr-inp-nombre')   || {}).value || '';
@@ -1954,13 +2031,22 @@
         if (!rol)           { mostrarNotificacion('⚠️ Seleccione un rol.', 'warning'); return; }
         if (!_usrEditandoId && !password.trim()) { mostrarNotificacion('⚠️ La contraseña es obligatoria.', 'warning'); return; }
 
+        // Para CLI en creación validar que se seleccionó empresa
+        var idClienteAsociado = '';
+        if (!_usrEditandoId && rol === 'CLI') {
+            var selEmpresa = document.getElementById('usr-inp-empresa');
+            idClienteAsociado = selEmpresa ? selEmpresa.value : '';
+            if (!idClienteAsociado) { mostrarNotificacion('⚠️ Seleccione la empresa para el usuario cliente.', 'warning'); return; }
+        }
+
         var btn     = document.getElementById('usr-btn-guardar');
         var spinner = document.getElementById('usr-spinner-guardar');
         if (btn)     btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
 
         var datos = { nombre: nombre.trim(), email: email.trim(), rol: rol.trim(),
-                      cedula: cedula.trim(), celular: celular.trim() };
+                      cedula: cedula.trim(), celular: celular.trim(),
+                      idClienteAsociado: idClienteAsociado };
 
         var fnExito = function(res) {
             if (btn)     btn.disabled = false;

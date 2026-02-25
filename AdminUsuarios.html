@@ -175,6 +175,17 @@
                 </select>
             </div>
 
+            <!-- Empresa / Cliente (solo rol CLI, solo en creación) -->
+            <div id="usr-campo-empresa" class="hidden">
+                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Empresa / Cliente *</label>
+                <select id="usr-inp-empresa" onchange="onSeleccionClienteUsuario()"
+                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none">
+                    <option value="" style="background:#1a242f;">Seleccione una empresa...</option>
+                </select>
+                <p class="text-[9px] text-slate-500 mt-1.5">Email, nombre y celular se completan desde la ficha del cliente.</p>
+            </div>
+
             <!-- Contraseña (solo en creación) -->
             <div id="usr-campo-password">
                 <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Contraseña *</label>
