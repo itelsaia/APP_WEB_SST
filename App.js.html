@@ -1355,6 +1355,11 @@
             if (workspace) workspace.classList.remove('hidden');
             actualizarModuloHeader('Gestión Supervisor SST');
             cargarSupervisorSTT();
+        } else if (modulo === 'hallazgos') {
+            const workspace = document.getElementById('admin-workspace-hallazgos');
+            if (workspace) workspace.classList.remove('hidden');
+            actualizarModuloHeader('Gestión Hallazgos');
+            cargarGaleriaHallazgos();
         }
     }
 
@@ -1366,7 +1371,7 @@
         if (portal) portal.classList.remove('hidden');
 
         // Ocultar todos los workspaces
-        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios', 'admin-workspace-formatos', 'admin-workspace-supervisor-stt'].forEach(function(id) {
+        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios', 'admin-workspace-formatos', 'admin-workspace-supervisor-stt', 'admin-workspace-hallazgos'].forEach(function(id) {
             var ws = document.getElementById(id);
             if (ws) ws.classList.add('hidden');
         });

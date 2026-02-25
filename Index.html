@@ -511,23 +511,25 @@
                 </div>
             </div>
 
-            <!-- ── CUADRÍCULA DE MÓDULOS (2×2 + 1 full) ───────────────── -->
+            <!-- ── CUADRÍCULA DE MÓDULOS (3 filas × 2 cols) ──────────────── -->
             <div class="grid grid-cols-2 gap-3 sm:gap-4">
 
-                <!-- Módulo 1: Empresas -->
-                <button onclick="abrirModuloAdmin('clientes')"
+                <!-- Fila 1 — Módulos principales de supervisión -->
+
+                <!-- Supervisor SST -->
+                <button onclick="abrirModuloAdmin('supervisor-stt')"
                     class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
                     <div class="adm-icon rounded-2xl flex items-center justify-center"
                         style="width:52px;height:52px;">
-                        <span class="material-symbols-outlined text-3xl text-primary">domain</span>
+                        <span class="material-symbols-outlined text-3xl text-primary">supervisor_account</span>
                     </div>
                     <div>
-                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Empresas</p>
-                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Gestión de Clientes</p>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Supervisor SST</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Dashboard · Desempeño</p>
                     </div>
                 </button>
 
-                <!-- Módulo 2: Asistencia -->
+                <!-- Asistencia -->
                 <button onclick="abrirModuloAdmin('asistencia')"
                     class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
                     <div class="adm-icon rounded-2xl flex items-center justify-center"
@@ -540,20 +542,22 @@
                     </div>
                 </button>
 
-                <!-- Módulo 3: Usuarios -->
-                <button onclick="abrirModuloAdmin('usuarios')"
+                <!-- Fila 2 — Gestión de empresas y documentos -->
+
+                <!-- Empresas -->
+                <button onclick="abrirModuloAdmin('clientes')"
                     class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
                     <div class="adm-icon rounded-2xl flex items-center justify-center"
                         style="width:52px;height:52px;">
-                        <span class="material-symbols-outlined text-3xl text-primary">manage_accounts</span>
+                        <span class="material-symbols-outlined text-3xl text-primary">domain</span>
                     </div>
                     <div>
-                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Usuarios</p>
-                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Gestión de Accesos</p>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Empresas</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Gestión de Clientes</p>
                     </div>
                 </button>
 
-                <!-- Módulo 4: Formatos -->
+                <!-- Formatos -->
                 <button onclick="abrirModuloAdmin('formatos')"
                     class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
                     <div class="adm-icon rounded-2xl flex items-center justify-center"
@@ -566,16 +570,31 @@
                     </div>
                 </button>
 
-                <!-- Módulo 5: Gestión Supervisor SST — ancho completo, mismo estilo vertical -->
-                <button onclick="abrirModuloAdmin('supervisor-stt')"
-                    class="adm-card col-span-2 group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                <!-- Fila 3 — Administración y evidencias -->
+
+                <!-- Usuarios -->
+                <button onclick="abrirModuloAdmin('usuarios')"
+                    class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
                     <div class="adm-icon rounded-2xl flex items-center justify-center"
                         style="width:52px;height:52px;">
-                        <span class="material-symbols-outlined text-3xl text-primary">supervisor_account</span>
+                        <span class="material-symbols-outlined text-3xl text-primary">manage_accounts</span>
                     </div>
                     <div>
-                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Gestión Supervisor SST</p>
-                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Dashboard de Rendimiento · Evaluación de Desempeño</p>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Usuarios</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Gestión de Accesos</p>
+                    </div>
+                </button>
+
+                <!-- Hallazgos -->
+                <button onclick="abrirModuloAdmin('hallazgos')"
+                    class="adm-card group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                    <div class="adm-icon rounded-2xl flex items-center justify-center"
+                        style="width:52px;height:52px;">
+                        <span class="material-symbols-outlined text-3xl text-primary">find_in_page</span>
+                    </div>
+                    <div>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Hallazgos</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Galería de Evidencias</p>
                     </div>
                 </button>
 
@@ -606,6 +625,11 @@
         <!-- ══ WORKSPACE: GESTIÓN SUPERVISOR STT ══ -->
         <div id="admin-workspace-supervisor-stt" class="hidden">
             <?!= include('AdminSupervisorSTT'); ?>
+        </div>
+
+        <!-- ══ WORKSPACE: GESTIÓN HALLAZGOS ══ -->
+        <div id="admin-workspace-hallazgos" class="hidden">
+            <?!= include('AdminHallazgos'); ?>
         </div>
     </template>
     <template id="tpl-error">
@@ -656,6 +680,8 @@
 
     <!-- Lógica principal del cliente -->
     <?!= include('App.js'); ?>
+    <!-- Módulo 6: Galería Hallazgos -->
+    <?!= include('AdminHallazgos.js'); ?>
 
     <!-- Footer -->
     <footer

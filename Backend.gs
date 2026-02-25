@@ -1544,6 +1544,78 @@ function obtenerHallazgo(idHallazgo) {
 }
 
 /**
+ * Obtiene todos los hallazgos para la galería administrativa.
+ * Cruza el código del supervisor con DB_USUARIOS para obtener el nombre completo.
+ *
+ * @return {Object} { status, data: [ { id, fecha, hora, ubicacion, descripcion,
+ *                    urlFoto, urlFotoCierre, empresa, supervisor, reportadoA,
+ *                    gestionRealizada, estado, fechaCierre, horaCierre } ] }
+ */
+function obtenerGaleriaHallazgosAdmin() {
+  try {
+    const ss    = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hojaH = ss.getSheetByName('DB_HALLAZGOS');
+    const hojaU = ss.getSheetByName('DB_USUARIOS');
+    if (!hojaH) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada.' };
+
+    const filasH = hojaH.getDataRange().getValues();
+    const tz     = Session.getScriptTimeZone();
+
+    // Mapa código supervisor → nombre completo
+    const mapaSuper = {};
+    if (hojaU) {
+      const filasU = hojaU.getDataRange().getValues();
+      for (let i = 1; i < filasU.length; i++) {
+        const codigo = (filasU[i][4] || '').toString().trim(); // col E: ID_Cliente_Asociado
+        const nombre = (filasU[i][1] || '').toString().trim(); // col B: Nombre_Completo
+        if (codigo) mapaSuper[codigo] = nombre;
+      }
+    }
+
+    function _fmt_(val, fmt) {
+      if (!val && val !== 0) return '';
+      if (val instanceof Date) {
+        try { return Utilities.formatDate(val, tz, fmt); } catch (_) {}
+      }
+      return val.toString().trim();
+    }
+
+    const hallazgos = [];
+    for (let i = 1; i < filasH.length; i++) {
+      const f = filasH[i];
+      const id = (f[0] || '').toString().trim();
+      if (!id) continue;
+
+      const codigoSup = (f[7] || '').toString().trim();
+      hallazgos.push({
+        id:               id,
+        fecha:            _fmt_(f[1],  'dd/MM/yyyy'),
+        hora:             _fmt_(f[2],  'HH:mm'),
+        ubicacion:        (f[3]  || '').toString().trim(),
+        descripcion:      (f[4]  || '').toString().trim(),
+        urlFoto:          (f[5]  || '').toString().trim(),
+        empresa:          (f[6]  || '').toString().trim(),
+        supervisor:       mapaSuper[codigoSup] || codigoSup,
+        reportadoA:       (f[8]  || '').toString().trim(),
+        gestionRealizada: (f[10] || '').toString().trim(),
+        estado:           (f[11] || 'ABIERTO').toString().trim().toUpperCase(),
+        fechaCierre:      _fmt_(f[12], 'dd/MM/yyyy'),
+        horaCierre:       _fmt_(f[13], 'HH:mm'),
+        urlFotoCierre:    (f[14] || '').toString().trim()
+      });
+    }
+
+    // Más recientes primero (appendRow los agrega al final)
+    hallazgos.reverse();
+
+    return { status: 'success', data: hallazgos };
+  } catch (e) {
+    Logger.log('Error en obtenerGaleriaHallazgosAdmin: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
  * Obtiene métricas de gestión para todos los supervisores SUP-SST.
  * Agrega datos de DB_INSPECCIONES y DB_HALLAZGOS por supervisor.
  * @return {Object} { status, data: { supervisores: [...], kpis: {...} } }
