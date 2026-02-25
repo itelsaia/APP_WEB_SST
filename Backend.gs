@@ -617,6 +617,138 @@ function obtenerClientesParaUsuarios() {
 }
 
 // ══════════════════════════════════════════════════════════
+// ADMINISTRACIÓN DE LISTAS_FORMATOS
+// Esquema: A(0)=Id_Formato B(1)=Descripcion_Formato
+//          C(2)=Tipo_Documento D(3)=Empresa_Contratista
+// Clave primaria compuesta: Id_Formato + Empresa_Contratista
+// ══════════════════════════════════════════════════════════
+
+/**
+ * Devuelve todos los formatos de LISTAS_FORMATOS para el panel de administración.
+ */
+function obtenerFormatosAdmin() {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('LISTAS_FORMATOS');
+    if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
+
+    const datos    = hoja.getDataRange().getValues();
+    const formatos = [];
+    for (let i = 1; i < datos.length; i++) {
+      const id = (datos[i][0] || '').toString().trim();
+      if (!id) continue;
+      formatos.push({
+        id:          id,
+        descripcion: (datos[i][1] || '').toString().trim(), // B: Descripcion_Formato
+        tipo:        (datos[i][2] || '').toString().trim(), // C: Tipo_Documento
+        empresa:     (datos[i][3] || '').toString().trim()  // D: Empresa_Contratista
+      });
+    }
+    return { status: 'success', data: formatos };
+  } catch (e) {
+    Logger.log('Error en obtenerFormatosAdmin: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Crea un nuevo formato en LISTAS_FORMATOS.
+ * Valida que no exista la combinación Id_Formato + Empresa_Contratista.
+ */
+function crearFormato(datos) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('LISTAS_FORMATOS');
+    if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
+
+    const idNuevo = (datos.id      || '').toString().trim().toUpperCase();
+    const empresa = (datos.empresa || '').toString().trim();
+    if (!idNuevo) return { status: 'error', message: 'El código del formato es obligatorio.' };
+    if (!empresa)  return { status: 'error', message: 'La empresa contratista es obligatoria.' };
+
+    // Verificar duplicado (mismo código + misma empresa)
+    const filas = hoja.getDataRange().getValues();
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim().toUpperCase() === idNuevo &&
+          (filas[i][3] || '').toString().trim()                === empresa) {
+        return { status: 'error', message: 'Ya existe el formato ' + idNuevo + ' para ' + empresa + '.' };
+      }
+    }
+
+    hoja.appendRow([
+      idNuevo,                                          // A: Id_Formato
+      (datos.descripcion || '').toString().trim(),      // B: Descripcion_Formato
+      (datos.tipo        || '').toString().trim(),      // C: Tipo_Documento
+      empresa                                           // D: Empresa_Contratista
+    ]);
+    SpreadsheetApp.flush();
+    return { status: 'success', message: 'Formato ' + idNuevo + ' creado correctamente.' };
+  } catch (e) {
+    Logger.log('Error en crearFormato: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Actualiza descripción y tipo de un formato (el código y empresa son la clave, no se cambian).
+ */
+function actualizarFormato(datos) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('LISTAS_FORMATOS');
+    if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
+
+    const idBusca  = (datos.id      || '').toString().trim().toUpperCase();
+    const empBusca = (datos.empresa || '').toString().trim();
+    const filas    = hoja.getDataRange().getValues();
+
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim().toUpperCase() === idBusca &&
+          (filas[i][3] || '').toString().trim()                === empBusca) {
+        const fila = i + 1;
+        hoja.getRange(fila, 2).setValue((datos.descripcion || '').toString().trim()); // B
+        hoja.getRange(fila, 3).setValue((datos.tipo        || '').toString().trim()); // C
+        SpreadsheetApp.flush();
+        return { status: 'success', message: 'Formato actualizado correctamente.' };
+      }
+    }
+    return { status: 'error', message: 'Formato no encontrado.' };
+  } catch (e) {
+    Logger.log('Error en actualizarFormato: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Elimina un formato de LISTAS_FORMATOS por clave compuesta (Id_Formato + Empresa_Contratista).
+ */
+function eliminarFormato(idFormato, empresa) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('LISTAS_FORMATOS');
+    if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
+
+    const idBusca  = (idFormato || '').toString().trim().toUpperCase();
+    const empBusca = (empresa   || '').toString().trim();
+    const filas    = hoja.getDataRange().getValues();
+
+    // Recorrer de abajo hacia arriba para no desplazar índices al eliminar
+    for (let i = filas.length - 1; i >= 1; i--) {
+      if ((filas[i][0] || '').toString().trim().toUpperCase() === idBusca &&
+          (filas[i][3] || '').toString().trim()                === empBusca) {
+        hoja.deleteRow(i + 1);
+        SpreadsheetApp.flush();
+        return { status: 'success', message: 'Formato ' + idBusca + ' eliminado correctamente.' };
+      }
+    }
+    return { status: 'error', message: 'Formato no encontrado.' };
+  } catch (e) {
+    Logger.log('Error en eliminarFormato: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════
 // ADMINISTRACIÓN DE CLIENTES/EMPRESAS
 // ══════════════════════════════════════════════════════════
 

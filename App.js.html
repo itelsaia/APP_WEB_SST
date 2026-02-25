@@ -1088,6 +1088,11 @@
             if (workspace) workspace.classList.remove('hidden');
             actualizarModuloHeader('Gestión de Usuarios');
             cargarUsuariosAdmin();
+        } else if (modulo === 'formatos') {
+            const workspace = document.getElementById('admin-workspace-formatos');
+            if (workspace) workspace.classList.remove('hidden');
+            actualizarModuloHeader('Gestor de Formatos');
+            cargarFormatosAdmin();
         }
     }
 
@@ -1099,7 +1104,7 @@
         if (portal) portal.classList.remove('hidden');
 
         // Ocultar todos los workspaces
-        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios'].forEach(function(id) {
+        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios', 'admin-workspace-formatos'].forEach(function(id) {
             var ws = document.getElementById(id);
             if (ws) ws.classList.add('hidden');
         });
@@ -2142,6 +2147,307 @@
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
             .toggleEstadoUsuario(id);
+    }
+
+    // ════════════════════════════════════════════════════════
+    // MÓDULO: GESTOR DE FORMATOS POR EMPRESA
+    // ════════════════════════════════════════════════════════
+
+    let _formatosAdminTotal = []; // cache completo de LISTAS_FORMATOS
+    let _fmtEditando        = null; // { id, empresa } del formato en edición, null = nuevo
+
+    function cargarFormatosAdmin() {
+        var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
+                     '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+                     '<span>Cargando formatos...</span></div>';
+        var tbody = document.getElementById('fmt-tabla-body');
+        var movil = document.getElementById('fmt-lista-mobile');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="py-10 text-center">' + loader + '</td></tr>';
+        if (movil) movil.innerHTML = loader;
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res.status === 'success') {
+                    _formatosAdminTotal = res.data || [];
+                    _poblarFiltroEmpresasFormatos();
+                    filtrarFormatos();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
+            })
+            .obtenerFormatosAdmin();
+    }
+
+    // Puebla el filtro de empresa dinámicamente desde los datos cargados
+    function _poblarFiltroEmpresasFormatos() {
+        var sel = document.getElementById('fmt-filtro-empresa');
+        if (!sel) return;
+        var valActual = sel.value;
+        var empresas  = {};
+        _formatosAdminTotal.forEach(function(f) { if (f.empresa) empresas[f.empresa] = true; });
+        sel.innerHTML = '<option value="" style="background:#1a242f;">Todas las empresas</option>';
+        Object.keys(empresas).sort().forEach(function(e) {
+            var opt = document.createElement('option');
+            opt.value = e; opt.textContent = e; opt.style.background = '#1a242f';
+            sel.appendChild(opt);
+        });
+        if (valActual) sel.value = valActual;
+    }
+
+    function filtrarFormatos() {
+        var q       = ((document.getElementById('fmt-filtro-texto')   || {}).value || '').trim().toLowerCase();
+        var empresa = ((document.getElementById('fmt-filtro-empresa')  || {}).value || '').trim();
+        var tipo    = ((document.getElementById('fmt-filtro-tipo')     || {}).value || '').trim();
+
+        var filtrados = _formatosAdminTotal.filter(function(f) {
+            var coincideTexto   = !q       || f.id.toLowerCase().includes(q) || f.descripcion.toLowerCase().includes(q);
+            var coincideEmpresa = !empresa || f.empresa === empresa;
+            var coincideTipo    = !tipo    || f.tipo === tipo;
+            return coincideTexto && coincideEmpresa && coincideTipo;
+        });
+
+        _actualizarStatsFormatos(filtrados);
+        _renderTablaFormatos(filtrados);
+        _renderCardsFormatosMobil(filtrados);
+    }
+
+    function _actualizarStatsFormatos(registros) {
+        var empresas     = {};
+        var permisos     = 0;
+        var inspecciones = 0;
+        registros.forEach(function(f) {
+            if (f.empresa) empresas[f.empresa] = true;
+            if (f.tipo === 'Permiso')     permisos++;
+            if (f.tipo === 'Inspeccion')  inspecciones++;
+        });
+        var elTot = document.getElementById('fmt-stat-total');
+        var elEmp = document.getElementById('fmt-stat-empresas');
+        var elPer = document.getElementById('fmt-stat-permisos');
+        var elIns = document.getElementById('fmt-stat-inspecciones');
+        if (elTot) elTot.querySelector('.stat-num').textContent = registros.length;
+        if (elEmp) elEmp.querySelector('.stat-num').textContent = Object.keys(empresas).length;
+        if (elPer) elPer.querySelector('.stat-num').textContent = permisos;
+        if (elIns) elIns.querySelector('.stat-num').textContent = inspecciones;
+    }
+
+    // Colores por tipo de documento
+    var _TIPO_BADGE = {
+        'Registro':   { bg: 'bg-green-500/15',  text: 'text-green-400',  border: 'border-green-500/30'  },
+        'Permiso':    { bg: 'bg-amber-500/15',   text: 'text-amber-400',  border: 'border-amber-500/30'  },
+        'Inspeccion': { bg: 'bg-blue-500/15',    text: 'text-blue-400',   border: 'border-blue-500/30'   },
+        'Ejecucion':  { bg: 'bg-purple-500/15',  text: 'text-purple-400', border: 'border-purple-500/30' }
+    };
+
+    function _tipoBadge(tipo) {
+        var c = _TIPO_BADGE[tipo] || { bg: 'bg-white/10', text: 'text-slate-400', border: 'border-white/20' };
+        return '<span class="inline-flex text-[9px] font-black px-2 py-0.5 rounded-lg border ' +
+               c.bg + ' ' + c.text + ' ' + c.border + '">' + _esc(tipo || '-') + '</span>';
+    }
+
+    function _renderTablaFormatos(registros) {
+        var tbody = document.getElementById('fmt-tabla-body');
+        if (!tbody) return;
+        if (!registros || registros.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-10 text-slate-500 text-xs italic">' +
+                '<div class="flex flex-col items-center gap-2">' +
+                '<span class="material-symbols-outlined text-3xl">search_off</span>' +
+                '<span>Sin formatos para mostrar</span></div></td></tr>';
+            return;
+        }
+        tbody.innerHTML = registros.map(function(f) {
+            var idEscaped = encodeURIComponent(f.id);
+            var empEscaped = encodeURIComponent(f.empresa);
+            return '<tr class="border-b border-white/5 hover:bg-white/5 transition-colors">' +
+                '<td class="px-3 py-3"><span class="text-xs font-black text-primary tracking-widest">' + _esc(f.id) + '</span></td>' +
+                '<td class="px-3 py-3 text-xs text-slate-200 max-w-[280px]">' + _esc(f.descripcion) + '</td>' +
+                '<td class="px-3 py-3">' + _tipoBadge(f.tipo) + '</td>' +
+                '<td class="px-3 py-3 text-xs text-slate-300">' + _esc(f.empresa) + '</td>' +
+                '<td class="px-3 py-3 text-right">' +
+                '<div class="flex items-center justify-end gap-1">' +
+                '<button onclick="abrirModalFormato(\'' + idEscaped + '\',\'' + empEscaped + '\')" ' +
+                'class="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-primary/20 text-slate-400 hover:text-primary transition border border-white/10" title="Editar">' +
+                '<span class="material-symbols-outlined text-sm">edit</span></button>' +
+                '<button onclick="eliminarFormato(\'' + idEscaped + '\',\'' + empEscaped + '\')" ' +
+                'class="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition border border-white/10" title="Eliminar">' +
+                '<span class="material-symbols-outlined text-sm">delete</span></button>' +
+                '</div></td></tr>';
+        }).join('');
+    }
+
+    function _renderCardsFormatosMobil(registros) {
+        var cont = document.getElementById('fmt-lista-mobile');
+        if (!cont) return;
+        if (!registros || registros.length === 0) {
+            cont.innerHTML = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
+                '<span class="material-symbols-outlined text-3xl">search_off</span><span>Sin formatos para mostrar</span></div>';
+            return;
+        }
+        cont.innerHTML = registros.map(function(f) {
+            var idEscaped  = encodeURIComponent(f.id);
+            var empEscaped = encodeURIComponent(f.empresa);
+            return '<div class="bg-white/5 rounded-xl border border-white/10 p-3 space-y-2">' +
+                '<div class="flex items-start justify-between">' +
+                '<div><p class="text-xs font-black text-primary tracking-widest">' + _esc(f.id) + '</p>' +
+                '<p class="text-[10px] text-slate-300 mt-0.5">' + _esc(f.descripcion) + '</p></div>' +
+                _tipoBadge(f.tipo) + '</div>' +
+                '<div class="flex items-center justify-between">' +
+                '<span class="text-[9px] text-slate-500">' + _esc(f.empresa) + '</span>' +
+                '<div class="flex gap-1">' +
+                '<button onclick="abrirModalFormato(\'' + idEscaped + '\',\'' + empEscaped + '\')" ' +
+                'class="text-[9px] font-black px-2 py-1 rounded-lg bg-primary/10 text-primary border border-primary/20 hover:opacity-80 transition">Editar</button>' +
+                '<button onclick="eliminarFormato(\'' + idEscaped + '\',\'' + empEscaped + '\')" ' +
+                'class="text-[9px] font-black px-2 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:opacity-80 transition">Eliminar</button>' +
+                '</div></div></div>';
+        }).join('');
+    }
+
+    // ── Modal crear / editar ──────────────────────────────────────────
+
+    function abrirModalFormato(idEnc, empresaEnc) {
+        var modal  = document.getElementById('fmt-modal');
+        var titulo = document.getElementById('fmt-modal-titulo');
+        var sub    = document.getElementById('fmt-modal-sub');
+        var inpId  = document.getElementById('fmt-inp-id');
+        var nota   = document.getElementById('fmt-nota-id');
+
+        // Poblar el select de empresas desde _clientesParaModal (cache compartido con usuarios)
+        _poblarSelectEmpresasFormatos();
+
+        if (!idEnc) {
+            // CREAR
+            _fmtEditando = null;
+            titulo.textContent = 'Nuevo Formato';
+            sub.textContent    = 'Se vinculará a la empresa seleccionada';
+            inpId.value        = '';
+            inpId.readOnly     = false;
+            inpId.style.opacity = '1';
+            if (nota) nota.classList.remove('hidden');
+            document.getElementById('fmt-inp-descripcion').value = '';
+            document.getElementById('fmt-inp-tipo').value        = '';
+            document.getElementById('fmt-inp-empresa').value     = '';
+        } else {
+            // EDITAR
+            var id      = decodeURIComponent(idEnc);
+            var empresa = decodeURIComponent(empresaEnc);
+            var f = _formatosAdminTotal.find(function(x) { return x.id === id && x.empresa === empresa; });
+            if (!f) return;
+            _fmtEditando = { id: f.id, empresa: f.empresa };
+            titulo.textContent = 'Editar Formato';
+            sub.textContent    = f.id + ' · ' + f.empresa;
+            inpId.value        = f.id;
+            inpId.readOnly     = true;
+            inpId.style.opacity = '0.5';
+            if (nota) nota.classList.add('hidden');
+            document.getElementById('fmt-inp-descripcion').value = f.descripcion;
+            document.getElementById('fmt-inp-tipo').value        = f.tipo;
+            document.getElementById('fmt-inp-empresa').value     = f.empresa;
+            document.getElementById('fmt-inp-empresa').disabled  = true;
+        }
+        modal.classList.remove('hidden');
+    }
+
+    function cerrarModalFormato() {
+        var modal = document.getElementById('fmt-modal');
+        if (modal) modal.classList.add('hidden');
+        var selEmp = document.getElementById('fmt-inp-empresa');
+        if (selEmp) selEmp.disabled = false;
+        _fmtEditando = null;
+    }
+
+    // Puebla el select de empresa del modal con los clientes de DB_CLIENTES
+    function _poblarSelectEmpresasFormatos() {
+        var sel = document.getElementById('fmt-inp-empresa');
+        if (!sel) return;
+        // Si ya tiene opciones cargadas (más de 1), no repoblar
+        if (sel.options.length > 1) return;
+
+        if (_clientesParaModal.length > 0) {
+            _llenarSelectEmpresasFormatos(sel);
+        } else {
+            // Cargar clientes y luego poblar
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res && res.status === 'success') {
+                        _clientesParaModal = res.data || [];
+                        _llenarSelectEmpresasFormatos(sel);
+                    }
+                })
+                .obtenerClientesParaUsuarios();
+        }
+    }
+
+    function _llenarSelectEmpresasFormatos(sel) {
+        sel.innerHTML = '<option value="" style="background:#1a242f;">Seleccione la empresa...</option>';
+        _clientesParaModal.forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c.nombre; opt.textContent = c.nombre; opt.style.background = '#1a242f';
+            sel.appendChild(opt);
+        });
+    }
+
+    function guardarFormato() {
+        var id          = ((document.getElementById('fmt-inp-id')          || {}).value || '').trim().toUpperCase();
+        var descripcion = ((document.getElementById('fmt-inp-descripcion') || {}).value || '').trim();
+        var tipo        = ((document.getElementById('fmt-inp-tipo')        || {}).value || '').trim();
+        var empresa     = ((document.getElementById('fmt-inp-empresa')     || {}).value || '').trim();
+
+        if (!id)          { mostrarNotificacion('⚠️ El código del formato es obligatorio.', 'warning'); return; }
+        if (!descripcion) { mostrarNotificacion('⚠️ La descripción es obligatoria.',        'warning'); return; }
+        if (!tipo)        { mostrarNotificacion('⚠️ Seleccione el tipo de documento.',      'warning'); return; }
+        if (!empresa)     { mostrarNotificacion('⚠️ Seleccione la empresa contratista.',    'warning'); return; }
+
+        var btn     = document.getElementById('fmt-btn-guardar');
+        var spinner = document.getElementById('fmt-spinner-guardar');
+        if (btn)     btn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+
+        var fnExito = function(res) {
+            if (btn)     btn.disabled = false;
+            if (spinner) spinner.classList.add('hidden');
+            if (res.status === 'success') {
+                mostrarNotificacion('✅ ' + res.message, 'success');
+                cerrarModalFormato();
+                cargarFormatosAdmin();
+            } else {
+                mostrarNotificacion('❌ ' + res.message, 'error');
+            }
+        };
+        var fnError = function(err) {
+            if (btn)     btn.disabled = false;
+            if (spinner) spinner.classList.add('hidden');
+            mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+        };
+
+        var datos = { id: id, descripcion: descripcion, tipo: tipo, empresa: empresa };
+        if (_fmtEditando) {
+            datos.empresa = _fmtEditando.empresa; // usar la empresa original como clave
+            google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).actualizarFormato(datos);
+        } else {
+            google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).crearFormato(datos);
+        }
+    }
+
+    function eliminarFormato(idEnc, empresaEnc) {
+        var id      = decodeURIComponent(idEnc);
+        var empresa = decodeURIComponent(empresaEnc);
+        if (!confirm('¿Eliminar el formato ' + id + ' de ' + empresa + '?\nEsta acción no se puede deshacer.')) return;
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (res.status === 'success') {
+                    mostrarNotificacion('✅ ' + res.message, 'success');
+                    cargarFormatosAdmin();
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .eliminarFormato(id, empresa);
     }
 
     function onExito(response) {
