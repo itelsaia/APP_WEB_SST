@@ -12,6 +12,8 @@
     let _obraSeleccionada = ''; // Obra elegida en el formulario de jornada
     let _clientesCargados = false; // Flag: ¿ya se cargó el select de clientes?
     let _formatosDisponibles = []; // Cache de formatos del cliente seleccionado
+    let _clientesCompletos = []; // Cache de clientes con contacto y celular (para hallazgos)
+    let _rhArchivoBase64 = null; // Foto de evidencia del formulario de hallazgo
 
     window.addEventListener('load', function () {
         verificarSesion();
@@ -619,6 +621,7 @@
         const select = document.getElementById('idCliente');
         if (!select) return;
         if (response.status === 'success') {
+            _clientesCompletos = response.data; // Cache con contacto y celular para hallazgos
             select.innerHTML = '<option value="">Seleccione la empresa...</option>';
             response.data.forEach(function (clie) {
                 const opt = document.createElement('option');
@@ -668,21 +671,275 @@
 
     /**
      * Se dispara al seleccionar un formato en el combo.
+     * Si el Id_Formato empieza con 'RH', carga el formulario de hallazgo.
+     * De lo contrario, muestra el formulario estándar de inspección.
      */
     function onCambioFormato(select) {
+        const fmtId   = select.value;
+        const fmtData = _formatosDisponibles.find(f => f.id === fmtId);
+
+        // Detectar formato RH → Reporte de Hallazgo
+        if (fmtId && fmtId.toUpperCase().startsWith('RH')) {
+            mostrarFormularioHallazgo(fmtData);
+            return;
+        }
+
+        // Formulario estándar de inspección
+        mostrarFormularioEstandar();
+
         const descCont = document.getElementById('formato-descripcion-container');
         const descText = document.getElementById('formato-descripcion-text');
         if (!descCont || !descText) return;
-
-        const fmtId = select.value;
-        const fmtData = _formatosDisponibles.find(f => f.id === fmtId);
-
         if (fmtData) {
             descText.textContent = fmtData.descripcion;
             descCont.classList.remove('hidden');
         } else {
             descCont.classList.add('hidden');
         }
+    }
+
+    /**
+     * Muestra el formulario de Reporte de Hallazgo y oculta el formulario estándar.
+     * Auto-rellena empresa, contacto y celular desde el contexto de la jornada activa.
+     */
+    function mostrarFormularioHallazgo(fmtData) {
+        // Ocultar partes del formulario estándar que no aplican
+        const sstBody = document.getElementById('sst-form');
+        if (sstBody) {
+            // Ocultar foto + botones del formulario estándar (mantener selects visibles)
+            ['fotoEvidencia', 'preview-container', 'btn-pendiente', 'btn-con-firma',
+             'formato-descripcion-container'].forEach(function(id) {
+                const el = document.querySelector('[id="' + id + '"]') ||
+                           document.querySelector('label[for="' + id + '"]');
+                // Ocultar la sección de foto y botones envolviéndola
+            });
+            // Ocultar todo el form excepto los selects
+            sstBody.classList.add('hidden');
+        }
+        // Ocultar descripción del formato estándar
+        const descCont = document.getElementById('formato-descripcion-container');
+        if (descCont) descCont.classList.add('hidden');
+
+        // Mostrar formulario de hallazgo
+        const formRH = document.getElementById('form-hallazgo-container');
+        if (!formRH) return;
+        formRH.classList.remove('hidden');
+
+        // Actualizar descripción del formato RH
+        const rhDesc = document.getElementById('rh-fmt-desc');
+        if (rhDesc && fmtData) rhDesc.textContent = fmtData.descripcion || 'Reporte de Hallazgo SST';
+
+        // Auto-rellenar empresa desde la jornada activa
+        const empresa = _obraSeleccionada || '';
+        const rhNombre = document.getElementById('rh-empresa-nombre');
+        const rhValor  = document.getElementById('rh-empresa-valor');
+        if (rhNombre) rhNombre.textContent = empresa || 'No detectada';
+        if (rhValor)  rhValor.value = empresa;
+
+        // Auto-rellenar contacto y celular desde el cache de clientes
+        const clienteData = _clientesCompletos.find(function(c) {
+            return c.nombre.toLowerCase().trim() === empresa.toLowerCase().trim();
+        });
+        if (clienteData) {
+            const rhA   = document.getElementById('rh-reportado-a');
+            const rhTel = document.getElementById('rh-telefono');
+            if (rhA   && clienteData.contacto) rhA.value   = clienteData.contacto;
+            if (rhTel && clienteData.celular)  rhTel.value = clienteData.celular;
+        }
+
+        // Limpiar foto previa
+        _rhArchivoBase64 = null;
+        const prev = document.getElementById('rh-preview-container');
+        if (prev) prev.classList.add('hidden');
+    }
+
+    /**
+     * Muestra el formulario estándar de inspección y oculta el de hallazgo.
+     */
+    function mostrarFormularioEstandar() {
+        const sstBody = document.getElementById('sst-form');
+        if (sstBody) sstBody.classList.remove('hidden');
+        const formRH = document.getElementById('form-hallazgo-container');
+        if (formRH) formRH.classList.add('hidden');
+    }
+
+    /**
+     * Preview de la foto de evidencia del hallazgo.
+     */
+    function previewHallazgo(input) {
+        if (!input.files || !input.files[0]) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            _rhArchivoBase64 = e.target.result;
+            const prev = document.getElementById('rh-preview-container');
+            const img  = document.getElementById('rh-img-preview');
+            if (prev) prev.classList.remove('hidden');
+            if (img)  img.src = _rhArchivoBase64;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+
+    /**
+     * Valida y envía el Reporte de Hallazgo al backend.
+     * Al tener éxito construye el enlace wa.me y lo abre automáticamente.
+     */
+    function reportarHallazgo() {
+        const ubicacion  = (document.getElementById('rh-ubicacion')  || {}).value || '';
+        const descripcion= (document.getElementById('rh-descripcion') || {}).value || '';
+        const reportadoA = (document.getElementById('rh-reportado-a')|| {}).value || '';
+        const telefono   = (document.getElementById('rh-telefono')   || {}).value || '';
+
+        if (!ubicacion.trim()) {
+            mostrarNotificacion('⚠️ Ingrese la ubicación del hallazgo.', 'warning'); return;
+        }
+        if (!descripcion.trim()) {
+            mostrarNotificacion('⚠️ Ingrese la descripción del hallazgo.', 'warning'); return;
+        }
+        if (!_rhArchivoBase64) {
+            mostrarNotificacion('⚠️ Capture la foto de evidencia.', 'warning'); return;
+        }
+
+        const btn = document.getElementById('btn-reportar-hallazgo');
+        const sp  = document.getElementById('rh-spinner');
+        if (btn) btn.disabled = true;
+        if (sp)  sp.classList.remove('hidden');
+
+        const empresa = (document.getElementById('rh-empresa-valor') || {}).value
+                        || _obraSeleccionada || '';
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (sp)  sp.classList.add('hidden');
+                if (btn) btn.disabled = false;
+
+                if (res.status === 'success') {
+                    const d = res.data;
+                    mostrarNotificacion('✅ Hallazgo ' + d.idHallazgo + ' reportado.', 'success');
+
+                    // Construir y abrir enlace WhatsApp
+                    const mensaje = [
+                        '🚨 *HALLAZGO SST — ' + d.idHallazgo + '*',
+                        '📍 Ubicación: ' + ubicacion,
+                        '📋 Descripción: ' + descripcion,
+                        '👷 Reportado por: ' + (currentUser ? currentUser.nombre : ''),
+                        '🔗 Para gestionar y cerrar el hallazgo: ' + d.urlCierre
+                    ].join('\n');
+
+                    const numLimpio = telefono.replace(/\D/g, '');
+                    if (numLimpio) {
+                        const waUrl = 'https://wa.me/57' + numLimpio + '?text=' + encodeURIComponent(mensaje);
+                        mostrarModalWhatsApp(waUrl, reportadoA);
+                    } else {
+                        mostrarNotificacion('✅ Hallazgo guardado. Agregue el número para enviar WhatsApp.', 'success');
+                    }
+
+                    // Limpiar formulario de hallazgo y volver al estándar
+                    ['rh-ubicacion', 'rh-descripcion', 'rh-reportado-a', 'rh-telefono'].forEach(function(id) {
+                        const el = document.getElementById(id);
+                        if (el) el.value = '';
+                    });
+                    _rhArchivoBase64 = null;
+                    const prev = document.getElementById('rh-preview-container');
+                    if (prev) prev.classList.add('hidden');
+                    const fotoInput = document.getElementById('rh-foto');
+                    if (fotoInput) fotoInput.value = '';
+
+                    // Resetear selector de formato y volver al form estándar
+                    const selectFmt = document.getElementById('idFormato');
+                    if (selectFmt) selectFmt.value = '';
+                    mostrarFormularioEstandar();
+
+                } else {
+                    mostrarNotificacion('❌ ' + res.message, 'error');
+                }
+            })
+            .withFailureHandler(function(err) {
+                if (sp)  sp.classList.add('hidden');
+                if (btn) btn.disabled = false;
+                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
+            })
+            .guardarHallazgo({
+                ubicacion:          ubicacion.trim(),
+                descripcion:        descripcion.trim(),
+                empresaContratista: empresa,
+                reportadoPor:       currentUser ? (currentUser.codigo || currentUser.nombre) : '',
+                reportadoA:         reportadoA.trim(),
+                numeroContacto:     telefono.trim(),
+                fotoBase64:         _rhArchivoBase64
+            });
+    }
+
+    /**
+     * Modal de WhatsApp: muestra un bottom-sheet con un enlace wa.me tappable.
+     * Solución al bloqueo de window.open() dentro de callbacks async de GAS.
+     */
+    function mostrarModalWhatsApp(waUrl, nombre) {
+        // Evitar duplicados
+        var existing = document.getElementById('modal-whatsapp-hallazgo');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'modal-whatsapp-hallazgo';
+        overlay.style.cssText = [
+            'position:fixed', 'inset:0', 'z-index:9999',
+            'background:rgba(0,0,0,0.7)', 'backdrop-filter:blur(4px)',
+            'display:flex', 'align-items:flex-end', 'justify-content:center',
+            'padding:16px', 'animation:fadeIn 0.25s ease-out'
+        ].join(';');
+
+        overlay.innerHTML = [
+            '<div style="width:100%;max-width:420px;background:#101922;border:1px solid rgba(255,255,255,0.1);',
+            'border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.6);">',
+
+            // Cabecera
+            '<div style="background:rgba(37,211,102,0.08);border-bottom:1px solid rgba(37,211,102,0.2);',
+            'padding:16px;display:flex;align-items:center;gap:12px;">',
+            '<div style="width:40px;height:40px;background:rgba(37,211,102,0.15);border:1px solid rgba(37,211,102,0.3);',
+            'border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">',
+            '<svg viewBox="0 0 24 24" width="22" height="22" fill="#25d366">',
+            '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.553 4.116 1.521 5.851L.057 23.941l6.264-1.438A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.807 9.807 0 01-5.004-1.367l-.36-.213-3.72.854.895-3.617-.235-.372A9.801 9.801 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>',
+            '</svg></div>',
+            '<div>',
+            '<p style="font-size:13px;font-weight:900;color:#fff;line-height:1;">Notificar por WhatsApp</p>',
+            '<p style="font-size:10px;color:rgba(37,211,102,0.7);font-weight:700;margin-top:2px;">Hallazgo reportado exitosamente</p>',
+            '</div></div>',
+
+            // Cuerpo
+            '<div style="padding:20px;display:flex;flex-direction:column;gap:12px;">',
+            '<p style="font-size:12px;color:#94a3b8;line-height:1.5;">',
+            'Toca el botón para abrir WhatsApp y enviar el aviso a <strong style="color:#fff;">' + (nombre || 'el responsable') + '</strong>.',
+            '</p>',
+
+            // Botón WhatsApp — anchor real, no window.open
+            '<a href="' + waUrl + '" target="_blank" rel="noopener noreferrer"',
+            ' style="display:flex;align-items:center;justify-content:center;gap:10px;',
+            'background:linear-gradient(135deg,#25d366,#128c7e);',
+            'color:#fff;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;',
+            'text-decoration:none;padding:16px;border-radius:14px;',
+            'box-shadow:0 6px 20px rgba(37,211,102,0.35);',
+            'border:none;cursor:pointer;" onclick="document.getElementById(\'modal-whatsapp-hallazgo\').remove();">',
+            '<svg viewBox="0 0 24 24" width="20" height="20" fill="#fff">',
+            '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.553 4.116 1.521 5.851L.057 23.941l6.264-1.438A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.807 9.807 0 01-5.004-1.367l-.36-.213-3.72.854.895-3.617-.235-.372A9.801 9.801 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>',
+            '</svg>',
+            'Abrir WhatsApp',
+            '</a>',
+
+            // Botón cerrar
+            '<button onclick="document.getElementById(\'modal-whatsapp-hallazgo\').remove()"',
+            ' style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:#64748b;',
+            'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;',
+            'padding:12px;border-radius:12px;cursor:pointer;">',
+            'Cerrar',
+            '</button>',
+            '</div></div>'
+        ].join('');
+
+        // Cerrar al tocar el fondo
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) overlay.remove();
+        });
+
+        document.body.appendChild(overlay);
     }
 
     /**

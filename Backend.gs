@@ -28,16 +28,10 @@ function guardarRegistroFormato(data) {
     const idRegistro = _generarProximoIdRegistro(data.idFormato, ss);
     const fechaHora  = new Date();
 
-    // 2. Guardar evidencia inicial en Drive → [Empresa]/FORMATOS_GESTIONADOS/
-    let urlFoto = "Sin foto";
-    if (data.archivoBase64) {
-      const params        = getParametros().data || {};
-      const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
-      const nombreArchivo = `${idRegistro}_${nombreEmpresa}_INICIAL.png`;
-      urlFoto = guardarImagenEnDrive(
-        data.archivoBase64, nombreArchivo, nombreEmpresa, idCarpetaRaiz, 'FORMATOS_GESTIONADOS'
-      );
-    }
+    // 2. Solo se almacena la foto con firma digital al cerrar el registro.
+    //    La evidencia inicial NO se guarda en Drive para optimizar el almacenamiento
+    //    de las carpetas del cliente (ver cerrarRegistroFormato).
+    const urlFoto = "Sin foto";
 
     // 3. Preparar fila — orden exacto del sheet DB_INSPECCIONES:
     // A:Id_formato | B:Consecutivo | C:Descripcion_Formato | D:Fecha_Hora
@@ -157,8 +151,13 @@ function cerrarRegistroFormato(idRegistro, archivoBase64) {
             const params        = getParametros().data || {};
             const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
             const nombreArchivo = `${idRegistro}_${empresa}_FIRMA.png`;
+
+            // Determinar subcarpeta según Tipo_Documento del formato
+            const idFormato = (data[i][0] || '').toString().trim();
+            const subCarpeta = _subcarpetaPorTipo_(idFormato, empresa, ss);
+
             urlFirma = guardarImagenEnDrive(
-              archivoBase64, nombreArchivo, empresa, idCarpetaRaiz, 'FORMATOS_GESTIONADOS'
+              archivoBase64, nombreArchivo, empresa, idCarpetaRaiz, subCarpeta
             );
           } catch (eDrive) {
             Logger.log('Advertencia: no se pudo guardar foto de firma: ' + eDrive.toString());
@@ -232,9 +231,46 @@ function obtenerRegistrosPendientes(email, fecha) {
 }
 
 /**
+ * Devuelve el nombre de la subcarpeta de Drive correspondiente al tipo de documento del formato.
+ * Consulta LISTAS_FORMATOS por Id_Formato + Empresa_Contratista.
+ * Mapeo: Inspeccion→Inspecciones | Permiso→Permisos | Registro→Registros | Ejecucion→Ejecucion
+ * Fallback si no se encuentra: 'FORMATOS_GESTIONADOS'.
+ *
+ * @param {string} idFormato      Código del formato (ej: 'ATS', 'PMA').
+ * @param {string} empresa        Nombre de la empresa contratista.
+ * @param {Object} ss             Instancia del Spreadsheet ya abierto.
+ * @return {string} Nombre de la subcarpeta de destino.
+ */
+function _subcarpetaPorTipo_(idFormato, empresa, ss) {
+  const MAPA = {
+    'inspeccion':  'Inspecciones',
+    'permiso':     'Permisos',
+    'registro':    'Registros',
+    'ejecucion':   'Ejecucion'
+  };
+  try {
+    const hoja = ss.getSheetByName('LISTAS_FORMATOS');
+    if (!hoja) return 'FORMATOS_GESTIONADOS';
+    const filas = hoja.getDataRange().getValues();
+    const idBusca  = (idFormato || '').toString().trim().toUpperCase();
+    const empBusca = (empresa   || '').toString().trim().toLowerCase();
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim().toUpperCase() === idBusca &&
+          (filas[i][3] || '').toString().trim().toLowerCase() === empBusca) {
+        const tipo = (filas[i][2] || '').toString().trim().toLowerCase();
+        return MAPA[tipo] || 'FORMATOS_GESTIONADOS';
+      }
+    }
+  } catch (e) {
+    Logger.log('_subcarpetaPorTipo_: ' + e.toString());
+  }
+  return 'FORMATOS_GESTIONADOS';
+}
+
+/**
  * Procesa la cadena Base64 y guarda la imagen en una estructura de carpetas:
  * [Carpeta Raíz del Cliente Security Work] / [Nombre del Cliente Final (Ej: Argos)] / [Archivo]
- * 
+ *
  * @param {String} base64Data Datos de la imagen en formato base64.
  * @param {String} nombreArchivo Nombre descriptivo para el archivo.
  * @param {String} nombreEmpresa Nombre del cliente final para la subcarpeta.
@@ -315,7 +351,12 @@ function obtenerClientesRegistrados() {
       const estado = (datos[i][8] || 'ACTIVO').toString().trim().toUpperCase();
       // Solo empresas activas (las sin estado configurado se consideran activas)
       if (id && nombre && estado !== 'INACTIVO') {
-        clientes.push({ id: id, nombre: nombre });
+        clientes.push({
+          id:       id,
+          nombre:   nombre,
+          contacto: (datos[i][5] || '').toString().trim(), // F: Nombre_Contacto (Jefe de Obra)
+          celular:  (datos[i][6] || '').toString().trim()  // G: Celular_Whatsapp
+        });
       }
     }
 
@@ -1291,5 +1332,213 @@ function obtenerUsuarioActivo() {
     return obtenerDatosUsuario(email);
   } catch (e) {
     return { status: "error", message: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// MÓDULO: REPORTE DE HALLAZGOS (RH)
+// Schema DB_HALLAZGOS (15 cols):
+//  A(0):Id_hallazgo         B(1):Fecha               C(2):Hora
+//  D(3):Ubicacion           E(4):Descripcion_hallazgo F(5):Foto_URL_Hallazgo
+//  G(6):Empresa_Contratista H(7):Reportado_Por        I(8):Reportado_A
+//  J(9):Numero_contacto_whatssap  K(10):Gestion_Realizada  L(11):Estado
+//  M(12):Fecha_cierre       N(13):Hora_cierre         O(14):Foto_URL_Cierre_hallazgo
+// ══════════════════════════════════════════════════════════
+
+/**
+ * Genera un slug URL-safe desde un string:
+ * quita tildes, caracteres especiales y reemplaza espacios por guiones bajos.
+ */
+function _slugify_(str, maxLen) {
+  return (str || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, '').trim()
+    .replace(/\s+/g, '_')
+    .substring(0, maxLen || 30);
+}
+
+/**
+ * Guarda un nuevo Reporte de Hallazgo en DB_HALLAZGOS y la foto en Drive.
+ * Retorna el ID del hallazgo y la URL de cierre para construir el enlace WA.
+ *
+ * @param {Object} data
+ *   ubicacion, descripcion, empresaContratista, reportadoPor,
+ *   reportadoA, numeroContacto, fotoBase64
+ * @return {Object} { status, data: { idHallazgo, urlCierre } }
+ */
+function guardarHallazgo(data) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_HALLAZGOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada. Ejecute inicializarBaseDeDatos().' };
+
+    const tz    = Session.getScriptTimeZone();
+    const ahora = new Date();
+    const fecha = Utilities.formatDate(ahora, tz, 'dd/MM/yyyy');
+    const hora  = Utilities.formatDate(ahora, tz, 'HH:mm:ss');
+
+    // Generar identificador único: RH-{consecutivo}-{empresa}-{descripcion}
+    const totalDatos  = Math.max(hoja.getLastRow() - 1, 0);
+    const consecutivo = String(totalDatos + 1).padStart(3, '0');
+    const empSlug     = _slugify_(data.empresaContratista, 20);
+    const descSlug    = _slugify_((data.descripcion || '').split(' ').slice(0, 3).join(' '), 30);
+    const idHallazgo  = 'RH-' + consecutivo + '-' + empSlug + '-' + descSlug;
+
+    // Guardar foto de evidencia en Drive → {empresa}/Hallazgos/
+    let urlFoto = 'Sin foto';
+    if (data.fotoBase64) {
+      try {
+        const params = getParametros().data || {};
+        urlFoto = guardarImagenEnDrive(
+          data.fotoBase64,
+          idHallazgo + '_EVIDENCIA.png',
+          (data.empresaContratista || '').toString().trim(),
+          params.DRIVE_ROOT_FOLDER_ID,
+          'Hallazgos'
+        );
+      } catch (eDrive) {
+        Logger.log('guardarHallazgo Drive: ' + eDrive.toString());
+      }
+    }
+
+    // URL pública de cierre para el jefe de obra
+    const urlCierre = getScriptUrl() + '?page=hallazgo&id=' + encodeURIComponent(idHallazgo);
+
+    hoja.appendRow([
+      idHallazgo,                                            // A: Id_hallazgo
+      fecha,                                                 // B: Fecha
+      hora,                                                  // C: Hora
+      (data.ubicacion          || '').toString().trim(),     // D: Ubicacion
+      (data.descripcion        || '').toString().trim(),     // E: Descripcion_hallazgo
+      urlFoto,                                               // F: Foto_URL_Hallazgo
+      (data.empresaContratista || '').toString().trim(),     // G: Empresa_Contratista
+      (data.reportadoPor       || '').toString().trim(),     // H: Reportado_Por
+      (data.reportadoA         || '').toString().trim(),     // I: Reportado_A
+      (data.numeroContacto     || '').toString().trim(),     // J: Numero_contacto_whatssap
+      '',          // K: Gestion_Realizada (se llena al cerrar)
+      'ABIERTO',   // L: Estado
+      '',          // M: Fecha_cierre
+      '',          // N: Hora_cierre
+      ''           // O: Foto_URL_Cierre_hallazgo
+    ]);
+    SpreadsheetApp.flush();
+
+    return {
+      status: 'success',
+      message: 'Hallazgo ' + idHallazgo + ' reportado correctamente.',
+      data: { idHallazgo: idHallazgo, urlCierre: urlCierre, urlFoto: urlFoto }
+    };
+  } catch (e) {
+    Logger.log('Error en guardarHallazgo: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Cierra un hallazgo: actualiza Estado=CERRADO, guarda gestión y foto de cierre.
+ *
+ * @param {Object} data  idHallazgo, gestionRealizada, fotoBase64 (opcional)
+ * @return {Object} Respuesta estandarizada.
+ */
+function cerrarHallazgo(data) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_HALLAZGOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada.' };
+
+    const filas   = hoja.getDataRange().getValues();
+    const idBusca = (data.idHallazgo || '').toString().trim();
+
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim() === idBusca) {
+        const fila    = i + 1;
+        const empresa = (filas[i][6] || '').toString().trim(); // G: Empresa
+        const tz      = Session.getScriptTimeZone();
+        const ahora   = new Date();
+
+        // Guardar foto de cierre en Drive → {empresa}/Hallazgos/
+        let urlFotoCierre = 'Sin foto cierre';
+        if (data.fotoBase64) {
+          try {
+            const params = getParametros().data || {};
+            urlFotoCierre = guardarImagenEnDrive(
+              data.fotoBase64,
+              idBusca + '_CIERRE.png',
+              empresa,
+              params.DRIVE_ROOT_FOLDER_ID,
+              'Hallazgos'
+            );
+          } catch (eDrive) {
+            Logger.log('cerrarHallazgo Drive: ' + eDrive.toString());
+          }
+        }
+
+        // K(11), L(12), M(13), N(14), O(15) — índice de columna es fila-base 1
+        hoja.getRange(fila, 11).setValue((data.gestionRealizada || '').toString().trim());
+        hoja.getRange(fila, 12).setValue('CERRADO');
+        hoja.getRange(fila, 13).setValue(Utilities.formatDate(ahora, tz, 'dd/MM/yyyy'));
+        hoja.getRange(fila, 14).setValue(Utilities.formatDate(ahora, tz, 'HH:mm:ss'));
+        hoja.getRange(fila, 15).setValue(urlFotoCierre);
+        SpreadsheetApp.flush();
+
+        return { status: 'success', message: 'Hallazgo cerrado correctamente.' };
+      }
+    }
+    return { status: 'error', message: 'Hallazgo no encontrado: ' + idBusca };
+  } catch (e) {
+    Logger.log('Error en cerrarHallazgo: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Obtiene los datos de un hallazgo por su ID.
+ * Usado por la vista pública de cierre (jefe de obra).
+ *
+ * @param {string} idHallazgo  ID del hallazgo (ej: RH-001-eurolaminados-cables_sueltos)
+ * @return {Object} { status, data: { id, fecha, hora, ubicacion, descripcion, ... } }
+ */
+function obtenerHallazgo(idHallazgo) {
+  try {
+    const ss   = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName('DB_HALLAZGOS');
+    if (!hoja) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada.' };
+
+    const filas   = hoja.getDataRange().getValues();
+    const idBusca = (idHallazgo || '').toString().trim();
+
+    const tz = Session.getScriptTimeZone();
+    // Helper: formatea celdas Date con el patrón dado; devuelve string para el resto
+    function _fmtCelda_(val, fmt) {
+      if (!val && val !== 0) return '';
+      if (val instanceof Date) {
+        try { return Utilities.formatDate(val, tz, fmt); } catch(_) {}
+      }
+      return val.toString().trim();
+    }
+
+    for (let i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim() === idBusca) {
+        return {
+          status: 'success',
+          data: {
+            id:          (filas[i][0]  || '').toString().trim(),
+            fecha:       _fmtCelda_(filas[i][1], 'dd/MM/yyyy'),
+            hora:        _fmtCelda_(filas[i][2], 'HH:mm:ss'),
+            ubicacion:   (filas[i][3]  || '').toString().trim(),
+            descripcion: (filas[i][4]  || '').toString().trim(),
+            fotoUrl:     (filas[i][5]  || '').toString().trim(),
+            empresa:     (filas[i][6]  || '').toString().trim(),
+            reportadoPor:(filas[i][7]  || '').toString().trim(),
+            reportadoA:  (filas[i][8]  || '').toString().trim(),
+            estado:      (filas[i][11] || 'ABIERTO').toString().trim().toUpperCase()
+          }
+        };
+      }
+    }
+    return { status: 'error', message: 'Hallazgo no encontrado: ' + idBusca };
+  } catch (e) {
+    Logger.log('Error en obtenerHallazgo: ' + e.toString());
+    return { status: 'error', message: e.toString() };
   }
 }

@@ -1,0 +1,18 @@
+# Carpeta de Inteligencia y Skills
+.agent/
+skills/
+docs/
+
+# Archivos de seguimiento y planificación
+task.md
+walkthrough.md
+implementation_plan.md
+README.md
+
+# Configuración local
+.claspignore
+.gitignore
+.clasp.json
+node_modules/
+package-lock.json
+package.json

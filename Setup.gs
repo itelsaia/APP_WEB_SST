@@ -315,7 +315,8 @@ function inicializarBaseDeDatos() {
     { nombre: 'DB_INSPECCIONES',  encabezados: ['Id_formato', 'Consecutivo', 'Descripcion_Formato', 'Fecha_Hora', 'Empresa_Contratista', 'Foto_Formato_URL', 'Reportado_Por', 'Estado', 'Foto_Firma_URL', 'Fecha_Cierre'] },
     { nombre: 'DB_ANALISIS_IA',   encabezados: ['ID_Registro_Padre', 'Diagnostico_IA', 'Plan_Accion_Recomendado', 'Nivel_Riesgo_IA'] },
     { nombre: 'LISTAS_SISTEMA',   encabezados: ['Categoria', 'Item'] },
-    { nombre: 'DB_ASISTENCIA',    encabezados: ['ID_Asistencia', 'Email_Supervisor', 'Nombre_Completo', 'Fecha', 'Hora_Entrada', 'Hora_Salida', 'Tipo_Dia', 'Obra_Proyecto', 'Foto_Entrada_URL', 'Foto_Salida_URL', 'Estado'] }
+    { nombre: 'DB_ASISTENCIA',    encabezados: ['ID_Asistencia', 'Email_Supervisor', 'Nombre_Completo', 'Fecha', 'Hora_Entrada', 'Hora_Salida', 'Tipo_Dia', 'Obra_Proyecto', 'Foto_Entrada_URL', 'Foto_Salida_URL', 'Estado'] },
+    { nombre: 'DB_HALLAZGOS',     encabezados: ['Id_hallazgo', 'Fecha', 'Hora', 'Ubicacion', 'Descripcion_hallazgo', 'Foto_URL_Hallazgo', 'Empresa_Contratista', 'Reportado_Por', 'Reportado_A', 'Numero_contacto_whatssap', 'Gestion_Realizada', 'Estado', 'Fecha_cierre', 'Hora_cierre', 'Foto_URL_Cierre_hallazgo'] }
   ];
 
   hojasRequeridas.forEach(function(configHoja) {

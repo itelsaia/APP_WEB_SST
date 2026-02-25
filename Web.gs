@@ -28,6 +28,11 @@ function doGet(e) {
       template = HtmlService.createTemplateFromFile('Index');
       template.role = role;
       template.email = email;
+    } else if (page === 'hallazgo') {
+      // Vista pública de cierre de hallazgo — acceso por URL directa sin login
+      var idHallazgo = (e && e.parameter && e.parameter.id) ? e.parameter.id : '';
+      template = HtmlService.createTemplateFromFile('GestionHallazgo');
+      template.idHallazgo = idHallazgo;
     } else {
       template = HtmlService.createTemplateFromFile('Login');
     }

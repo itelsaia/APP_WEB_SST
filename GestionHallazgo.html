@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Hallazgo SST</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root { --color-primario: #C5A048; }
+        body { font-family: 'Inter', sans-serif; }
+        .text-primary { color: var(--color-primario); }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes slideUp { from { opacity:0; transform:translateY(30px); } to { opacity:1; transform:translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .animate-slide-up { animation: slideUp 0.4s ease-out forwards; }
+    </style>
+</head>
+
+<body class="bg-[#101922] min-h-screen text-slate-100">
+
+    <!-- ID del hallazgo inyectado por el servidor -->
+    <script>
+        var ID_HALLAZGO = '<?= idHallazgo ?>';
+    </script>
+
+    <!-- ── HEADER ───────────────────────────────────────────────── -->
+    <header class="bg-[#101922]/90 backdrop-blur-md sticky top-0 z-40 px-4 py-3 flex items-center gap-3 border-b border-white/10">
+        <div class="w-9 h-9 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-xl text-red-400">report_problem</span>
+        </div>
+        <div>
+            <h1 class="text-sm font-black text-white uppercase tracking-tight leading-none">Gestión de Hallazgo SST</h1>
+            <p id="hdr-id" class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5"></p>
+        </div>
+    </header>
+
+    <!-- ── CONTENIDO PRINCIPAL ───────────────────────────────────── -->
+    <main class="p-4 max-w-lg mx-auto space-y-4 pb-10">
+
+        <!-- Estado: cargando -->
+        <div id="panel-loader" class="flex flex-col items-center gap-3 py-20">
+            <div class="animate-spin h-10 w-10 border-4 border-red-500/20 border-t-red-400 rounded-full"></div>
+            <p class="text-slate-500 text-sm font-medium">Cargando hallazgo...</p>
+        </div>
+
+        <!-- Estado: error -->
+        <div id="panel-error" class="hidden text-center py-20 space-y-3">
+            <span class="material-symbols-outlined text-5xl text-red-500">error</span>
+            <p id="error-msg" class="text-red-400 font-bold">No se pudo cargar el hallazgo.</p>
+        </div>
+
+        <!-- Estado: éxito tras cierre -->
+        <div id="panel-exito" class="hidden text-center py-20 space-y-4 animate-fade-in">
+            <div class="w-20 h-20 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center mx-auto">
+                <span class="material-symbols-outlined text-5xl text-green-400">check_circle</span>
+            </div>
+            <div>
+                <p class="text-xl font-black text-white">¡Hallazgo Cerrado!</p>
+                <p class="text-slate-400 text-sm mt-1">La gestión ha sido registrada exitosamente.</p>
+            </div>
+        </div>
+
+        <!-- Panel principal (se muestra al cargar datos) -->
+        <div id="panel-hallazgo" class="hidden space-y-4 animate-fade-in">
+
+            <!-- ── FICHA DEL HALLAZGO ─────────────────────────────── -->
+            <div class="bg-white/5 border border-red-500/20 rounded-2xl overflow-hidden">
+                <div class="px-4 py-3 border-b border-red-500/15 flex items-center gap-2"
+                    style="background:rgba(220,38,38,0.07);">
+                    <span class="material-symbols-outlined text-base text-red-400">info</span>
+                    <p class="text-xs font-black text-red-300 uppercase tracking-widest">Datos del Hallazgo</p>
+                </div>
+                <div class="p-4 space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Fecha</p>
+                            <p id="h-fecha" class="text-sm font-bold text-white">—</p>
+                        </div>
+                        <div>
+                            <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Hora</p>
+                            <p id="h-hora" class="text-sm font-bold text-white">—</p>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Empresa / Proyecto</p>
+                        <p id="h-empresa" class="text-sm font-bold text-white">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Ubicación</p>
+                        <p id="h-ubicacion" class="text-sm text-slate-200">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Descripción del Hallazgo</p>
+                        <p id="h-descripcion" class="text-sm text-slate-200 leading-relaxed">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Reportado Por</p>
+                        <p id="h-reportado-por" class="text-sm font-bold text-white">—</p>
+                    </div>
+                </div>
+
+                <!-- Foto de evidencia -->
+                <div id="h-foto-container" class="hidden px-4 pb-4">
+                    <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-2">Foto de Evidencia</p>
+                    <img id="h-foto" src="" alt="Evidencia"
+                        class="w-full rounded-xl border border-white/10 object-cover"
+                        style="max-height:220px;">
+                </div>
+            </div>
+
+            <!-- Badge estado CERRADO -->
+            <div id="badge-cerrado"
+                class="hidden text-center py-3 rounded-xl font-black text-sm uppercase tracking-widest bg-green-500/10 border border-green-500/20 text-green-400">
+                ✅ Hallazgo Cerrado — Gestión Realizada
+            </div>
+
+            <!-- ── FORMULARIO DE CIERRE (visible solo si ABIERTO) ─── -->
+            <div id="form-cierre" class="hidden bg-white/5 border border-white/10 rounded-2xl overflow-hidden animate-slide-up">
+                <div class="px-4 py-3 border-b border-white/10 flex items-center gap-2"
+                    style="background:rgba(34,197,94,0.07);">
+                    <span class="material-symbols-outlined text-base text-green-400">task_alt</span>
+                    <p class="text-xs font-black text-green-300 uppercase tracking-widest">Registrar Gestión y Cerrar</p>
+                </div>
+                <div class="p-4 space-y-4">
+
+                    <!-- Gestión realizada -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                            Gestión Realizada <span class="text-green-400">*</span>
+                        </label>
+                        <textarea id="cierre-gestion" rows="4"
+                            placeholder="Describa las acciones correctivas realizadas para solucionar el hallazgo..."
+                            style="background:#1a242f; color:#f8fafc; color-scheme:dark; resize:none;"
+                            class="w-full px-3 py-2.5 text-sm rounded-xl border border-white/10 outline-none transition-all"
+                            onfocus="this.style.borderColor='rgba(34,197,94,0.5)'"
+                            onblur="this.style.borderColor='rgba(255,255,255,0.1)'"></textarea>
+                    </div>
+
+                    <!-- Foto de cierre -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                            Foto de Cierre (opcional)
+                        </label>
+                        <div class="flex items-center gap-3">
+                            <label class="flex-1 cursor-pointer bg-green-500/5 py-4 px-4 border border-green-500/20 border-dashed rounded-xl text-xs font-black text-green-300 hover:bg-green-500/10 flex items-center justify-center gap-2 transition-all group">
+                                <span class="material-symbols-outlined text-green-400 group-hover:scale-110 transition-transform">add_a_photo</span>
+                                <span>CAPTURAR FOTO</span>
+                                <input type="file" id="cierre-foto" accept="image/*" capture="camera" class="hidden"
+                                    onchange="previewCierreHallazgo(this)">
+                            </label>
+                            <div id="cierre-preview-container"
+                                class="hidden h-14 w-14 rounded-xl overflow-hidden border-2 border-green-500/40 shrink-0">
+                                <img id="cierre-img-preview" src="" class="h-full w-full object-cover">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botón cerrar hallazgo -->
+                    <button onclick="submitCierreHallazgo()" id="btn-cerrar-hallazgo"
+                        class="w-full flex justify-center items-center gap-2 py-4 rounded-xl text-[11px] font-black text-white uppercase tracking-widest transition-all active:scale-95"
+                        style="background:linear-gradient(135deg,#16a34a,#15803d); box-shadow:0 6px 20px rgba(22,163,74,0.3);">
+                        <span id="cierre-spinner"
+                            class="hidden animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full shrink-0"></span>
+                        <span class="material-symbols-outlined text-lg shrink-0">task_alt</span>
+                        Cerrar Hallazgo
+                    </button>
+                </div>
+            </div>
+
+        </div><!-- /panel-hallazgo -->
+    </main>
+
+    <script>
+        var _cierreBase64 = null;
+
+        // ── Preview foto de cierre ───────────────────────────────────
+        function previewCierreHallazgo(input) {
+            if (!input.files || !input.files[0]) return;
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                _cierreBase64 = e.target.result;
+                var cont = document.getElementById('cierre-preview-container');
+                var img  = document.getElementById('cierre-img-preview');
+                if (cont) cont.classList.remove('hidden');
+                if (img)  img.src = _cierreBase64;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+
+        // ── Enviar cierre del hallazgo ───────────────────────────────
+        function submitCierreHallazgo() {
+            var gestion = (document.getElementById('cierre-gestion') || {}).value || '';
+            if (!gestion.trim()) {
+                alert('Por favor, describa la gestión realizada antes de cerrar el hallazgo.');
+                return;
+            }
+            var btn = document.getElementById('btn-cerrar-hallazgo');
+            var sp  = document.getElementById('cierre-spinner');
+            if (btn) btn.disabled = true;
+            if (sp)  sp.classList.remove('hidden');
+
+            google.script.run
+                .withSuccessHandler(function (res) {
+                    if (sp)  sp.classList.add('hidden');
+                    if (res.status === 'success') {
+                        document.getElementById('panel-hallazgo').classList.add('hidden');
+                        document.getElementById('panel-exito').classList.remove('hidden');
+                    } else {
+                        if (btn) btn.disabled = false;
+                        alert('Error: ' + (res.message || 'No se pudo cerrar el hallazgo.'));
+                    }
+                })
+                .withFailureHandler(function (err) {
+                    if (sp)  sp.classList.add('hidden');
+                    if (btn) btn.disabled = false;
+                    alert('Error de conexión: ' + err.toString());
+                })
+                .cerrarHallazgo({
+                    idHallazgo:       ID_HALLAZGO,
+                    gestionRealizada: gestion.trim(),
+                    fotoBase64:       _cierreBase64
+                });
+        }
+
+        // ── Cargar datos del hallazgo al abrir la página ─────────────
+        google.script.run
+            .withSuccessHandler(function (res) {
+                document.getElementById('panel-loader').classList.add('hidden');
+
+                if (res.status !== 'success') {
+                    document.getElementById('error-msg').textContent = res.message || 'Hallazgo no encontrado.';
+                    document.getElementById('panel-error').classList.remove('hidden');
+                    return;
+                }
+
+                var h = res.data;
+
+                // Llenar header
+                var hdrId = document.getElementById('hdr-id');
+                if (hdrId) hdrId.textContent = h.id || '';
+
+                // Llenar ficha
+                document.getElementById('h-fecha').textContent       = h.fecha       || '—';
+                document.getElementById('h-hora').textContent        = h.hora        || '—';
+                document.getElementById('h-empresa').textContent     = h.empresa     || '—';
+                document.getElementById('h-ubicacion').textContent   = h.ubicacion   || '—';
+                document.getElementById('h-descripcion').textContent = h.descripcion || '—';
+                document.getElementById('h-reportado-por').textContent = h.reportadoPor || '—';
+
+                // Foto de evidencia
+                if (h.fotoUrl && h.fotoUrl !== 'Sin foto') {
+                    var fotoCont = document.getElementById('h-foto-container');
+                    var fotoImg  = document.getElementById('h-foto');
+                    if (fotoCont) fotoCont.classList.remove('hidden');
+                    if (fotoImg)  fotoImg.src = h.fotoUrl;
+                }
+
+                // Mostrar panel principal
+                document.getElementById('panel-hallazgo').classList.remove('hidden');
+
+                // Mostrar formulario de cierre o badge según estado
+                if ((h.estado || '').toUpperCase() === 'ABIERTO') {
+                    document.getElementById('form-cierre').classList.remove('hidden');
+                } else {
+                    document.getElementById('badge-cerrado').classList.remove('hidden');
+                }
+            })
+            .withFailureHandler(function (err) {
+                document.getElementById('panel-loader').classList.add('hidden');
+                document.getElementById('error-msg').textContent = 'Error de conexión: ' + err.toString();
+                document.getElementById('panel-error').classList.remove('hidden');
+            })
+            .obtenerHallazgo(ID_HALLAZGO);
+    </script>
+
+</body>
+</html>
