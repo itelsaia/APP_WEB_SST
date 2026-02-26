@@ -205,7 +205,9 @@ function normalizarUrlImagen(url) {
  * @returns {Object} Parámetros de configuración con colores de marca siempre presentes
  */
 function getParametros() {
-  const CACHE_KEY = 'params_sistema_v1';
+  // Cache key único por cliente (incluye el spreadsheet ID para evitar mezclas)
+  const ssId      = _CLIENT_SPREADSHEET_ID_ || CONFIG.SPREADSHEET_ID || 'default';
+  const CACHE_KEY = 'params_sistema_v1_' + ssId.slice(-12);
   const cache     = CacheService.getScriptCache();
 
   // ── Ruta rápida: leer desde caché ─────────────────────────────────
@@ -274,8 +276,10 @@ function getParametros() {
  * Llamar cuando se modifiquen valores en PARAM_SISTEMA manualmente.
  */
 function invalidarCacheParametros() {
-  CacheService.getScriptCache().remove('params_sistema_v1');
-  Logger.log('[getParametros] Caché invalidada.');
+  const ssId      = _CLIENT_SPREADSHEET_ID_ || CONFIG.SPREADSHEET_ID || 'default';
+  const CACHE_KEY = 'params_sistema_v1_' + ssId.slice(-12);
+  CacheService.getScriptCache().remove(CACHE_KEY);
+  Logger.log('[getParametros] Caché invalidada para cliente: ' + ssId.slice(-12));
 }
 
 /**
