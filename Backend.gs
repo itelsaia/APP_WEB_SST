@@ -1086,6 +1086,19 @@ function cambiarEstadoCliente(idCliente, nuevoEstado) {
  */
 function validarCredenciales(email, password) {
   try {
+    // ── Verificar estado de la cuenta del cliente ────────────────────
+    const configRes = getParametros();
+    if (configRes && configRes.status === 'success' && configRes.data) {
+      const cuenta = (configRes.data.CUENTA || 'ACTIVA').toString().trim().toUpperCase();
+      if (cuenta === 'INACTIVA') {
+        return {
+          status:  'error',
+          message: '⚠ ACCESO TEMPORALMENTE SUSPENDIDO\n\nEl acceso al sistema ha sido desactivado por el administrador. Comuníquese con soporte para más información.',
+          codigo:  'CUENTA_INACTIVA'
+        };
+      }
+    }
+
     // ── Intentar leer desde cache ────────────────────────────────────
     const cache     = CacheService.getScriptCache();
     const CACHE_KEY = 'db_usuarios_v1';

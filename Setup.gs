@@ -365,7 +365,8 @@ function inicializarBaseDeDatos() {
       ['NOMBRE_EMPRESA', 'SECURITY WORK S&M', 'Nombre de la empresa'],
       ['DRIVE_ROOT_FOLDER_ID', '1dWgNKvEm4rtV7bpLNn7ymN667rbC0NPd', 'ID carpeta raíz para evidencias'],
       ['GEMINI_API_KEY', 'TU_API_KEY_AQUI', 'Clave API Gemini (para extracción de marca y análisis IA)'],
-      ['OPEN_AI_KEY',    'TU_API_KEY_AQUI', 'Clave API OpenAI (opcional)']
+      ['OPEN_AI_KEY',    'TU_API_KEY_AQUI', 'Clave API OpenAI (opcional)'],
+      ['CUENTA',         'ACTIVA',          'Estado del acceso al sistema — ACTIVA o INACTIVA (suspende todos los accesos)']
     ];
     hojaParam.getRange(2, 1, valoresIniciales.length, 3).setValues(valoresIniciales);
     Logger.log('Valores iniciales insertados en PARAM_SISTEMA.');
