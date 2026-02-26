@@ -52,11 +52,11 @@
         btnText.textContent = "VERIFICANDO...";
         hideLoginError();
 
-        // Timeout: si GAS no responde en 30s, resetear automáticamente
+        // Timeout: si GAS no responde en 12s, resetear automáticamente
         var loginTimeout = setTimeout(function () {
             showLoginError('La conexión tardó demasiado. Verifica tu internet e intenta de nuevo.');
             resetButton();
-        }, 30000);
+        }, 12000);
 
         google.script.run
             .withSuccessHandler(function (response) {
