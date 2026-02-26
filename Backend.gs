@@ -5,20 +5,32 @@
  */
 
 // ══════════════════════════════════════════════════════════
-// SINGLETON — Spreadsheet compartido por toda la ejecución
-// Evita llamadas redundantes a openById() dentro del mismo request.
+// MULTI-TENANT — ID de spreadsheet por ejecución
+// Cada proyecto cliente inyecta su propio SPREADSHEET_ID
+// llamando a setSpreadsheetId() antes de cualquier función.
 // ══════════════════════════════════════════════════════════
 let _ss_ = null;
+let _CLIENT_SPREADSHEET_ID_ = null;
+
+/**
+ * Inyecta el spreadsheet ID del cliente que llama a la biblioteca.
+ * Llamar al inicio de cada función wrapper en el proyecto cliente.
+ */
+function setSpreadsheetId(id) {
+  if (id && id !== _CLIENT_SPREADSHEET_ID_) {
+    _CLIENT_SPREADSHEET_ID_ = id;
+    _ss_ = null; // Resetear singleton para usar el nuevo ID
+  }
+}
+
 function _getSpreadsheet() {
   if (!_ss_) {
-    try {
-      _ss_ = SpreadsheetApp.getActiveSpreadsheet();
-    } catch(e) {
-      // Fallback: Si no hay activo, intentar abrir por ID de configuración
-      const id = CONFIG.SPREADSHEET_ID;
-      if (id) {
-        _ss_ = SpreadsheetApp.openById(id);
-      }
+    // 1. ID inyectado por el cliente via setSpreadsheetId()
+    const id = _CLIENT_SPREADSHEET_ID_ || CONFIG.SPREADSHEET_ID;
+    if (id) {
+      _ss_ = SpreadsheetApp.openById(id);
+    } else {
+      try { _ss_ = SpreadsheetApp.getActiveSpreadsheet(); } catch(e) {}
     }
   }
   return _ss_;
