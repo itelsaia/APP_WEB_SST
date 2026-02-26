@@ -1,0 +1,170 @@
+<!-- ══ MÓDULO 6: GESTIÓN DE HALLAZGOS — Galería de Evidencias ══════════ -->
+<div class="space-y-5 animate-fade-in">
+
+    <!-- ── CABECERA DEL MÓDULO ──────────────────────────────────────────── -->
+    <div class="flex items-center justify-between pb-4 border-b border-white/10">
+        <div class="flex items-center gap-3">
+            <button onclick="volverAlPortalAdmin()"
+                class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:bg-white/10 transition border border-white/10 shrink-0"
+                title="Volver al portal">
+                <span class="material-symbols-outlined text-base">arrow_back</span>
+            </button>
+            <div>
+                <h3 class="text-sm font-black text-white uppercase tracking-tight">Gestión de Hallazgos</h3>
+                <p class="text-[9px] text-amber-500/60 font-bold uppercase tracking-widest mt-0.5">Galería de Evidencias · Auditoría de Campo</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <button onclick="cargarHallazgosAdmin()" title="Recargar datos"
+                class="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-all active:scale-95">
+                <span class="material-symbols-outlined text-base">refresh</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ── LOADER ────────────────────────────────────────────────────────── -->
+    <div id="hall-loader" class="flex flex-col items-center gap-3 py-16 text-slate-500">
+        <div class="animate-spin rounded-full h-8 w-8 border-2 border-amber-400 border-t-transparent"></div>
+        <p class="text-xs font-bold uppercase tracking-widest">Cargando evidencias...</p>
+    </div>
+
+    <!-- ── ERROR ─────────────────────────────────────────────────────────── -->
+    <div id="hall-error" class="hidden py-10 text-center">
+        <span class="material-symbols-outlined text-4xl text-red-400 mb-2 block">error_outline</span>
+        <p id="hall-error-msg" class="text-sm text-red-400 font-bold"></p>
+        <button onclick="cargarHallazgosAdmin()"
+            class="mt-4 text-xs text-amber-400 underline">Reintentar</button>
+    </div>
+
+    <!-- ── CONTENIDO PRINCIPAL ───────────────────────────────────────────── -->
+    <div id="hall-content" class="hidden space-y-4">
+
+        <!-- KPI CARDS -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="bg-white/5 rounded-xl border border-white/10 p-3.5 text-center hover:bg-white/8 transition-all">
+                <p id="hall-kpi-total" class="text-2xl font-black text-white leading-none">-</p>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Total</p>
+            </div>
+            <div class="rounded-xl border p-3.5 text-center hover:bg-red-500/8 transition-all"
+                style="background:rgba(239,68,68,0.05);border-color:rgba(239,68,68,0.20);">
+                <p id="hall-kpi-abiertos" class="text-2xl font-black text-red-400 leading-none">-</p>
+                <p class="text-[9px] font-bold uppercase tracking-widest mt-1" style="color:rgba(239,68,68,0.60);">Abiertos</p>
+            </div>
+            <div class="rounded-xl border p-3.5 text-center hover:bg-green-500/8 transition-all"
+                style="background:rgba(34,197,94,0.05);border-color:rgba(34,197,94,0.20);">
+                <p id="hall-kpi-cerrados" class="text-2xl font-black text-green-400 leading-none">-</p>
+                <p class="text-[9px] font-bold uppercase tracking-widest mt-1" style="color:rgba(34,197,94,0.60);">Cerrados</p>
+            </div>
+            <div class="rounded-xl border p-3.5 text-center hover:bg-amber-500/8 transition-all"
+                style="background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.20);">
+                <p id="hall-kpi-pc" class="text-2xl font-black text-amber-400 leading-none">-</p>
+                <p class="text-[9px] font-bold uppercase tracking-widest mt-1" style="color:rgba(245,158,11,0.60);">% Cierre</p>
+            </div>
+        </div>
+
+        <!-- PANEL DE FILTROS -->
+        <div class="border border-white/10 rounded-xl p-3 space-y-3"
+            style="background:rgba(255,255,255,0.02);">
+
+            <!-- Chips de estado -->
+            <div class="flex flex-wrap gap-2">
+                <button onclick="_hallFiltrar('TODOS')" id="hall-f-todos"
+                    class="hall-chip px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg border transition-all active:scale-95
+                           border-amber-500/40 text-amber-400 bg-amber-500/10">
+                    Todos
+                </button>
+                <button onclick="_hallFiltrar('ABIERTO')" id="hall-f-abierto"
+                    class="hall-chip px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg border transition-all active:scale-95
+                           border-white/10 text-slate-400 hover:border-red-500/40 hover:text-red-400">
+                    <span class="material-symbols-outlined text-xs align-middle mr-0.5">warning</span>Abiertos
+                </button>
+                <button onclick="_hallFiltrar('CERRADO')" id="hall-f-cerrado"
+                    class="hall-chip px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg border transition-all active:scale-95
+                           border-white/10 text-slate-400 hover:border-green-500/40 hover:text-green-400">
+                    <span class="material-symbols-outlined text-xs align-middle mr-0.5">check_circle</span>Cerrados
+                </button>
+            </div>
+
+            <!-- Selectores supervisor / empresa -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">badge</span>
+                    <select id="hall-f-supervisor" onchange="_hallAplicarFiltros()"
+                        style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                        class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-amber-500/50 transition-all appearance-none cursor-pointer">
+                        <option value="">Todos los supervisores</option>
+                    </select>
+                </div>
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none z-10">location_city</span>
+                    <select id="hall-f-empresa" onchange="_hallAplicarFiltros()"
+                        style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                        class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-amber-500/50 transition-all appearance-none cursor-pointer">
+                        <option value="">Todas las empresas</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Búsqueda de texto libre -->
+            <div class="relative">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none">search</span>
+                <input type="text" id="hall-f-buscar"
+                    placeholder="Buscar por descripción, ubicación o empresa..."
+                    oninput="_hallAplicarFiltros()"
+                    style="background:#1a242f; color:#f8fafc;"
+                    class="w-full pl-9 pr-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-amber-500/50 transition-all">
+            </div>
+        </div>
+
+        <!-- Contador de resultados -->
+        <p id="hall-count" class="text-[10px] text-slate-500 font-bold uppercase tracking-widest text-right pr-1"></p>
+
+        <!-- ── GALERÍA ─────────────────────────────────────────────────── -->
+        <div id="hall-galeria" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Las cards se inyectan por JS -->
+        </div>
+
+        <!-- Estado vacío -->
+        <div id="hall-empty" class="hidden text-center py-16">
+            <span class="material-symbols-outlined text-5xl text-slate-600 block mb-3">image_search</span>
+            <p class="text-sm text-slate-500 font-bold">No hay hallazgos que coincidan con los filtros.</p>
+            <button onclick="_hallFiltrar('TODOS')"
+                class="mt-4 text-xs text-amber-400 underline">Ver todos</button>
+        </div>
+
+    </div>
+</div>
+
+<!-- ══ MODAL: DETALLE DE HALLAZGO ════════════════════════════════════════ -->
+<div id="hall-modal"
+    class="fixed inset-0 bg-black/90 z-[70] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
+    onclick="if(event.target===this)_hallCerrarDetalle()">
+    <div class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[90vh] border border-white/10 flex flex-col">
+
+        <!-- Handle móvil -->
+        <div class="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
+        </div>
+
+        <!-- Header del modal -->
+        <div class="px-5 pt-4 pb-3 border-b border-white/10 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+                <div id="hall-modal-badge"
+                    class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border">
+                    ABIERTO
+                </div>
+                <div>
+                    <h3 id="hall-modal-titulo" class="text-base font-black text-white tracking-tight">Hallazgo #—</h3>
+                    <p id="hall-modal-fecha" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest"></p>
+                </div>
+            </div>
+            <button onclick="_hallCerrarDetalle()"
+                class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:bg-white/10 transition border border-white/10">
+                <span class="material-symbols-outlined text-base">close</span>
+            </button>
+        </div>
+
+        <!-- Cuerpo del modal (scroll) -->
+        <div id="hall-modal-body" class="overflow-y-auto flex-1 p-4 space-y-4"></div>
+    </div>
+</div>

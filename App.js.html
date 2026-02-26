@@ -1355,6 +1355,11 @@
             if (workspace) workspace.classList.remove('hidden');
             actualizarModuloHeader('Gestión Supervisor SST');
             cargarSupervisorSTT();
+        } else if (modulo === 'hallazgos') {
+            const workspace = document.getElementById('admin-workspace-hallazgos');
+            if (workspace) workspace.classList.remove('hidden');
+            actualizarModuloHeader('Gestión de Hallazgos');
+            cargarHallazgosAdmin();
         }
     }
 
@@ -1366,7 +1371,7 @@
         if (portal) portal.classList.remove('hidden');
 
         // Ocultar todos los workspaces
-        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios', 'admin-workspace-formatos', 'admin-workspace-supervisor-stt'].forEach(function(id) {
+        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios', 'admin-workspace-formatos', 'admin-workspace-supervisor-stt', 'admin-workspace-hallazgos'].forEach(function(id) {
             var ws = document.getElementById(id);
             if (ws) ws.classList.add('hidden');
         });
@@ -3515,6 +3520,421 @@
     }
 
     // ── FIN MÓDULO GESTIÓN SUPERVISOR STT ─────────────────────────────
+
+    // ══════════════════════════════════════════════════════════════════
+    // MÓDULO 6: GESTIÓN DE HALLAZGOS — Galería de Evidencias
+    // ══════════════════════════════════════════════════════════════════
+
+    var _hallCache        = [];       // Todos los hallazgos del backend
+    var _hallEstadoFiltro = 'TODOS';  // Chip de estado activo
+
+    /**
+     * Carga los hallazgos desde el backend y muestra la galería.
+     */
+    function cargarHallazgosAdmin() {
+        var loader  = document.getElementById('hall-loader');
+        var content = document.getElementById('hall-content');
+        var errBox  = document.getElementById('hall-error');
+
+        if (loader)  { loader.classList.remove('hidden'); loader.style.display = 'flex'; }
+        if (content) content.classList.add('hidden');
+        if (errBox)  errBox.classList.add('hidden');
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (loader) { loader.classList.add('hidden'); loader.style.display = 'none'; }
+                if (res.status !== 'success') {
+                    _hallMostrarError(res.message || 'Error desconocido.');
+                    return;
+                }
+
+                _hallCache = res.data.hallazgos || [];
+
+                // Actualizar KPIs
+                var k   = res.data.kpis || {};
+                var $el = function(id){ return document.getElementById(id); };
+                if ($el('hall-kpi-total'))    $el('hall-kpi-total').textContent    = k.total    || 0;
+                if ($el('hall-kpi-abiertos')) $el('hall-kpi-abiertos').textContent = k.abiertos || 0;
+                if ($el('hall-kpi-cerrados')) $el('hall-kpi-cerrados').textContent = k.cerrados || 0;
+                if ($el('hall-kpi-pc'))       $el('hall-kpi-pc').textContent       = (k.pcCierre || 0) + '%';
+
+                // Poblar selectores de filtro
+                _hallPoblarFiltros(res.data.supervisores || [], res.data.empresas || []);
+
+                // Resetear estado de filtro y renderizar
+                _hallEstadoFiltro = 'TODOS';
+                _hallResaltarChip('TODOS');
+
+                if (content) content.classList.remove('hidden');
+                _hallAplicarFiltros();
+            })
+            .withFailureHandler(function(err) {
+                if (loader) { loader.classList.add('hidden'); loader.style.display = 'none'; }
+                _hallMostrarError(err.message || err.toString());
+            })
+            .obtenerGaleriaHallazgosAdmin();
+    }
+
+    /** Muestra el bloque de error del módulo hallazgos. */
+    function _hallMostrarError(msg) {
+        var errBox = document.getElementById('hall-error');
+        var errMsg = document.getElementById('hall-error-msg');
+        if (errBox) errBox.classList.remove('hidden');
+        if (errMsg) errMsg.textContent = msg;
+    }
+
+    /** Rellena los selects de supervisor y empresa con los datos del backend. */
+    function _hallPoblarFiltros(supervisores, empresas) {
+        var selSup = document.getElementById('hall-f-supervisor');
+        var selEmp = document.getElementById('hall-f-empresa');
+        if (selSup) {
+            selSup.innerHTML = '<option value="">Todos los supervisores</option>';
+            supervisores.forEach(function(n) {
+                selSup.innerHTML += '<option value="' + n + '">' + n + '</option>';
+            });
+        }
+        if (selEmp) {
+            selEmp.innerHTML = '<option value="">Todas las empresas</option>';
+            empresas.forEach(function(e) {
+                selEmp.innerHTML += '<option value="' + e + '">' + e + '</option>';
+            });
+        }
+    }
+
+    /**
+     * Activa el filtro de estado (chip) y re-renderiza.
+     * @param {'TODOS'|'ABIERTO'|'CERRADO'} estado
+     */
+    function _hallFiltrar(estado) {
+        _hallEstadoFiltro = estado;
+        _hallResaltarChip(estado);
+        _hallAplicarFiltros();
+    }
+
+    /** Resalta visualmente el chip de estado seleccionado. */
+    function _hallResaltarChip(estado) {
+        var estilos = {
+            TODOS:   'border-amber-500/40 text-amber-400 bg-amber-500/10',
+            ABIERTO: 'border-red-500/40 text-red-400 bg-red-500/10',
+            CERRADO: 'border-green-500/40 text-green-400 bg-green-500/10'
+        };
+        var ids = { TODOS: 'hall-f-todos', ABIERTO: 'hall-f-abierto', CERRADO: 'hall-f-cerrado' };
+        ['TODOS', 'ABIERTO', 'CERRADO'].forEach(function(e) {
+            var btn = document.getElementById(ids[e]);
+            if (!btn) return;
+            var base = 'hall-chip px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg border transition-all active:scale-95 ';
+            btn.className = base + (e === estado
+                ? estilos[e]
+                : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-white');
+        });
+    }
+
+    /**
+     * Aplica todos los filtros activos (estado, supervisor, empresa, texto)
+     * y llama a _hallRenderGaleria con los resultados.
+     */
+    function _hallAplicarFiltros() {
+        var sup    = (document.getElementById('hall-f-supervisor') || {}).value || '';
+        var emp    = (document.getElementById('hall-f-empresa')    || {}).value || '';
+        var buscar = ((document.getElementById('hall-f-buscar')    || {}).value || '').toLowerCase().trim();
+        var estado = _hallEstadoFiltro;
+
+        var filtrados = _hallCache.filter(function(h) {
+            if (estado !== 'TODOS' && h.estado !== estado) return false;
+            if (sup && h.supervisor !== sup)                return false;
+            if (emp && h.empresa    !== emp)                return false;
+            if (buscar) {
+                var texto = ((h.descripcion || '') + ' ' + (h.ubicacion || '') + ' ' + (h.empresa || '')).toLowerCase();
+                if (texto.indexOf(buscar) === -1) return false;
+            }
+            return true;
+        });
+
+        _hallRenderGaleria(filtrados);
+    }
+
+    /**
+     * Convierte una URL de Google Drive a thumbnail directo.
+     * Soporta formatos /d/FILE_ID/view y /open?id=FILE_ID
+     * @param {string} url  URL original
+     * @param {number} sz   Tamaño en píxeles (default 400)
+     */
+    function _hallDriveThumb(url, sz) {
+        if (!url) return '';
+        var m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (!m) m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + (sz || 400);
+        return url;
+    }
+
+    /**
+     * Renderiza la galería con el array de hallazgos filtrados.
+     * @param {Array} hallazgos
+     */
+    function _hallRenderGaleria(hallazgos) {
+        var galeria = document.getElementById('hall-galeria');
+        var empty   = document.getElementById('hall-empty');
+        var counter = document.getElementById('hall-count');
+        if (!galeria) return;
+
+        var n = hallazgos.length;
+        if (counter) counter.textContent = n + ' hallazgo' + (n !== 1 ? 's' : '') + ' encontrado' + (n !== 1 ? 's' : '');
+
+        if (n === 0) {
+            galeria.innerHTML = '';
+            if (empty) empty.classList.remove('hidden');
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+
+        galeria.innerHTML = hallazgos.map(function(h) {
+            var esCerrado    = h.estado === 'CERRADO';
+            var thumbInicial = _hallDriveThumb(h.urlFoto, 500);
+            var thumbCierre  = _hallDriveThumb(h.urlFotoCierre, 500);
+            var placeholder  = 'https://placehold.co/500x320/0d1a24/475569?text=Sin+foto';
+            var fotoSrc      = thumbInicial || placeholder;
+
+            // Badge de estado
+            var badgeCls = esCerrado
+                ? 'bg-green-500/20 border border-green-500/40 text-green-400'
+                : 'bg-red-500/20 border border-red-500/40 text-red-400';
+            var badgeIcon = esCerrado ? 'check_circle' : 'warning';
+
+            // Descripción truncada
+            var desc = h.descripcion
+                ? (h.descripcion.length > 85 ? h.descripcion.substring(0, 85) + '…' : h.descripcion)
+                : '—';
+
+            // Botón Antes/Después (solo si está cerrado y tiene foto de cierre)
+            var btnToggle = '';
+            if (esCerrado && thumbCierre) {
+                var safeI = thumbInicial.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                var safeC = thumbCierre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                btnToggle = '<button onclick="_hallToggleFoto(this,\'' + safeI + '\',\'' + safeC + '\')" '
+                    + 'class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-white/10 text-slate-400 hover:border-green-500/30 hover:text-green-400 transition-all active:scale-95">'
+                    + '<span class="material-symbols-outlined text-xs">compare</span>Antes/Desp.</button>';
+            }
+
+            var safeId = h.id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+            return '<div class="group relative rounded-2xl overflow-hidden border border-white/10 bg-[#0d1a24] '
+                + 'hover:border-amber-500/25 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200">'
+
+                // ── Imagen principal
+                + '<div class="relative overflow-hidden cursor-pointer" style="height:210px;" onclick="_hallAbrirDetalle(\'' + safeId + '\')">'
+                + '<img src="' + fotoSrc + '" alt="Evidencia" '
+                + 'data-inicial="' + thumbInicial + '" data-cierre="' + thumbCierre + '" data-modo="inicial" '
+                + 'class="hall-card-img w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" '
+                + 'onerror="this.src=\'' + placeholder + '\'">'
+
+                // Badge estado (top-right)
+                + '<div class="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded-full backdrop-blur-sm ' + badgeCls + '">'
+                + '<span class="material-symbols-outlined text-xs">' + badgeIcon + '</span>'
+                + '<span class="text-[9px] font-black uppercase tracking-wider">' + h.estado + '</span>'
+                + '</div>'
+
+                // Badge empresa (top-left, si existe)
+                + (h.empresa
+                    ? '<div class="absolute top-2.5 left-2.5 px-2 py-1 rounded-full bg-black/65 text-[9px] font-bold text-slate-200 backdrop-blur-sm border border-white/10 truncate max-w-[55%]">'
+                      + h.empresa + '</div>'
+                    : '')
+
+                // Icono Antes/Después flotante (si está cerrado)
+                + (esCerrado && thumbCierre
+                    ? '<div class="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2 py-1 rounded-full bg-green-900/70 backdrop-blur-sm border border-green-500/30 text-[9px] text-green-300 font-bold">'
+                      + '<span class="material-symbols-outlined text-xs">compare</span>Antes/Después</div>'
+                    : '')
+                + '</div>'
+
+                // ── Panel de información (glassmorphism)
+                + '<div class="p-3.5 space-y-2.5" style="background:rgba(10,20,28,0.97);">'
+
+                // Supervisor y ubicación
+                + '<div class="space-y-1">'
+                + '<div class="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">'
+                + '<span class="material-symbols-outlined text-xs text-amber-400/80">badge</span>'
+                + '<span>' + (h.supervisor || '—') + '</span>'
+                + '</div>'
+                + '<div class="flex items-center gap-1.5 text-[10px] text-slate-500">'
+                + '<span class="material-symbols-outlined text-xs">location_on</span>'
+                + '<span class="truncate">' + (h.ubicacion || '—') + '</span>'
+                + '</div>'
+                + '</div>'
+
+                // Descripción
+                + '<p class="text-[10px] text-slate-400 leading-relaxed">' + desc + '</p>'
+
+                // Fecha + botones de acción
+                + '<div class="flex items-center justify-between gap-2 pt-0.5">'
+                + '<span class="text-[9px] text-slate-600 font-bold shrink-0">' + (h.fecha || '') + '</span>'
+                + '<div class="flex items-center gap-1.5" onclick="event.stopPropagation()">'
+                + btnToggle
+                + '<button onclick="_hallAbrirDetalle(\'' + safeId + '\')" '
+                + 'class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider '
+                + 'border border-amber-500/25 text-amber-400 bg-amber-500/5 hover:bg-amber-500/15 transition-all active:scale-95">'
+                + '<span class="material-symbols-outlined text-xs">open_in_full</span>Detalles</button>'
+                + '</div>'
+                + '</div>'
+
+                + '</div>'  // fin panel info
+                + '</div>';  // fin card
+        }).join('');
+    }
+
+    /**
+     * Alterna la foto de la card entre estado inicial y cierre.
+     * @param {HTMLElement} btn  El botón que activó el toggle
+     * @param {string} thumbInicial  URL thumbnail del hallazgo inicial
+     * @param {string} thumbCierre   URL thumbnail del cierre
+     */
+    function _hallToggleFoto(btn, thumbInicial, thumbCierre) {
+        var card = btn.closest('.group');
+        if (!card) return;
+        var img = card.querySelector('.hall-card-img');
+        if (!img) return;
+        var modo = img.getAttribute('data-modo');
+        if (modo === 'inicial') {
+            img.src = thumbCierre || thumbInicial;
+            img.setAttribute('data-modo', 'cierre');
+            btn.innerHTML = '<span class="material-symbols-outlined text-xs">compare</span>Ver inicial';
+        } else {
+            img.src = thumbInicial;
+            img.setAttribute('data-modo', 'inicial');
+            btn.innerHTML = '<span class="material-symbols-outlined text-xs">compare</span>Antes/Desp.';
+        }
+    }
+
+    /**
+     * Abre el modal de detalle para el hallazgo con el ID indicado.
+     * @param {string} id  Id_hallazgo
+     */
+    function _hallAbrirDetalle(id) {
+        var h = _hallCache.find(function(x){ return x.id === id; });
+        if (!h) return;
+
+        var modal  = document.getElementById('hall-modal');
+        var badge  = document.getElementById('hall-modal-badge');
+        var titulo = document.getElementById('hall-modal-titulo');
+        var fecha  = document.getElementById('hall-modal-fecha');
+        var body   = document.getElementById('hall-modal-body');
+
+        var esCerrado = h.estado === 'CERRADO';
+
+        // Badge de estado
+        if (badge) {
+            badge.textContent = h.estado;
+            badge.className = 'px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border '
+                + (esCerrado
+                    ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                    : 'bg-red-500/20 border-red-500/40 text-red-400');
+        }
+        if (titulo) titulo.textContent = 'Hallazgo #' + h.id;
+        if (fecha)  fecha.textContent  = h.fecha + (h.hora ? ' · ' + h.hora : '');
+
+        // ── Sección de fotos
+        var thumbInicial = _hallDriveThumb(h.urlFoto, 700);
+        var thumbCierre  = _hallDriveThumb(h.urlFotoCierre, 700);
+        var placeholder  = 'https://placehold.co/700x440/0d1a24/475569?text=Sin+foto';
+
+        var secFotos = '';
+        if (esCerrado && thumbCierre) {
+            // Vista comparativa Antes/Después
+            secFotos = '<div class="grid grid-cols-2 gap-3">'
+                + _hallFotoCol('Antes · Hallazgo', thumbInicial, placeholder, 'border-red-500/20', 'text-red-400')
+                + _hallFotoCol('Después · Cierre',  thumbCierre,  placeholder, 'border-green-500/20', 'text-green-400')
+                + '</div>';
+        } else if (thumbInicial) {
+            secFotos = '<div class="rounded-xl overflow-hidden border border-white/10" style="max-height:250px;">'
+                + '<img src="' + thumbInicial + '" class="w-full h-full object-cover" onerror="this.src=\'' + placeholder + '\'">'
+                + '</div>';
+        }
+
+        // ── Sección de datos
+        var secDatos = '<div class="space-y-2.5">'
+
+            // Supervisor / Empresa
+            + '<div class="grid grid-cols-2 gap-2">'
+            + _hallInfoBox('Reportado por', 'badge', h.supervisor || '—')
+            + _hallInfoBox('Empresa', 'location_city', h.empresa || '—')
+            + '</div>'
+
+            // Ubicación
+            + _hallInfoBox('Ubicación', 'location_on', h.ubicacion || '—', true)
+
+            // Descripción
+            + '<div class="bg-white/5 rounded-xl p-3 border border-white/10">'
+            + '<p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">Descripción del hallazgo</p>'
+            + '<p class="text-xs text-slate-200 leading-relaxed">' + (h.descripcion || '—') + '</p>'
+            + '</div>'
+
+            // Línea de tiempo
+            + '<div class="bg-white/5 rounded-xl p-3 border border-white/10 space-y-3">'
+            + '<p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Línea de tiempo</p>'
+            + _hallTimelineItem('red-400', 'Reportado',
+                (h.fecha || '') + (h.hora ? ' · ' + h.hora : '') + ' · por ' + (h.supervisor || '—'))
+            + (esCerrado && h.fechaCierre
+                ? _hallTimelineItem('green-400', 'Cerrado',
+                    h.fechaCierre + (h.horaCierre ? ' · ' + h.horaCierre : ''))
+                : '')
+            + '</div>';
+
+        // Gestión realizada (solo si está cerrado y tiene texto)
+        if (esCerrado && h.gestionRealizada) {
+            secDatos += '<div class="rounded-xl p-3.5 border border-green-500/25" style="background:rgba(34,197,94,0.05);">'
+                + '<p class="text-[9px] text-green-400 font-bold uppercase tracking-widest mb-1.5">Gestión realizada</p>'
+                + '<div class="flex items-start gap-2">'
+                + '<span class="material-symbols-outlined text-sm text-green-400 shrink-0">task_alt</span>'
+                + '<p class="text-xs text-slate-200 leading-relaxed">' + h.gestionRealizada + '</p>'
+                + '</div>'
+                + '</div>';
+        }
+
+        secDatos += '</div>';
+
+        if (body) body.innerHTML = secFotos + secDatos;
+        if (modal) modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    /** Genera HTML de columna de foto para el modal (comparativa). */
+    function _hallFotoCol(titulo, thumb, placeholder, borderCls, textCls) {
+        return '<div class="space-y-1.5">'
+            + '<p class="text-[9px] font-black uppercase tracking-widest text-center ' + textCls + '">' + titulo + '</p>'
+            + '<div class="rounded-xl overflow-hidden border ' + borderCls + '" style="height:180px;">'
+            + '<img src="' + (thumb || placeholder) + '" class="w-full h-full object-cover" onerror="this.src=\'' + placeholder + '\'">'
+            + '</div>'
+            + '</div>';
+    }
+
+    /** Genera HTML de tarjeta de información simple (ícono + texto). */
+    function _hallInfoBox(label, icon, valor, fullWidth) {
+        var wrapper = fullWidth ? '' : '';
+        return '<div class="bg-white/5 rounded-xl p-3 border border-white/10">'
+            + '<p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1">' + label + '</p>'
+            + '<div class="flex items-center gap-1.5">'
+            + '<span class="material-symbols-outlined text-sm text-amber-400">' + icon + '</span>'
+            + '<p class="text-xs font-bold text-white">' + valor + '</p>'
+            + '</div></div>';
+    }
+
+    /** Genera HTML de ítem de la línea de tiempo. */
+    function _hallTimelineItem(dotColor, titulo, subtitulo) {
+        return '<div class="flex items-start gap-2.5">'
+            + '<div class="w-2 h-2 rounded-full bg-' + dotColor + ' mt-1 shrink-0"></div>'
+            + '<div>'
+            + '<p class="text-[10px] font-bold text-white">' + titulo + '</p>'
+            + '<p class="text-[9px] text-slate-400">' + subtitulo + '</p>'
+            + '</div></div>';
+    }
+
+    /** Cierra el modal de detalle de hallazgo. */
+    function _hallCerrarDetalle() {
+        var modal = document.getElementById('hall-modal');
+        if (modal) modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    // ── FIN MÓDULO GESTIÓN HALLAZGOS ──────────────────────────────────
 
     function onError(message) {
         mostrarNotificacion('❌ Error: ' + message, 'error');

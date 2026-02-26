@@ -579,6 +579,19 @@
                     </div>
                 </button>
 
+                <!-- Módulo 6: Gestión Hallazgos — ancho completo -->
+                <button onclick="abrirModuloAdmin('hallazgos')"
+                    class="adm-card col-span-2 group flex flex-col items-center justify-center gap-3 p-5 sm:p-8 rounded-2xl text-center">
+                    <div class="adm-icon rounded-2xl flex items-center justify-center"
+                        style="width:52px;height:52px;">
+                        <span class="material-symbols-outlined text-3xl text-primary">photo_library</span>
+                    </div>
+                    <div>
+                        <p class="text-xs sm:text-sm font-black text-white uppercase tracking-tight leading-none">Gestión Hallazgos</p>
+                        <p class="text-[9px] sm:text-[10px] font-bold mt-1" style="color:rgba(197,160,72,0.55);">Galería de Evidencias · Auditoría de Campo</p>
+                    </div>
+                </button>
+
             </div>
 
         </div>
@@ -606,6 +619,11 @@
         <!-- ══ WORKSPACE: GESTIÓN SUPERVISOR STT ══ -->
         <div id="admin-workspace-supervisor-stt" class="hidden">
             <?!= include('AdminSupervisorSTT'); ?>
+        </div>
+
+        <!-- ══ WORKSPACE: GESTIÓN DE HALLAZGOS ══ -->
+        <div id="admin-workspace-hallazgos" class="hidden">
+            <?!= include('AdminHallazgos'); ?>
         </div>
     </template>
     <template id="tpl-error">

@@ -1885,3 +1885,117 @@ function obtenerReporteDesempenoSTT(params) {
     return { status:'error', message: e.toString() };
   }
 }
+
+/**
+ * Obtiene todos los hallazgos para la Galería de Evidencias del administrador.
+ * Cruza el código del supervisor (Reportado_Por) con DB_USUARIOS para obtener
+ * el nombre completo. Ordena por fecha descendente (más recientes primero).
+ *
+ * @return {Object} { status, data: { hallazgos, kpis, supervisores, empresas } }
+ */
+function obtenerGaleriaHallazgosAdmin() {
+  try {
+    var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var tz = Session.getScriptTimeZone();
+
+    // 1. Mapa código de supervisor → nombre completo (desde DB_USUARIOS)
+    var hojaUsr  = ss.getSheetByName('DB_USUARIOS');
+    var datosUsr = hojaUsr ? hojaUsr.getDataRange().getValues() : [];
+    var mapaSupNombre = {};   // { codigoSup: 'Nombre Completo' }
+    for (var i = 1; i < datosUsr.length; i++) {
+      var cod    = (datosUsr[i][4] || '').toString().trim();
+      var nombre = (datosUsr[i][1] || '').toString().trim();
+      if (cod) mapaSupNombre[cod] = nombre;
+    }
+
+    // Helper: formatear fecha (Date object o string dd/MM/yyyy)
+    function _fmt(val) {
+      if (!val) return '';
+      if (val instanceof Date) {
+        try { return Utilities.formatDate(val, tz, 'dd/MM/yyyy'); } catch(e) { return val.toString(); }
+      }
+      return val.toString().trim();
+    }
+
+    // Helper: formatear hora
+    function _fmtH(val) {
+      if (!val) return '';
+      if (val instanceof Date) {
+        try { return Utilities.formatDate(val, tz, 'HH:mm'); } catch(e) { return val.toString(); }
+      }
+      return val.toString().trim();
+    }
+
+    // 2. Leer DB_HALLAZGOS (sin cabecera)
+    var hojaHall = ss.getSheetByName('DB_HALLAZGOS');
+    var rawHall  = hojaHall ? hojaHall.getDataRange().getValues().slice(1) : [];
+
+    var hallazgos    = [];
+    var empresasSet  = {};
+    var supervisorSet = {};
+
+    for (var j = 0; j < rawHall.length; j++) {
+      var r = rawHall[j];
+      var id = (r[0] || '').toString().trim();
+      if (!id) continue;  // omitir filas vacías
+
+      var codSup    = (r[7]  || '').toString().trim();
+      var nombreSup = mapaSupNombre[codSup] || codSup;
+      var empresa   = (r[6]  || '').toString().trim();
+      var estado    = (r[11] || '').toString().trim().toUpperCase() || 'ABIERTO';
+
+      if (empresa)   empresasSet[empresa]     = true;
+      if (nombreSup) supervisorSet[nombreSup] = true;
+
+      hallazgos.push({
+        id:               id,
+        fecha:            _fmt(r[1]),
+        hora:             _fmtH(r[2]),
+        ubicacion:        (r[3]  || '').toString().trim(),
+        descripcion:      (r[4]  || '').toString().trim(),
+        urlFoto:          (r[5]  || '').toString().trim(),
+        empresa:          empresa,
+        supervisorCod:    codSup,
+        supervisor:       nombreSup,
+        reportadoA:       (r[8]  || '').toString().trim(),
+        gestionRealizada: (r[10] || '').toString().trim(),
+        estado:           estado,
+        fechaCierre:      _fmt(r[12]),
+        horaCierre:       _fmtH(r[13]),
+        urlFotoCierre:    (r[14] || '').toString().trim()
+      });
+    }
+
+    // 3. Ordenar por fecha descendente (más reciente primero)
+    hallazgos.sort(function(a, b) {
+      function _parseD(s) {
+        if (!s) return 0;
+        var p = s.split('/');
+        return p.length === 3 ? parseInt(p[2] + p[1] + p[0]) : 0;
+      }
+      var da = _parseD(a.fecha), db = _parseD(b.fecha);
+      if (db !== da) return db - da;
+      return (b.hora || '') > (a.hora || '') ? 1 : -1;
+    });
+
+    // 4. KPIs globales
+    var total    = hallazgos.length;
+    var cerrados = hallazgos.filter(function(h){ return h.estado === 'CERRADO'; }).length;
+    var abiertos = total - cerrados;
+    var pcCierre = total > 0 ? Math.round((cerrados / total) * 100) : 0;
+
+    return {
+      status: 'success',
+      data: {
+        hallazgos:   hallazgos,
+        kpis:        { total: total, abiertos: abiertos, cerrados: cerrados, pcCierre: pcCierre },
+        supervisores: Object.keys(supervisorSet).sort(),
+        empresas:     Object.keys(empresasSet).sort()
+      }
+    };
+
+  } catch(e) {
+    Logger.log('Error en obtenerGaleriaHallazgosAdmin: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
