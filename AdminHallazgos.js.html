@@ -1,0 +1,281 @@
+<script>
+    /* ═══════════════════════════════════════════════════════════════════
+       MÓDULO 6 — GESTIÓN HALLAZGOS (Galería de Evidencias)
+       ═══════════════════════════════════════════════════════════════════ */
+
+    var _galeriaData  = [];
+    var _filtroEstado = 'todos';
+
+    /* ── Convierte URL Drive a thumbnail embebible ────────────────────── */
+    function _urlDriveToImg(url) {
+        if (!url || url === 'Sin foto' || url === 'Sin foto cierre' || !url.trim()) return null;
+        var m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w600';
+        if (url.indexOf('export=view') !== -1 || url.indexOf('lh3.google') !== -1) return url;
+        return null;
+    }
+
+    /* ── Carga datos desde el backend ────────────────────────────────── */
+    function cargarGaleriaHallazgos() {
+        var loader  = document.getElementById('gh-loader');
+        var content = document.getElementById('gh-content');
+        var err     = document.getElementById('gh-error');
+
+        if (loader)  { loader.classList.remove('hidden'); loader.style.display = ''; }
+        if (content) content.classList.add('hidden');
+        if (err)     err.classList.add('hidden');
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (loader) loader.classList.add('hidden');
+                if (res.status !== 'success') {
+                    var msg = document.getElementById('gh-error-msg');
+                    if (msg) msg.textContent = res.message || 'Error al cargar hallazgos.';
+                    if (err) { err.classList.remove('hidden'); err.style.display = 'flex'; }
+                    return;
+                }
+                _galeriaData = res.data || [];
+                if (content) content.classList.remove('hidden');
+                _actualizarKpis();
+                filtrarGaleriaHallazgos();
+            })
+            .withFailureHandler(function(e) {
+                if (loader) loader.classList.add('hidden');
+                var msg = document.getElementById('gh-error-msg');
+                if (msg) msg.textContent = 'Error de conexión: ' + e.toString();
+                if (err) { err.classList.remove('hidden'); err.style.display = 'flex'; }
+            })
+            .obtenerGaleriaHallazgosAdmin();
+    }
+
+    /* ── Actualiza los KPIs numéricos ────────────────────────────────── */
+    function _actualizarKpis() {
+        var total    = _galeriaData.length;
+        var abiertos = _galeriaData.filter(function(h) { return h.estado === 'ABIERTO'; }).length;
+        var cerrados = _galeriaData.filter(function(h) { return h.estado === 'CERRADO'; }).length;
+        var setNum = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+        setNum('gh-cnt-total-num',    total);
+        setNum('gh-cnt-abiertos-num', abiertos);
+        setNum('gh-cnt-cerrados-num', cerrados);
+    }
+
+    /* ── Activa un filtro de estado ──────────────────────────────────── */
+    function setFiltroEstado(estado, btn) {
+        _filtroEstado = estado;
+        document.querySelectorAll('.gh-pill').forEach(function(p) { p.className = 'gh-pill'; });
+        if (btn) {
+            if (estado === 'todos')   btn.classList.add('active-todos');
+            if (estado === 'ABIERTO') btn.classList.add('active-abierto');
+            if (estado === 'CERRADO') btn.classList.add('active-cerrado');
+        }
+        filtrarGaleriaHallazgos();
+    }
+
+    /* ── Filtra y re-renderiza ───────────────────────────────────────── */
+    function filtrarGaleriaHallazgos() {
+        var texto = ((document.getElementById('gh-filtro-texto') || {}).value || '').toLowerCase().trim();
+        var lista = _galeriaData.filter(function(h) {
+            if (_filtroEstado !== 'todos' && h.estado !== _filtroEstado) return false;
+            if (texto) {
+                var haystack = [h.supervisor, h.empresa, h.ubicacion, h.descripcion, h.id, h.reportadoA]
+                    .join(' ').toLowerCase();
+                if (haystack.indexOf(texto) === -1) return false;
+            }
+            return true;
+        });
+        _renderGaleriaHallazgos(lista);
+    }
+
+    /* ── Renderiza el grid de cards ──────────────────────────────────── */
+    function _renderGaleriaHallazgos(lista) {
+        var grid  = document.getElementById('gh-grid');
+        var empty = document.getElementById('gh-empty');
+        if (!grid) return;
+
+        if (lista.length === 0) {
+            grid.innerHTML = '';
+            if (empty) { empty.classList.remove('hidden'); empty.style.display = 'flex'; }
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+
+        grid.innerHTML = lista.map(function(h) {
+            var idx       = _galeriaData.indexOf(h);
+            var esCerrado = h.estado === 'CERRADO';
+            var imgUrl    = _urlDriveToImg(h.urlFoto);
+            var imgCierre = esCerrado ? _urlDriveToImg(h.urlFotoCierre) : null;
+
+            /* ── Zona de foto ── */
+            var fotoInner = imgUrl
+                ? '<img class="gh-foto" src="' + imgUrl + '" alt="Evidencia"'
+                  + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+                  + '<div class="gh-foto-placeholder" style="display:none;">'
+                  + '<span class="material-symbols-outlined" style="font-size:36px;">hide_image</span>'
+                  + '<span style="font-size:10px;font-weight:700;">Sin foto</span></div>'
+                : '<div class="gh-foto-placeholder">'
+                  + '<span class="material-symbols-outlined" style="font-size:36px;">hide_image</span>'
+                  + '<span style="font-size:10px;font-weight:700;">Sin evidencia fotográfica</span></div>';
+
+            /* Badge estado */
+            var badge = esCerrado
+                ? '<span class="gh-badge gh-badge-cerrado">✓ Cerrado</span>'
+                : '<span class="gh-badge gh-badge-abierto">⚠ Abierto</span>';
+
+            /* Mini-tabs Antes/Después solo cuando hay foto de cierre */
+            var tabs = (esCerrado && imgCierre)
+                ? '<div class="gh-tabs-wrap">'
+                  + '<button class="gh-tab-btn active" id="gh-tab-ev-' + idx + '"'
+                  + ' onclick="event.stopPropagation();_switchCardTab(' + idx + ',\'ev\')">'
+                  + 'Antes</button>'
+                  + '<button class="gh-tab-btn" id="gh-tab-ci-' + idx + '"'
+                  + ' onclick="event.stopPropagation();_switchCardTab(' + idx + ',\'ci\')">'
+                  + 'Después</button>'
+                  + '</div>'
+                : '';
+
+            /* ── Panel de información ── */
+            var gestionHTML = (esCerrado && h.gestionRealizada)
+                ? '<p class="gh-gestion-row">'
+                  + '<span class="material-symbols-outlined gh-meta-icon" style="color:#4ade80;">check_circle</span> '
+                  + _esc(h.gestionRealizada) + '</p>'
+                : '';
+
+            var infoHTML = '<div class="gh-info">'
+                + '<p class="gh-desc">' + _esc(h.descripcion || 'Sin descripción') + '</p>'
+                + '<div class="gh-meta-row">'
+                + '<span class="material-symbols-outlined gh-meta-icon">badge</span>'
+                + '<span class="gh-meta-val">' + _esc(h.supervisor || '—') + '</span>'
+                + '</div>'
+                + '<div class="gh-meta-row">'
+                + '<span class="material-symbols-outlined gh-meta-icon">location_on</span>'
+                + '<span class="gh-meta-val">' + _esc(h.ubicacion || '—') + '</span>'
+                + '</div>'
+                + gestionHTML
+                + '<p class="gh-footer-row">' + _esc(h.fecha) + (h.empresa ? ' · ' + _esc(h.empresa) : '') + '</p>'
+                + '<div class="gh-ver-btn">'
+                + '<span class="material-symbols-outlined" style="font-size:14px;">open_in_full</span>'
+                + 'Ver detalle completo</div>'
+                + '</div>';
+
+            return '<div class="gh-card animate-fade-in"'
+                + ' onclick="abrirDetalleHallazgo(' + idx + ')"'
+                + ' data-idx="' + idx + '"'
+                + ' data-url-ev="' + (imgUrl || '') + '"'
+                + ' data-url-ci="' + (imgCierre || '') + '">'
+                + '<div class="gh-foto-wrap" id="gh-foto-wrap-' + idx + '">'
+                + fotoInner + badge + tabs
+                + '</div>'
+                + infoHTML
+                + '</div>';
+        }).join('');
+    }
+
+    /* ── Switch tabs Antes/Después en la card ────────────────────────── */
+    function _switchCardTab(idx, tab) {
+        var card = document.querySelector('[data-idx="' + idx + '"]');
+        if (!card) return;
+        var url = tab === 'ci' ? card.getAttribute('data-url-ci') : card.getAttribute('data-url-ev');
+        var wrap = document.getElementById('gh-foto-wrap-' + idx);
+        if (wrap && url) {
+            var img = wrap.querySelector('img.gh-foto');
+            if (img) { img.style.display = ''; img.src = url; }
+        }
+        var tabEv = document.getElementById('gh-tab-ev-' + idx);
+        var tabCi = document.getElementById('gh-tab-ci-' + idx);
+        if (tabEv) tabEv.className = 'gh-tab-btn' + (tab === 'ev' ? ' active' : '');
+        if (tabCi) tabCi.className = 'gh-tab-btn' + (tab === 'ci' ? ' active' : '');
+    }
+
+    /* ── Abre modal de detalle ────────────────────────────────────────── */
+    function abrirDetalleHallazgo(idx) {
+        var h = _galeriaData[idx];
+        if (!h) return;
+        var modal = document.getElementById('gh-modal-detalle');
+        if (!modal) return;
+
+        var esCerrado = h.estado === 'CERRADO';
+
+        /* Cabecera */
+        var setTxt = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v || '—'; };
+        setTxt('gh-modal-id',      h.id);
+        setTxt('gh-modal-empresa', h.empresa);
+
+        var badge = document.getElementById('gh-modal-badge');
+        if (badge) {
+            badge.textContent = esCerrado ? '✓ Cerrado' : '⚠ Abierto';
+            badge.className   = 'text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider '
+                + (esCerrado
+                    ? 'bg-green-500/20 border border-green-500/30 text-green-400'
+                    : 'bg-red-500/20 border border-red-500/30 text-red-400');
+        }
+
+        /* Fotos */
+        var urlEv = _urlDriveToImg(h.urlFoto);
+        var urlCi = _urlDriveToImg(h.urlFotoCierre);
+        var simpl = document.getElementById('gh-modal-foto-simple');
+        var dobl  = document.getElementById('gh-modal-foto-doble');
+
+        if (esCerrado) {
+            if (simpl) simpl.classList.add('hidden');
+            if (dobl)  dobl.classList.remove('hidden');
+            var imgA = document.getElementById('gh-modal-img-antes');
+            var imgD = document.getElementById('gh-modal-img-despues');
+            if (imgA) { imgA.style.display = ''; imgA.src = urlEv || ''; }
+            if (imgD) { imgD.style.display = ''; imgD.src = urlCi || ''; }
+        } else {
+            if (dobl)  dobl.classList.add('hidden');
+            if (simpl) simpl.classList.remove('hidden');
+            var imgEv = document.getElementById('gh-modal-img-evidencia');
+            var evPh  = document.getElementById('gh-modal-img-ev-ph');
+            if (imgEv) { imgEv.style.display = ''; imgEv.src = urlEv || ''; }
+            if (evPh)  evPh.style.display = urlEv ? 'none' : 'flex';
+        }
+
+        /* Línea de tiempo */
+        setTxt('gh-modal-fecha-reporte', h.fecha + (h.hora ? ' · ' + h.hora : ''));
+        setTxt('gh-modal-supervisor',    'Por: ' + (h.supervisor || '—'));
+
+        var tCierre = document.getElementById('gh-modal-timeline-cierre');
+        if (esCerrado && (h.fechaCierre || h.horaCierre)) {
+            if (tCierre) tCierre.style.display = 'flex';
+            setTxt('gh-modal-fecha-cierre', (h.fechaCierre || '') + (h.horaCierre ? ' · ' + h.horaCierre : ''));
+        } else {
+            if (tCierre) tCierre.style.display = 'none';
+        }
+
+        /* Detalles */
+        setTxt('gh-modal-empresa-det', h.empresa);
+        setTxt('gh-modal-reportado-a', h.reportadoA);
+        setTxt('gh-modal-ubicacion',   h.ubicacion);
+        setTxt('gh-modal-descripcion', h.descripcion);
+
+        /* Gestión */
+        var gBox = document.getElementById('gh-modal-gestion-box');
+        var gTxt = document.getElementById('gh-modal-gestion');
+        if (esCerrado && h.gestionRealizada) {
+            if (gBox) gBox.classList.remove('hidden');
+            if (gTxt) gTxt.textContent = h.gestionRealizada;
+        } else {
+            if (gBox) gBox.classList.add('hidden');
+        }
+
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    /* ── Cierra modal de detalle ──────────────────────────────────────── */
+    function cerrarDetalleHallazgo() {
+        var modal = document.getElementById('gh-modal-detalle');
+        if (modal) modal.classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    /* ── Escapa HTML para evitar XSS ─────────────────────────────────── */
+    function _esc(str) {
+        if (!str) return '';
+        return str.toString()
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+</script>

@@ -300,7 +300,7 @@
             google.script.run
                 .withSuccessHandler(_irAlLogin)
                 .withFailureHandler(function () {
-                    alert("No se pudo obtener la URL de sesión. Recargue la página.");
+                    mostrarNotificacion('No se pudo obtener la URL de sesión. Recargue la página.', 'error');
                 })
                 .getScriptUrl();
         }
@@ -399,12 +399,12 @@
             const obraSelect = document.getElementById('idObraAsistencia');
 
             if (obraSelect && (obraSelect.value === '' || obraSelect.selectedIndex === 0)) {
-                alert("⚠️ Por favor seleccione la Obra / Proyecto.");
+                mostrarNotificacion('Por favor seleccione la Obra / Proyecto.', 'warning');
                 return;
             }
 
             if (!archivoBase64) {
-                alert("⚠️ Debe capturar la foto de ingreso.");
+                mostrarNotificacion('Debe capturar la foto de ingreso.', 'warning');
                 return;
             }
 
@@ -453,7 +453,7 @@
                         // Notificación amigable (no bloqueante)
                         mostrarNotificacion('✅ ' + res.message, 'success');
                     } else {
-                        alert("⚠️ " + res.message);
+                        mostrarNotificacion(res.message, 'error');
                     }
 
                     // Restaurar botón
@@ -464,7 +464,7 @@
                 })
                 .withFailureHandler(function (err) {
                     console.error("[SST] Error en registrarIngreso:", err);
-                    alert("❌ Error: " + err.toString());
+                    mostrarNotificacion('Error: ' + err.toString(), 'error');
                     if (btn) btn.disabled = false;
                     if (spinner) spinner.classList.add('hidden');
                     if (btnText) btnText.textContent = "INICIAR JORNADA";
@@ -474,25 +474,119 @@
     }
 
     /**
-     * Muestra una notificación tipo toast no-bloqueante
+     * Muestra una notificación tipo toast no-bloqueante.
+     * Tipos soportados: 'success' (verde), 'error' (rojo), 'warning' (amarillo)
      */
     function mostrarNotificacion(mensaje, tipo) {
-        const toast = document.createElement('div');
-        toast.className = `fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border font-bold text-xs uppercase tracking-widest animate-slide-up flex items-center space-x-3 min-w-[300px] justify-center ${tipo === 'success'
-            ? 'bg-green-500/10 border-green-500/20 text-green-400'
-            : 'bg-red-500/10 border-red-500/20 text-red-400'
-            }`;
+        // Limpiar prefijos de emoji heredados
+        var msg = (mensaje || '').replace(/^[✅❌⚠️🔴🟡🟢]\s*/u, '');
 
-        const icon = tipo === 'success' ? 'check_circle' : 'error';
-        toast.innerHTML = `<span class="material-symbols-outlined text-lg">${icon}</span><span>${mensaje}</span>`;
+        var colorClass = tipo === 'success'
+            ? 'background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);color:#4ade80;'
+            : tipo === 'warning'
+                ? 'background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.25);color:#fbbf24;'
+                : 'background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.25);color:#f87171;';
+
+        var icon = tipo === 'success' ? 'check_circle' : tipo === 'warning' ? 'warning' : 'error';
+
+        var toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(0);z-index:9999;'
+            + 'padding:0.875rem 1.5rem;border-radius:1rem;border:1px solid;'
+            + 'font-size:0.7rem;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;'
+            + 'display:flex;align-items:center;gap:0.625rem;min-width:280px;justify-content:center;'
+            + 'backdrop-filter:blur(16px);box-shadow:0 20px 40px rgba(0,0,0,0.4);'
+            + 'transition:all 0.4s cubic-bezier(0.4,0,0.2,1);'
+            + colorClass;
+        toast.innerHTML = '<span class="material-symbols-outlined" style="font-size:1.1rem;">'
+            + icon + '</span><span>' + msg + '</span>';
 
         document.body.appendChild(toast);
-        setTimeout(() => {
+        setTimeout(function () {
             toast.style.opacity = '0';
-            toast.style.transform = 'translate(-50%, 20px)';
-            toast.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
-            setTimeout(() => toast.remove(), 500);
+            toast.style.transform = 'translateX(-50%) translateY(1rem)';
+            setTimeout(function () { toast.remove(); }, 400);
         }, 3500);
+    }
+
+    /**
+     * Modal de confirmación personalizado — reemplaza el confirm() nativo del navegador.
+     * @param {string}   titulo      Título del modal (ej: "Eliminar empresa")
+     * @param {string}   mensaje     Descripción detallada de la acción
+     * @param {Function} onConfirm   Callback ejecutado al confirmar
+     * @param {Object}   [opts]      Opciones: { tipo:'danger'|'warning', btnConfirmar:'Texto', btnCancelar:'Texto' }
+     */
+    function mostrarConfirmacion(titulo, mensaje, onConfirm, opts) {
+        opts = opts || {};
+        var tipo        = opts.tipo        || 'danger';
+        var txtConfirm  = opts.btnConfirmar || (tipo === 'danger' ? 'Eliminar' : 'Confirmar');
+        var txtCancel   = opts.btnCancelar  || 'Cancelar';
+
+        var existing = document.getElementById('sst-confirm-modal');
+        if (existing) existing.remove();
+
+        var iconName  = tipo === 'danger'  ? 'delete_forever' : tipo === 'warning' ? 'warning' : 'help';
+        var iconColor = tipo === 'danger'  ? '#f87171'         : tipo === 'warning' ? '#fbbf24'  : '#94a3b8';
+        var iconBg    = tipo === 'danger'  ? 'rgba(239,68,68,0.1)'  : tipo === 'warning' ? 'rgba(251,191,36,0.1)' : 'rgba(148,163,184,0.1)';
+        var btnOkStyle = tipo === 'danger'
+            ? 'background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;'
+            : tipo === 'warning'
+                ? 'background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;'
+                : 'background:rgba(197,160,72,0.15);border:1px solid rgba(197,160,72,0.3);color:#C5A048;';
+
+        var overlay = document.createElement('div');
+        overlay.id  = 'sst-confirm-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;'
+            + 'justify-content:center;padding:1rem;background:rgba(0,0,0,0.65);'
+            + 'backdrop-filter:blur(10px);animation:sst-fadeIn 0.15s ease;';
+
+        overlay.innerHTML =
+            '<div style="background:rgba(16,25,34,0.98);border:1px solid rgba(197,160,72,0.15);'
+            + 'border-radius:1.25rem;padding:2rem 1.75rem;max-width:360px;width:100%;'
+            + 'box-shadow:0 30px 70px rgba(0,0,0,0.6);animation:sst-slideUp 0.22s cubic-bezier(0.34,1.56,0.64,1);">'
+            +   '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:1.125rem;">'
+            +     '<div style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:' + iconBg + ';">'
+            +       '<span class="material-symbols-outlined" style="font-size:28px;color:' + iconColor + ';">' + iconName + '</span>'
+            +     '</div>'
+            +     '<div>'
+            +       '<p style="font-weight:800;font-size:1rem;color:#f1f5f9;margin:0 0 0.4rem;letter-spacing:-0.01em;">' + titulo + '</p>'
+            +       '<p style="font-size:0.78rem;color:#94a3b8;margin:0;line-height:1.55;">' + mensaje + '</p>'
+            +     '</div>'
+            +     '<div style="display:flex;gap:0.75rem;width:100%;margin-top:0.25rem;">'
+            +       '<button id="sst-confirm-cancel" style="flex:1;padding:0.625rem 1rem;border-radius:0.75rem;'
+            +         'border:1px solid rgba(148,163,184,0.15);background:rgba(148,163,184,0.06);color:#64748b;'
+            +         'font-size:0.7rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;'
+            +         'transition:all 0.2s;">' + txtCancel + '</button>'
+            +       '<button id="sst-confirm-ok" style="flex:1;padding:0.625rem 1rem;border-radius:0.75rem;'
+            +         'font-size:0.7rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;'
+            +         'transition:all 0.2s;' + btnOkStyle + '">' + txtConfirm + '</button>'
+            +     '</div>'
+            +   '</div>'
+            + '</div>';
+
+        // Inyectar keyframes si aún no existen
+        if (!document.getElementById('sst-modal-kf')) {
+            var s = document.createElement('style');
+            s.id  = 'sst-modal-kf';
+            s.textContent = '@keyframes sst-fadeIn{from{opacity:0}to{opacity:1}}'
+                + '@keyframes sst-slideUp{from{opacity:0;transform:translateY(1.5rem) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}';
+            document.head.appendChild(s);
+        }
+
+        document.body.appendChild(overlay);
+        document.body.style.overflow = 'hidden';
+
+        function cerrar() {
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.15s';
+            setTimeout(function () { overlay.remove(); document.body.style.overflow = ''; }, 150);
+        }
+
+        document.getElementById('sst-confirm-cancel').onclick = cerrar;
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) cerrar(); });
+        document.getElementById('sst-confirm-ok').onclick = function () {
+            cerrar();
+            if (typeof onConfirm === 'function') onConfirm();
+        };
     }
 
     // ================================================================
@@ -532,7 +626,7 @@
 
     function submitSalida() {
         if (!archivoBase64) {
-            alert("⚠️ Debe capturar la foto de salida.");
+            mostrarNotificacion('Debe capturar la foto de salida.', 'warning');
             return;
         }
 
@@ -570,7 +664,7 @@
                 if (typeof SERVER_URL !== 'undefined' && SERVER_URL) {
                     _irAlLogin(SERVER_URL);
                 } else {
-                    alert("Error al cerrar sesión. Cierre la pestaña manualmente.");
+                    mostrarNotificacion('Error al cerrar sesión. Cierre la pestaña manualmente.', 'error');
                 }
             })
             .getScriptUrl();
@@ -580,32 +674,43 @@
     // CARGA DE DATOS
     // ================================================================
 
+    /**
+     * Carga la lista de clientes/obras UNA SOLA VEZ y rellena ambos selects:
+     *  - idObraAsistencia (módulo asistencia)
+     *  - idCliente (módulo inspección)
+     * Antes se hacían dos llamadas RPC independientes; ahora es solo una.
+     */
     function cargarObrasAsistencia() {
-        google.script.run
-            .withSuccessHandler(function (response) {
-                const select = document.getElementById('idObraAsistencia');
-                if (!select) return;
-                if (response.status === "success" && response.data && response.data.length > 0) {
-                    select.innerHTML = '<option value="">Seleccione la obra...</option>';
-                    response.data.forEach(clie => {
-                        const opt = document.createElement('option');
-                        opt.value = clie.id;
-                        opt.textContent = clie.nombre;
-                        select.appendChild(opt);
-                    });
-                } else {
-                    select.innerHTML = '<option value="">No hay obras registradas</option>';
-                }
-            })
-            .withFailureHandler(function () {
-                const select = document.getElementById('idObraAsistencia');
-                if (select) select.innerHTML = '<option value="">Error al cargar obras</option>';
-            })
-            .obtenerClientesRegistrados();
+        // No-op: la carga real ocurre en cargarOtrasOpciones() para evitar el doble RPC.
     }
 
     function cargarOtrasOpciones() {
-        google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
+        google.script.run
+            .withSuccessHandler(function(response) {
+                // 1. Rellenar selector de inspección (idCliente)
+                llenarClientes(response);
+
+                // 2. Rellenar selector de obra en asistencia (idObraAsistencia)
+                const selectObra = document.getElementById('idObraAsistencia');
+                if (selectObra) {
+                    if (response.status === 'success' && response.data && response.data.length > 0) {
+                        selectObra.innerHTML = '<option value="">Seleccione la obra...</option>';
+                        response.data.forEach(function(clie) {
+                            const opt = document.createElement('option');
+                            opt.value = clie.id;
+                            opt.textContent = clie.nombre;
+                            selectObra.appendChild(opt);
+                        });
+                    } else {
+                        selectObra.innerHTML = '<option value="">No hay obras registradas</option>';
+                    }
+                }
+            })
+            .withFailureHandler(function() {
+                const selectObra = document.getElementById('idObraAsistencia');
+                if (selectObra) selectObra.innerHTML = '<option value="">Error al cargar obras</option>';
+            })
+            .obtenerClientesRegistrados();
         configurarFormulario();
     }
 
@@ -1358,8 +1463,8 @@
         } else if (modulo === 'hallazgos') {
             const workspace = document.getElementById('admin-workspace-hallazgos');
             if (workspace) workspace.classList.remove('hidden');
-            actualizarModuloHeader('Gestión de Hallazgos');
-            cargarHallazgosAdmin();
+            actualizarModuloHeader('Gestión Hallazgos');
+            cargarGaleriaHallazgos();
         }
     }
 
@@ -1710,20 +1815,26 @@
      * Solicita confirmación antes de eliminar un cliente.
      */
     function confirmarEliminarCliente(id, nombre) {
-        if (!confirm('¿Está seguro de eliminar la empresa "' + nombre + '"?\nEsta acción no se puede deshacer.')) return;
-        google.script.run
-            .withSuccessHandler(function (res) {
-                if (res.status === 'success') {
-                    mostrarNotificacion('✅ ' + res.message, 'success');
-                    cargarClientesAdmin();
-                } else {
-                    mostrarNotificacion('❌ ' + res.message, 'error');
-                }
-            })
-            .withFailureHandler(function (err) {
-                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
-            })
-            .eliminarCliente(id);
+        mostrarConfirmacion(
+            'Eliminar empresa',
+            '¿Está seguro de eliminar "' + nombre + '"? Esta acción no se puede deshacer.',
+            function () {
+                google.script.run
+                    .withSuccessHandler(function (res) {
+                        if (res.status === 'success') {
+                            mostrarNotificacion(res.message, 'success');
+                            cargarClientesAdmin();
+                        } else {
+                            mostrarNotificacion(res.message, 'error');
+                        }
+                    })
+                    .withFailureHandler(function (err) {
+                        mostrarNotificacion('Error: ' + err.toString(), 'error');
+                    })
+                    .eliminarCliente(id);
+            },
+            { tipo: 'danger', btnConfirmar: 'Eliminar' }
+        );
     }
 
     /**
@@ -1732,24 +1843,29 @@
      */
     function toggleEstadoCliente(id, estadoActual) {
         var nuevoEstado = estadoActual === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
-        var msg = nuevoEstado === 'INACTIVO'
-            ? '¿Desactivar esta empresa?\nLos supervisores ya no podrán iniciar jornadas para ella.'
-            : '¿Reactivar esta empresa?';
-        if (!confirm(msg)) return;
-
-        google.script.run
-            .withSuccessHandler(function (res) {
-                if (res.status === 'success') {
-                    mostrarNotificacion('✅ ' + res.message, 'success');
-                    cargarClientesAdmin();
-                } else {
-                    mostrarNotificacion('❌ ' + res.message, 'error');
-                }
-            })
-            .withFailureHandler(function (err) {
-                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
-            })
-            .cambiarEstadoCliente(id, nuevoEstado);
+        var esDesactivar = nuevoEstado === 'INACTIVO';
+        mostrarConfirmacion(
+            esDesactivar ? 'Desactivar empresa' : 'Reactivar empresa',
+            esDesactivar
+                ? 'Los supervisores ya no podrán iniciar jornadas para esta empresa.'
+                : '¿Confirma que desea reactivar esta empresa?',
+            function () {
+                google.script.run
+                    .withSuccessHandler(function (res) {
+                        if (res.status === 'success') {
+                            mostrarNotificacion(res.message, 'success');
+                            cargarClientesAdmin();
+                        } else {
+                            mostrarNotificacion(res.message, 'error');
+                        }
+                    })
+                    .withFailureHandler(function (err) {
+                        mostrarNotificacion('Error: ' + err.toString(), 'error');
+                    })
+                    .cambiarEstadoCliente(id, nuevoEstado);
+            },
+            { tipo: esDesactivar ? 'warning' : 'success', btnConfirmar: esDesactivar ? 'Desactivar' : 'Reactivar' }
+        );
     }
 
     // ================================================================
@@ -2125,6 +2241,9 @@
                     '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" title="' + (esActivo ? 'Desactivar' : 'Activar') + '" ' +
                         'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-' + (esActivo ? 'red' : 'green') + '-500/20 border border-white/10 flex items-center justify-center transition-all">' +
                         '<span class="material-symbols-outlined text-sm ' + (esActivo ? 'text-green-400 hover:text-red-400' : 'text-red-400 hover:text-green-400') + '">' + (esActivo ? 'toggle_on' : 'toggle_off') + '</span></button>' +
+                    '<button onclick="confirmarEliminarUsuario(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" title="Eliminar usuario" ' +
+                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-all">' +
+                        '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-red-400">delete</span></button>' +
                     '</div>' +
                 '</td>' +
                 '</tr>';
@@ -2158,16 +2277,19 @@
                 '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '</div>' +
-                '<div class="flex gap-2 border-t border-white/5 pt-2">' +
+                '<div class="grid grid-cols-2 gap-2 border-t border-white/5 pt-2">' +
                 '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" ' +
-                    'class="flex-1 py-1.5 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center gap-1">' +
+                    'class="py-1.5 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center gap-1">' +
                     '<span class="material-symbols-outlined text-xs">edit</span>Editar</button>' +
                 '<button onclick="abrirModalResetPassword(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" ' +
-                    'class="flex-1 py-1.5 text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center gap-1">' +
+                    'class="py-1.5 text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center gap-1">' +
                     '<span class="material-symbols-outlined text-xs">key</span>Password</button>' +
                 '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" ' +
-                    'class="flex-1 py-1.5 text-[10px] font-black ' + (esActivo ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20') + ' border rounded-lg flex items-center justify-center gap-1">' +
+                    'class="py-1.5 text-[10px] font-black ' + (esActivo ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20') + ' border rounded-lg flex items-center justify-center gap-1">' +
                     '<span class="material-symbols-outlined text-xs">' + (esActivo ? 'toggle_off' : 'toggle_on') + '</span>' + (esActivo ? 'Desactivar' : 'Activar') + '</button>' +
+                '<button onclick="confirmarEliminarUsuario(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" ' +
+                    'class="py-1.5 text-[10px] font-black text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-center gap-1">' +
+                    '<span class="material-symbols-outlined text-xs">delete</span>Eliminar</button>' +
                 '</div></div>';
         }).join('');
     }
@@ -2406,26 +2528,58 @@
             .resetPasswordUsuario(_usrResetId, newPass);
     }
 
+    // ── Eliminar usuario ──────────────────────────────────────────────
+
+    function confirmarEliminarUsuario(id, nombre) {
+        mostrarConfirmacion(
+            'Eliminar usuario',
+            'Se eliminará permanentemente el usuario <strong>' + nombre + '</strong> (' + id + '). Esta acción no se puede deshacer.',
+            function () {
+                google.script.run
+                    .withSuccessHandler(function (res) {
+                        if (res.status === 'success') {
+                            mostrarNotificacion(res.message, 'success');
+                            cargarUsuariosAdmin();
+                        } else {
+                            mostrarNotificacion(res.message, 'error');
+                        }
+                    })
+                    .withFailureHandler(function (err) {
+                        mostrarNotificacion('Error: ' + err.toString(), 'error');
+                    })
+                    .eliminarUsuario(id);
+            },
+            { tipo: 'danger', btnConfirmar: 'Eliminar' }
+        );
+    }
+
     // ── Toggle estado usuario ─────────────────────────────────────────
 
     function toggleEstadoUsuario(id) {
-        var u = _usuariosTotal.find(function(x) { return x.id === id; });
-        var accion = u && u.estado === 'ACTIVO' ? 'desactivar' : 'activar';
-        if (!confirm('¿Desea ' + accion + ' este usuario?')) return;
-
-        google.script.run
-            .withSuccessHandler(function(res) {
-                if (res.status === 'success') {
-                    mostrarNotificacion('✅ ' + res.message, 'success');
-                    cargarUsuariosAdmin();
-                } else {
-                    mostrarNotificacion('❌ ' + res.message, 'error');
-                }
-            })
-            .withFailureHandler(function(err) {
-                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
-            })
-            .toggleEstadoUsuario(id);
+        var u          = _usuariosTotal.find(function (x) { return x.id === id; });
+        var esActivo   = u && u.estado === 'ACTIVO';
+        mostrarConfirmacion(
+            esActivo ? 'Desactivar usuario' : 'Activar usuario',
+            esActivo
+                ? 'El usuario no podrá iniciar sesión mientras esté inactivo.'
+                : '¿Confirma que desea activar este usuario?',
+            function () {
+                google.script.run
+                    .withSuccessHandler(function (res) {
+                        if (res.status === 'success') {
+                            mostrarNotificacion(res.message, 'success');
+                            cargarUsuariosAdmin();
+                        } else {
+                            mostrarNotificacion(res.message, 'error');
+                        }
+                    })
+                    .withFailureHandler(function (err) {
+                        mostrarNotificacion('Error: ' + err.toString(), 'error');
+                    })
+                    .toggleEstadoUsuario(id);
+            },
+            { tipo: esActivo ? 'warning' : 'success', btnConfirmar: esActivo ? 'Desactivar' : 'Activar' }
+        );
     }
 
     // ════════════════════════════════════════════════════════
@@ -2713,21 +2867,26 @@
     function eliminarFormato(idEnc, empresaEnc) {
         var id      = decodeURIComponent(idEnc);
         var empresa = decodeURIComponent(empresaEnc);
-        if (!confirm('¿Eliminar el formato ' + id + ' de ' + empresa + '?\nEsta acción no se puede deshacer.')) return;
-
-        google.script.run
-            .withSuccessHandler(function(res) {
-                if (res.status === 'success') {
-                    mostrarNotificacion('✅ ' + res.message, 'success');
-                    cargarFormatosAdmin();
-                } else {
-                    mostrarNotificacion('❌ ' + res.message, 'error');
-                }
-            })
-            .withFailureHandler(function(err) {
-                mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
-            })
-            .eliminarFormato(id, empresa);
+        mostrarConfirmacion(
+            'Eliminar formato',
+            'Se eliminará el formato <strong>' + id + '</strong> de <strong>' + empresa + '</strong>. Esta acción no se puede deshacer.',
+            function () {
+                google.script.run
+                    .withSuccessHandler(function (res) {
+                        if (res.status === 'success') {
+                            mostrarNotificacion(res.message, 'success');
+                            cargarFormatosAdmin();
+                        } else {
+                            mostrarNotificacion(res.message, 'error');
+                        }
+                    })
+                    .withFailureHandler(function (err) {
+                        mostrarNotificacion('Error: ' + err.toString(), 'error');
+                    })
+                    .eliminarFormato(id, empresa);
+            },
+            { tipo: 'danger', btnConfirmar: 'Eliminar' }
+        );
     }
 
     function onExito(response) {
@@ -3525,412 +3684,296 @@
     // MÓDULO 6: GESTIÓN DE HALLAZGOS — Galería de Evidencias
     // ══════════════════════════════════════════════════════════════════
 
-    var _hallCache        = [];       // Todos los hallazgos del backend
-    var _hallEstadoFiltro = 'TODOS';  // Chip de estado activo
+    var _ghCache        = [];       // Todos los hallazgos del backend
+    var _ghEstadoFiltro = 'todos';  // Chip de estado activo ('todos'|'ABIERTO'|'CERRADO')
 
     /**
      * Carga los hallazgos desde el backend y muestra la galería.
      */
-    function cargarHallazgosAdmin() {
-        var loader  = document.getElementById('hall-loader');
-        var content = document.getElementById('hall-content');
-        var errBox  = document.getElementById('hall-error');
+    function cargarGaleriaHallazgos() {
+        var loader  = document.getElementById('gh-loader');
+        var content = document.getElementById('gh-content');
+        var errBox  = document.getElementById('gh-error');
 
         if (loader)  { loader.classList.remove('hidden'); loader.style.display = 'flex'; }
         if (content) content.classList.add('hidden');
-        if (errBox)  errBox.classList.add('hidden');
+        if (errBox)  { errBox.classList.add('hidden'); errBox.style.display = 'none'; }
 
         google.script.run
             .withSuccessHandler(function(res) {
                 if (loader) { loader.classList.add('hidden'); loader.style.display = 'none'; }
                 if (res.status !== 'success') {
-                    _hallMostrarError(res.message || 'Error desconocido.');
+                    _ghMostrarError(res.message || 'Error desconocido.');
                     return;
                 }
 
-                _hallCache = res.data.hallazgos || [];
+                _ghCache = res.data.hallazgos || [];
 
-                // Actualizar KPIs
+                // Actualizar KPIs (3 tarjetas: Total, Abiertos, Cerrados)
                 var k   = res.data.kpis || {};
                 var $el = function(id){ return document.getElementById(id); };
-                if ($el('hall-kpi-total'))    $el('hall-kpi-total').textContent    = k.total    || 0;
-                if ($el('hall-kpi-abiertos')) $el('hall-kpi-abiertos').textContent = k.abiertos || 0;
-                if ($el('hall-kpi-cerrados')) $el('hall-kpi-cerrados').textContent = k.cerrados || 0;
-                if ($el('hall-kpi-pc'))       $el('hall-kpi-pc').textContent       = (k.pcCierre || 0) + '%';
+                if ($el('gh-cnt-total-num'))    $el('gh-cnt-total-num').textContent    = k.total    || 0;
+                if ($el('gh-cnt-abiertos-num')) $el('gh-cnt-abiertos-num').textContent = k.abiertos || 0;
+                if ($el('gh-cnt-cerrados-num')) $el('gh-cnt-cerrados-num').textContent = k.cerrados || 0;
 
-                // Poblar selectores de filtro
-                _hallPoblarFiltros(res.data.supervisores || [], res.data.empresas || []);
-
-                // Resetear estado de filtro y renderizar
-                _hallEstadoFiltro = 'TODOS';
-                _hallResaltarChip('TODOS');
+                // Resetear filtros y renderizar
+                _ghEstadoFiltro = 'todos';
+                var fText = document.getElementById('gh-filtro-texto');
+                if (fText) fText.value = '';
 
                 if (content) content.classList.remove('hidden');
-                _hallAplicarFiltros();
+                _ghRenderGrid(_ghCache);
             })
             .withFailureHandler(function(err) {
                 if (loader) { loader.classList.add('hidden'); loader.style.display = 'none'; }
-                _hallMostrarError(err.message || err.toString());
+                _ghMostrarError(err.message || err.toString());
             })
             .obtenerGaleriaHallazgosAdmin();
     }
 
-    /** Muestra el bloque de error del módulo hallazgos. */
-    function _hallMostrarError(msg) {
-        var errBox = document.getElementById('hall-error');
-        var errMsg = document.getElementById('hall-error-msg');
-        if (errBox) errBox.classList.remove('hidden');
+    /** Muestra el panel de error de la galería. */
+    function _ghMostrarError(msg) {
+        var errBox = document.getElementById('gh-error');
+        var errMsg = document.getElementById('gh-error-msg');
+        if (errBox) { errBox.classList.remove('hidden'); errBox.style.display = 'flex'; }
         if (errMsg) errMsg.textContent = msg;
     }
 
-    /** Rellena los selects de supervisor y empresa con los datos del backend. */
-    function _hallPoblarFiltros(supervisores, empresas) {
-        var selSup = document.getElementById('hall-f-supervisor');
-        var selEmp = document.getElementById('hall-f-empresa');
-        if (selSup) {
-            selSup.innerHTML = '<option value="">Todos los supervisores</option>';
-            supervisores.forEach(function(n) {
-                selSup.innerHTML += '<option value="' + n + '">' + n + '</option>';
-            });
-        }
-        if (selEmp) {
-            selEmp.innerHTML = '<option value="">Todas las empresas</option>';
-            empresas.forEach(function(e) {
-                selEmp.innerHTML += '<option value="' + e + '">' + e + '</option>';
-            });
-        }
-    }
-
     /**
-     * Activa el filtro de estado (chip) y re-renderiza.
-     * @param {'TODOS'|'ABIERTO'|'CERRADO'} estado
+     * Cambia el filtro de estado activo (pills) y re-renderiza.
+     * @param {string} estado  'todos' | 'ABIERTO' | 'CERRADO'
+     * @param {HTMLElement} btn  El botón pill que se presionó
      */
-    function _hallFiltrar(estado) {
-        _hallEstadoFiltro = estado;
-        _hallResaltarChip(estado);
-        _hallAplicarFiltros();
-    }
-
-    /** Resalta visualmente el chip de estado seleccionado. */
-    function _hallResaltarChip(estado) {
-        var estilos = {
-            TODOS:   'border-amber-500/40 text-amber-400 bg-amber-500/10',
-            ABIERTO: 'border-red-500/40 text-red-400 bg-red-500/10',
-            CERRADO: 'border-green-500/40 text-green-400 bg-green-500/10'
-        };
-        var ids = { TODOS: 'hall-f-todos', ABIERTO: 'hall-f-abierto', CERRADO: 'hall-f-cerrado' };
-        ['TODOS', 'ABIERTO', 'CERRADO'].forEach(function(e) {
-            var btn = document.getElementById(ids[e]);
-            if (!btn) return;
-            var base = 'hall-chip px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg border transition-all active:scale-95 ';
-            btn.className = base + (e === estado
-                ? estilos[e]
-                : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-white');
+    function setFiltroEstado(estado, btn) {
+        _ghEstadoFiltro = estado;
+        // Actualizar clases active en todos los pills
+        document.querySelectorAll('.gh-pill').forEach(function(p) {
+            p.classList.remove('active-todos', 'active-abierto', 'active-cerrado');
         });
+        if (btn) {
+            var cls = estado === 'todos' ? 'active-todos' : estado === 'ABIERTO' ? 'active-abierto' : 'active-cerrado';
+            btn.classList.add(cls);
+        }
+        filtrarGaleriaHallazgos();
     }
 
     /**
-     * Aplica todos los filtros activos (estado, supervisor, empresa, texto)
-     * y llama a _hallRenderGaleria con los resultados.
+     * Aplica el filtro de texto libre + el estado activo y re-renderiza la galería.
      */
-    function _hallAplicarFiltros() {
-        var sup    = (document.getElementById('hall-f-supervisor') || {}).value || '';
-        var emp    = (document.getElementById('hall-f-empresa')    || {}).value || '';
-        var buscar = ((document.getElementById('hall-f-buscar')    || {}).value || '').toLowerCase().trim();
-        var estado = _hallEstadoFiltro;
+    function filtrarGaleriaHallazgos() {
+        var buscar = ((document.getElementById('gh-filtro-texto') || {}).value || '').toLowerCase().trim();
+        var estado = _ghEstadoFiltro;
 
-        var filtrados = _hallCache.filter(function(h) {
-            if (estado !== 'TODOS' && h.estado !== estado) return false;
-            if (sup && h.supervisor !== sup)                return false;
-            if (emp && h.empresa    !== emp)                return false;
+        var filtrados = _ghCache.filter(function(h) {
+            if (estado !== 'todos' && h.estado !== estado) return false;
             if (buscar) {
-                var texto = ((h.descripcion || '') + ' ' + (h.ubicacion || '') + ' ' + (h.empresa || '')).toLowerCase();
+                var texto = ((h.descripcion || '') + ' ' + (h.supervisor || '') + ' '
+                    + (h.empresa || '') + ' ' + (h.ubicacion || '')).toLowerCase();
                 if (texto.indexOf(buscar) === -1) return false;
             }
             return true;
         });
 
-        _hallRenderGaleria(filtrados);
+        _ghRenderGrid(filtrados);
     }
 
     /**
-     * Convierte una URL de Google Drive a thumbnail directo.
-     * Soporta formatos /d/FILE_ID/view y /open?id=FILE_ID
+     * Convierte URL de Google Drive a thumbnail directo.
      * @param {string} url  URL original
-     * @param {number} sz   Tamaño en píxeles (default 400)
+     * @param {number} sz   Ancho en px (default 500)
      */
-    function _hallDriveThumb(url, sz) {
+    function _ghDriveThumb(url, sz) {
         if (!url) return '';
         var m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
         if (!m) m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-        if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + (sz || 400);
+        if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + (sz || 500);
         return url;
     }
 
     /**
-     * Renderiza la galería con el array de hallazgos filtrados.
-     * @param {Array} hallazgos
+     * Renderiza las cards en el grid usando las clases CSS premium .gh-*.
+     * @param {Array} hallazgos  Array filtrado de hallazgos
      */
-    function _hallRenderGaleria(hallazgos) {
-        var galeria = document.getElementById('hall-galeria');
-        var empty   = document.getElementById('hall-empty');
-        var counter = document.getElementById('hall-count');
-        if (!galeria) return;
+    function _ghRenderGrid(hallazgos) {
+        var grid  = document.getElementById('gh-grid');
+        var empty = document.getElementById('gh-empty');
+        if (!grid) return;
 
-        var n = hallazgos.length;
-        if (counter) counter.textContent = n + ' hallazgo' + (n !== 1 ? 's' : '') + ' encontrado' + (n !== 1 ? 's' : '');
-
-        if (n === 0) {
-            galeria.innerHTML = '';
-            if (empty) empty.classList.remove('hidden');
+        if (hallazgos.length === 0) {
+            grid.innerHTML = '';
+            if (empty) { empty.classList.remove('hidden'); empty.style.display = 'flex'; }
             return;
         }
-        if (empty) empty.classList.add('hidden');
+        if (empty) { empty.classList.add('hidden'); empty.style.display = 'none'; }
 
-        galeria.innerHTML = hallazgos.map(function(h) {
+        var placeholder = 'https://placehold.co/500x320/0d1821/2d3a48?text=Sin+foto';
+
+        grid.innerHTML = hallazgos.map(function(h) {
             var esCerrado    = h.estado === 'CERRADO';
-            var thumbInicial = _hallDriveThumb(h.urlFoto, 500);
-            var thumbCierre  = _hallDriveThumb(h.urlFotoCierre, 500);
-            var placeholder  = 'https://placehold.co/500x320/0d1a24/475569?text=Sin+foto';
+            var thumbInicial = _ghDriveThumb(h.urlFoto, 500);
+            var thumbCierre  = _ghDriveThumb(h.urlFotoCierre, 500);
             var fotoSrc      = thumbInicial || placeholder;
+            var safeId       = h.id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            var safeI        = thumbInicial.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            var safeC        = thumbCierre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
-            // Badge de estado
-            var badgeCls = esCerrado
-                ? 'bg-green-500/20 border border-green-500/40 text-green-400'
-                : 'bg-red-500/20 border border-red-500/40 text-red-400';
-            var badgeIcon = esCerrado ? 'check_circle' : 'warning';
-
-            // Descripción truncada
-            var desc = h.descripcion
-                ? (h.descripcion.length > 85 ? h.descripcion.substring(0, 85) + '…' : h.descripcion)
-                : '—';
-
-            // Botón Antes/Después (solo si está cerrado y tiene foto de cierre)
-            var btnToggle = '';
+            // Mini-tabs Antes/Después (solo CERRADO con foto de cierre)
+            var tabs = '';
             if (esCerrado && thumbCierre) {
-                var safeI = thumbInicial.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-                var safeC = thumbCierre.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-                btnToggle = '<button onclick="_hallToggleFoto(this,\'' + safeI + '\',\'' + safeC + '\')" '
-                    + 'class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-white/10 text-slate-400 hover:border-green-500/30 hover:text-green-400 transition-all active:scale-95">'
-                    + '<span class="material-symbols-outlined text-xs">compare</span>Antes/Desp.</button>';
+                tabs = '<div class="gh-tabs-wrap">'
+                    + '<button class="gh-tab-btn active" onclick="event.stopPropagation();_ghTab(this,\'inicial\',\'' + safeI + '\',\'' + safeC + '\')">Antes</button>'
+                    + '<button class="gh-tab-btn" onclick="event.stopPropagation();_ghTab(this,\'cierre\',\'' + safeI + '\',\'' + safeC + '\')">Después</button>'
+                    + '</div>';
             }
 
-            var safeId = h.id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            // Gestión resumida (solo CERRADO)
+            var gestionRow = '';
+            if (esCerrado && h.gestionRealizada) {
+                gestionRow = '<p class="gh-gestion-row">✅ ' + h.gestionRealizada + '</p>';
+            }
 
-            return '<div class="group relative rounded-2xl overflow-hidden border border-white/10 bg-[#0d1a24] '
-                + 'hover:border-amber-500/25 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200">'
-
-                // ── Imagen principal
-                + '<div class="relative overflow-hidden cursor-pointer" style="height:210px;" onclick="_hallAbrirDetalle(\'' + safeId + '\')">'
-                + '<img src="' + fotoSrc + '" alt="Evidencia" '
-                + 'data-inicial="' + thumbInicial + '" data-cierre="' + thumbCierre + '" data-modo="inicial" '
-                + 'class="hall-card-img w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" '
-                + 'onerror="this.src=\'' + placeholder + '\'">'
-
-                // Badge estado (top-right)
-                + '<div class="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded-full backdrop-blur-sm ' + badgeCls + '">'
-                + '<span class="material-symbols-outlined text-xs">' + badgeIcon + '</span>'
-                + '<span class="text-[9px] font-black uppercase tracking-wider">' + h.estado + '</span>'
+            return '<div class="gh-card" onclick="abrirDetalleHallazgo(\'' + safeId + '\')">'
+                // Zona de foto
+                + '<div class="gh-foto-wrap">'
+                + '<img class="gh-foto" src="' + fotoSrc + '" alt="Evidencia"'
+                + ' data-inicial="' + thumbInicial + '" data-cierre="' + thumbCierre + '"'
+                + ' onerror="this.src=\'' + placeholder + '\'">'
+                + '<div class="gh-badge ' + (esCerrado ? 'gh-badge-cerrado' : 'gh-badge-abierto') + '">'
+                + (esCerrado ? 'Cerrado' : 'Abierto')
                 + '</div>'
-
-                // Badge empresa (top-left, si existe)
-                + (h.empresa
-                    ? '<div class="absolute top-2.5 left-2.5 px-2 py-1 rounded-full bg-black/65 text-[9px] font-bold text-slate-200 backdrop-blur-sm border border-white/10 truncate max-w-[55%]">'
-                      + h.empresa + '</div>'
-                    : '')
-
-                // Icono Antes/Después flotante (si está cerrado)
-                + (esCerrado && thumbCierre
-                    ? '<div class="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2 py-1 rounded-full bg-green-900/70 backdrop-blur-sm border border-green-500/30 text-[9px] text-green-300 font-bold">'
-                      + '<span class="material-symbols-outlined text-xs">compare</span>Antes/Después</div>'
-                    : '')
+                + tabs
                 + '</div>'
-
-                // ── Panel de información (glassmorphism)
-                + '<div class="p-3.5 space-y-2.5" style="background:rgba(10,20,28,0.97);">'
-
-                // Supervisor y ubicación
-                + '<div class="space-y-1">'
-                + '<div class="flex items-center gap-1.5 text-[11px] font-bold text-slate-200">'
-                + '<span class="material-symbols-outlined text-xs text-amber-400/80">badge</span>'
-                + '<span>' + (h.supervisor || '—') + '</span>'
+                // Panel de información
+                + '<div class="gh-info">'
+                + '<p class="gh-desc">' + (h.descripcion || '—') + '</p>'
+                + '<div class="gh-meta-row"><span class="material-symbols-outlined gh-meta-icon">badge</span>'
+                + '<span class="gh-meta-val">' + (h.supervisor || '—') + '</span></div>'
+                + '<div class="gh-meta-row"><span class="material-symbols-outlined gh-meta-icon">location_on</span>'
+                + '<span class="gh-meta-val">' + (h.ubicacion || '—') + '</span></div>'
+                + '<div class="gh-meta-row"><span class="material-symbols-outlined gh-meta-icon">location_city</span>'
+                + '<span class="gh-meta-val">' + (h.empresa || '—') + '</span></div>'
+                + gestionRow
+                + '<p class="gh-footer-row">' + (h.fecha || '') + (h.hora ? ' · ' + h.hora : '') + '</p>'
+                + '<button class="gh-ver-btn" onclick="event.stopPropagation();abrirDetalleHallazgo(\'' + safeId + '\')">'
+                + '<span class="material-symbols-outlined" style="font-size:14px">open_in_full</span>Ver detalles</button>'
                 + '</div>'
-                + '<div class="flex items-center gap-1.5 text-[10px] text-slate-500">'
-                + '<span class="material-symbols-outlined text-xs">location_on</span>'
-                + '<span class="truncate">' + (h.ubicacion || '—') + '</span>'
-                + '</div>'
-                + '</div>'
-
-                // Descripción
-                + '<p class="text-[10px] text-slate-400 leading-relaxed">' + desc + '</p>'
-
-                // Fecha + botones de acción
-                + '<div class="flex items-center justify-between gap-2 pt-0.5">'
-                + '<span class="text-[9px] text-slate-600 font-bold shrink-0">' + (h.fecha || '') + '</span>'
-                + '<div class="flex items-center gap-1.5" onclick="event.stopPropagation()">'
-                + btnToggle
-                + '<button onclick="_hallAbrirDetalle(\'' + safeId + '\')" '
-                + 'class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider '
-                + 'border border-amber-500/25 text-amber-400 bg-amber-500/5 hover:bg-amber-500/15 transition-all active:scale-95">'
-                + '<span class="material-symbols-outlined text-xs">open_in_full</span>Detalles</button>'
-                + '</div>'
-                + '</div>'
-
-                + '</div>'  // fin panel info
-                + '</div>';  // fin card
+                + '</div>';
         }).join('');
     }
 
     /**
-     * Alterna la foto de la card entre estado inicial y cierre.
-     * @param {HTMLElement} btn  El botón que activó el toggle
-     * @param {string} thumbInicial  URL thumbnail del hallazgo inicial
-     * @param {string} thumbCierre   URL thumbnail del cierre
+     * Alterna la foto de la card entre tab "Antes" y "Después".
+     * @param {HTMLElement} btn   El tab presionado
+     * @param {string} cual       'inicial' | 'cierre'
+     * @param {string} safeI      URL thumbnail inicial (safe)
+     * @param {string} safeC      URL thumbnail cierre (safe)
      */
-    function _hallToggleFoto(btn, thumbInicial, thumbCierre) {
-        var card = btn.closest('.group');
-        if (!card) return;
-        var img = card.querySelector('.hall-card-img');
+    function _ghTab(btn, cual, safeI, safeC) {
+        var wrap = btn.closest('.gh-foto-wrap');
+        if (!wrap) return;
+        var img  = wrap.querySelector('.gh-foto');
         if (!img) return;
-        var modo = img.getAttribute('data-modo');
-        if (modo === 'inicial') {
-            img.src = thumbCierre || thumbInicial;
-            img.setAttribute('data-modo', 'cierre');
-            btn.innerHTML = '<span class="material-symbols-outlined text-xs">compare</span>Ver inicial';
-        } else {
-            img.src = thumbInicial;
-            img.setAttribute('data-modo', 'inicial');
-            btn.innerHTML = '<span class="material-symbols-outlined text-xs">compare</span>Antes/Desp.';
-        }
+        wrap.querySelectorAll('.gh-tab-btn').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        img.src = cual === 'cierre' ? (safeC || safeI) : safeI;
     }
 
     /**
-     * Abre el modal de detalle para el hallazgo con el ID indicado.
+     * Abre el modal de detalle con los datos completos del hallazgo.
      * @param {string} id  Id_hallazgo
      */
-    function _hallAbrirDetalle(id) {
-        var h = _hallCache.find(function(x){ return x.id === id; });
+    function abrirDetalleHallazgo(id) {
+        var h = _ghCache.find(function(x){ return x.id === id; });
         if (!h) return;
 
-        var modal  = document.getElementById('hall-modal');
-        var badge  = document.getElementById('hall-modal-badge');
-        var titulo = document.getElementById('hall-modal-titulo');
-        var fecha  = document.getElementById('hall-modal-fecha');
-        var body   = document.getElementById('hall-modal-body');
+        var modal = document.getElementById('gh-modal-detalle');
+        if (!modal) return;
 
         var esCerrado = h.estado === 'CERRADO';
 
-        // Badge de estado
-        if (badge) {
-            badge.textContent = h.estado;
-            badge.className = 'px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border '
-                + (esCerrado
-                    ? 'bg-green-500/20 border-green-500/40 text-green-400'
-                    : 'bg-red-500/20 border-red-500/40 text-red-400');
-        }
-        if (titulo) titulo.textContent = 'Hallazgo #' + h.id;
-        if (fecha)  fecha.textContent  = h.fecha + (h.hora ? ' · ' + h.hora : '');
-
-        // ── Sección de fotos
-        var thumbInicial = _hallDriveThumb(h.urlFoto, 700);
-        var thumbCierre  = _hallDriveThumb(h.urlFotoCierre, 700);
-        var placeholder  = 'https://placehold.co/700x440/0d1a24/475569?text=Sin+foto';
-
-        var secFotos = '';
-        if (esCerrado && thumbCierre) {
-            // Vista comparativa Antes/Después
-            secFotos = '<div class="grid grid-cols-2 gap-3">'
-                + _hallFotoCol('Antes · Hallazgo', thumbInicial, placeholder, 'border-red-500/20', 'text-red-400')
-                + _hallFotoCol('Después · Cierre',  thumbCierre,  placeholder, 'border-green-500/20', 'text-green-400')
-                + '</div>';
-        } else if (thumbInicial) {
-            secFotos = '<div class="rounded-xl overflow-hidden border border-white/10" style="max-height:250px;">'
-                + '<img src="' + thumbInicial + '" class="w-full h-full object-cover" onerror="this.src=\'' + placeholder + '\'">'
-                + '</div>';
+        // Header
+        var $id = document.getElementById('gh-modal-id');
+        var $emp = document.getElementById('gh-modal-empresa');
+        var $badge = document.getElementById('gh-modal-badge');
+        if ($id)    $id.textContent   = 'Hallazgo #' + h.id;
+        if ($emp)   $emp.textContent  = h.empresa || '—';
+        if ($badge) {
+            $badge.textContent  = esCerrado ? 'CERRADO' : 'ABIERTO';
+            $badge.style.cssText = esCerrado
+                ? 'background:rgba(22,163,74,0.20);border:1px solid rgba(74,222,128,0.35);color:#4ade80;'
+                : 'background:rgba(220,38,38,0.20);border:1px solid rgba(248,113,113,0.35);color:#f87171;';
         }
 
-        // ── Sección de datos
-        var secDatos = '<div class="space-y-2.5">'
+        // Fotos
+        var thumbI = _ghDriveThumb(h.urlFoto, 700);
+        var thumbC = _ghDriveThumb(h.urlFotoCierre, 700);
+        var $simple = document.getElementById('gh-modal-foto-simple');
+        var $doble  = document.getElementById('gh-modal-foto-doble');
 
-            // Supervisor / Empresa
-            + '<div class="grid grid-cols-2 gap-2">'
-            + _hallInfoBox('Reportado por', 'badge', h.supervisor || '—')
-            + _hallInfoBox('Empresa', 'location_city', h.empresa || '—')
-            + '</div>'
-
-            // Ubicación
-            + _hallInfoBox('Ubicación', 'location_on', h.ubicacion || '—', true)
-
-            // Descripción
-            + '<div class="bg-white/5 rounded-xl p-3 border border-white/10">'
-            + '<p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">Descripción del hallazgo</p>'
-            + '<p class="text-xs text-slate-200 leading-relaxed">' + (h.descripcion || '—') + '</p>'
-            + '</div>'
-
-            // Línea de tiempo
-            + '<div class="bg-white/5 rounded-xl p-3 border border-white/10 space-y-3">'
-            + '<p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Línea de tiempo</p>'
-            + _hallTimelineItem('red-400', 'Reportado',
-                (h.fecha || '') + (h.hora ? ' · ' + h.hora : '') + ' · por ' + (h.supervisor || '—'))
-            + (esCerrado && h.fechaCierre
-                ? _hallTimelineItem('green-400', 'Cerrado',
-                    h.fechaCierre + (h.horaCierre ? ' · ' + h.horaCierre : ''))
-                : '')
-            + '</div>';
-
-        // Gestión realizada (solo si está cerrado y tiene texto)
-        if (esCerrado && h.gestionRealizada) {
-            secDatos += '<div class="rounded-xl p-3.5 border border-green-500/25" style="background:rgba(34,197,94,0.05);">'
-                + '<p class="text-[9px] text-green-400 font-bold uppercase tracking-widest mb-1.5">Gestión realizada</p>'
-                + '<div class="flex items-start gap-2">'
-                + '<span class="material-symbols-outlined text-sm text-green-400 shrink-0">task_alt</span>'
-                + '<p class="text-xs text-slate-200 leading-relaxed">' + h.gestionRealizada + '</p>'
-                + '</div>'
-                + '</div>';
+        if (esCerrado && thumbC) {
+            if ($simple) $simple.classList.add('hidden');
+            if ($doble)  $doble.classList.remove('hidden');
+            var $antes   = document.getElementById('gh-modal-img-antes');
+            var $despues = document.getElementById('gh-modal-img-despues');
+            if ($antes)   $antes.src   = thumbI;
+            if ($despues) $despues.src = thumbC;
+        } else {
+            if ($doble)  $doble.classList.add('hidden');
+            if ($simple) $simple.classList.remove('hidden');
+            var $ev = document.getElementById('gh-modal-img-evidencia');
+            var $ph = document.getElementById('gh-modal-img-ev-ph');
+            if ($ev) { $ev.src = thumbI || ''; $ev.style.display = ''; }
+            if ($ph) $ph.style.display = 'none';
         }
 
-        secDatos += '</div>';
+        // Línea de tiempo
+        var $fechaR = document.getElementById('gh-modal-fecha-reporte');
+        var $sup    = document.getElementById('gh-modal-supervisor');
+        var $tlCierre = document.getElementById('gh-modal-timeline-cierre');
+        var $fechaC = document.getElementById('gh-modal-fecha-cierre');
+        if ($fechaR) $fechaR.textContent = (h.fecha || '') + (h.hora ? ' · ' + h.hora : '');
+        if ($sup)    $sup.textContent    = 'Por: ' + (h.supervisor || '—');
+        if ($tlCierre) {
+            if (esCerrado && h.fechaCierre) {
+                $tlCierre.classList.remove('hidden');
+                $tlCierre.style.display = 'flex';
+                if ($fechaC) $fechaC.textContent = h.fechaCierre + (h.horaCierre ? ' · ' + h.horaCierre : '');
+            } else {
+                $tlCierre.classList.add('hidden');
+                $tlCierre.style.display = 'none';
+            }
+        }
 
-        if (body) body.innerHTML = secFotos + secDatos;
-        if (modal) modal.classList.remove('hidden');
+        // Detalles
+        var $empDet = document.getElementById('gh-modal-empresa-det');
+        var $repA   = document.getElementById('gh-modal-reportado-a');
+        var $ubic   = document.getElementById('gh-modal-ubicacion');
+        var $desc   = document.getElementById('gh-modal-descripcion');
+        if ($empDet) $empDet.textContent = h.empresa    || '—';
+        if ($repA)   $repA.textContent   = h.reportadoA || '—';
+        if ($ubic)   $ubic.textContent   = h.ubicacion  || '—';
+        if ($desc)   $desc.textContent   = h.descripcion || '—';
+
+        // Gestión realizada
+        var $gBox = document.getElementById('gh-modal-gestion-box');
+        var $gest = document.getElementById('gh-modal-gestion');
+        if ($gBox) {
+            if (esCerrado && h.gestionRealizada) {
+                $gBox.classList.remove('hidden');
+                if ($gest) $gest.textContent = h.gestionRealizada;
+            } else {
+                $gBox.classList.add('hidden');
+            }
+        }
+
+        modal.classList.add('open');
         document.body.style.overflow = 'hidden';
     }
 
-    /** Genera HTML de columna de foto para el modal (comparativa). */
-    function _hallFotoCol(titulo, thumb, placeholder, borderCls, textCls) {
-        return '<div class="space-y-1.5">'
-            + '<p class="text-[9px] font-black uppercase tracking-widest text-center ' + textCls + '">' + titulo + '</p>'
-            + '<div class="rounded-xl overflow-hidden border ' + borderCls + '" style="height:180px;">'
-            + '<img src="' + (thumb || placeholder) + '" class="w-full h-full object-cover" onerror="this.src=\'' + placeholder + '\'">'
-            + '</div>'
-            + '</div>';
-    }
-
-    /** Genera HTML de tarjeta de información simple (ícono + texto). */
-    function _hallInfoBox(label, icon, valor, fullWidth) {
-        var wrapper = fullWidth ? '' : '';
-        return '<div class="bg-white/5 rounded-xl p-3 border border-white/10">'
-            + '<p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1">' + label + '</p>'
-            + '<div class="flex items-center gap-1.5">'
-            + '<span class="material-symbols-outlined text-sm text-amber-400">' + icon + '</span>'
-            + '<p class="text-xs font-bold text-white">' + valor + '</p>'
-            + '</div></div>';
-    }
-
-    /** Genera HTML de ítem de la línea de tiempo. */
-    function _hallTimelineItem(dotColor, titulo, subtitulo) {
-        return '<div class="flex items-start gap-2.5">'
-            + '<div class="w-2 h-2 rounded-full bg-' + dotColor + ' mt-1 shrink-0"></div>'
-            + '<div>'
-            + '<p class="text-[10px] font-bold text-white">' + titulo + '</p>'
-            + '<p class="text-[9px] text-slate-400">' + subtitulo + '</p>'
-            + '</div></div>';
-    }
-
     /** Cierra el modal de detalle de hallazgo. */
-    function _hallCerrarDetalle() {
-        var modal = document.getElementById('hall-modal');
-        if (modal) modal.classList.add('hidden');
+    function cerrarDetalleHallazgo() {
+        var modal = document.getElementById('gh-modal-detalle');
+        if (modal) modal.classList.remove('open');
         document.body.style.overflow = '';
     }
 
