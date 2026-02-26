@@ -13,8 +13,8 @@ const CONFIG = {
     try {
       return SpreadsheetApp.getActiveSpreadsheet().getId();
     } catch (e) {
-      // ID de respaldo por si el script falla al detectar la hoja activa
-      return '1ggeg2PW6Xv8GGTrAlKXDO1IEcCTTWeAp5E0Qdkd5fPo';
+      // Retornar null si falla, forzando al sistema a detectar el entorno dinámicamente
+      return null;
     }
   },
   SHEET_PARAMETROS: 'PARAM_SISTEMA'

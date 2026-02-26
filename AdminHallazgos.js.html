@@ -34,7 +34,8 @@
                     if (err) { err.classList.remove('hidden'); err.style.display = 'flex'; }
                     return;
                 }
-                _galeriaData = res.data || [];
+                // Backend devuelve { status, data: { hallazgos, kpis, supervisores, empresas } }
+                _galeriaData = (res.data && res.data.hallazgos) || [];
                 if (content) content.classList.remove('hidden');
                 _actualizarKpis();
                 filtrarGaleriaHallazgos();

@@ -14,7 +14,11 @@ function _getSpreadsheet() {
     try {
       _ss_ = SpreadsheetApp.getActiveSpreadsheet();
     } catch(e) {
-      _ss_ = _getSpreadsheet();
+      // Fallback: Si no hay activo, intentar abrir por ID de configuración
+      const id = CONFIG.SPREADSHEET_ID;
+      if (id) {
+        _ss_ = SpreadsheetApp.openById(id);
+      }
     }
   }
   return _ss_;
