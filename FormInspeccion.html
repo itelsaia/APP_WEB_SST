@@ -126,72 +126,99 @@
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- MODAL: CAPTURAR FIRMA (fixed — cubre toda la pantalla)   -->
 <!-- ══════════════════════════════════════════════════════════ -->
+<!-- ── MODAL FIRMA — Bottom Sheet (sube desde abajo, no se corta) ── -->
 <div id="firma-modal"
-    class="fixed inset-0 bg-black/85 z-[70] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
+    style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:9000;
+           background:rgba(0,0,0,0.82); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+           align-items:center; justify-content:center;"
     onclick="if(event.target===this) cerrarModalFirma()">
-    <div
-        class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden animate-slide-up border border-white/10">
 
-        <!-- Handle mobile -->
-        <div class="sm:hidden flex justify-center pt-3 pb-1">
-            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
+    <!-- Modal centrado — height:auto se adapta al contenido, max-height limita -->
+    <div id="firma-modal-box"
+        style="width:94%; max-width:420px; max-height:85vh; background:#101922; border-radius:20px;
+               border:1px solid rgba(255,255,255,0.10); overflow:hidden;
+               display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+
+        <!-- Handle de arrastre (indicador visual móvil) -->
+        <div style="display:flex; justify-content:center; padding:10px 0 4px;">
+            <div style="width:40px; height:4px; background:rgba(255,255,255,0.18); border-radius:9px;"></div>
         </div>
 
-        <!-- Cabecera modal -->
-        <div class="px-6 pt-4 pb-3 border-b border-white/10">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-green-500/10 rounded-xl flex items-center justify-center border border-green-500/20 shrink-0">
-                    <span class="material-symbols-outlined text-2xl text-green-400">verified</span>
+        <!-- Cabecera -->
+        <div style="padding:12px 20px 12px; border-bottom:1px solid rgba(255,255,255,0.08); flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:40px; height:40px; background:rgba(34,197,94,0.10); border-radius:12px;
+                            display:flex; align-items:center; justify-content:center;
+                            border:1px solid rgba(34,197,94,0.20); flex-shrink:0;">
+                    <span class="material-symbols-outlined" style="font-size:22px; color:#4ade80;">verified</span>
                 </div>
                 <div>
-                    <h3 class="text-base font-black text-white tracking-tight">Capturar Firma</h3>
-                    <p id="firma-modal-id" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest"></p>
+                    <p style="font-size:15px; font-weight:900; color:#fff; letter-spacing:-0.02em; margin:0;">Capturar Firma</p>
+                    <p id="firma-modal-id" style="font-size:9px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin:2px 0 0;"></p>
                 </div>
             </div>
         </div>
 
-        <div class="px-6 py-4 space-y-4">
-            <p class="text-xs text-slate-400 font-medium leading-relaxed">
-                Fotografíe el formato físico <strong class="text-white">ya firmado</strong> por el jefe de obra para
-                cerrar el registro.
+        <!-- Cuerpo scrollable -->
+        <div style="padding:16px 20px; overflow-y:auto; flex:1; min-height:0; display:flex; flex-direction:column; gap:14px;">
+
+            <p style="font-size:12px; color:#94a3b8; margin:0; line-height:1.55;">
+                Fotografíe el formato físico <strong style="color:#fff;">ya firmado</strong>
+                por el jefe de obra para cerrar el registro.
             </p>
 
             <!-- Preview foto firma -->
-            <div id="firma-preview-container"
-                class="hidden rounded-xl overflow-hidden shadow-xl border-2 border-green-500/30 relative"
-                style="max-height:150px;">
-                <img id="firma-img-preview" src="" alt="Firma" class="w-full h-full object-cover">
-                <div
-                    class="absolute bottom-2 right-2 bg-green-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full flex items-center">
-                    <span class="material-symbols-outlined text-[10px] mr-0.5">check_circle</span>LISTA
+            <div id="firma-preview-container" class="hidden"
+                style="border-radius:12px; overflow:hidden; border:2px solid rgba(34,197,94,0.30);
+                       max-height:140px; position:relative;">
+                <img id="firma-img-preview" src="" alt="Firma"
+                    style="width:100%; height:140px; object-fit:cover; display:block;">
+                <div style="position:absolute; bottom:8px; right:8px; background:#22c55e; color:#fff;
+                            font-size:9px; font-weight:900; padding:2px 8px; border-radius:99px;
+                            display:flex; align-items:center; gap:2px; text-transform:uppercase; letter-spacing:0.05em;">
+                    <span class="material-symbols-outlined" style="font-size:10px;">check_circle</span>Lista
                 </div>
             </div>
 
             <!-- Botón captura -->
             <label for="firma-foto" id="firma-foto-label"
-                class="cursor-pointer border-2 border-dashed border-white/10 rounded-xl py-5 flex flex-col items-center hover:border-green-500/40 hover:bg-white/5 transition-all group">
-                <div class="bg-green-500/10 p-2.5 rounded-full group-hover:scale-110 transition-transform border border-green-500/20">
-                    <span class="material-symbols-outlined text-2xl text-green-400">add_a_photo</span>
+                style="display:flex; flex-direction:column; align-items:center; cursor:pointer;
+                       border:2px dashed rgba(255,255,255,0.12); border-radius:14px;
+                       padding:22px 16px; gap:6px; transition:all .2s;">
+                <div style="background:rgba(34,197,94,0.10); padding:10px; border-radius:50%;
+                            border:1px solid rgba(34,197,94,0.25);">
+                    <span class="material-symbols-outlined" style="font-size:26px; color:#4ade80;">add_a_photo</span>
                 </div>
-                <span class="mt-2 text-[11px] font-semibold text-slate-400">Toque para fotografiar el formato firmado</span>
-                <input type="file" id="firma-foto" accept="image/*" capture="camera" class="hidden"
+                <span style="font-size:11px; font-weight:700; color:#94a3b8; text-align:center;">
+                    Toque para fotografiar el formato firmado
+                </span>
+                <input type="file" id="firma-foto" accept="image/*" capture="camera" style="display:none;"
                     onchange="previewFirma(this)">
             </label>
+        </div>
 
-            <!-- Botones de acción -->
-            <div class="flex gap-3 pt-1">
-                <button onclick="cerrarModalFirma()"
-                    class="flex-1 py-3 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">
-                    Cancelar
-                </button>
-                <button onclick="submitFirma()" id="btn-submit-firma"
-                    class="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-black rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
-                    <span id="firma-spinner"
-                        class="hidden animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
-                    <span class="material-symbols-outlined text-base">verified</span>
-                    Confirmar Firma
-                </button>
-            </div>
+        <!-- Botones de acción — SIEMPRE VISIBLES, fuera del scroll -->
+        <div style="padding:12px 20px 20px; flex-shrink:0; display:flex; gap:10px;
+                    border-top:1px solid rgba(255,255,255,0.06);">
+            <button onclick="cerrarModalFirma()"
+                style="flex:1; padding:14px; background:rgba(255,255,255,0.04);
+                       border:1px solid rgba(255,255,255,0.10); border-radius:14px;
+                       color:#cbd5e1; font-size:13px; font-weight:700; cursor:pointer;">
+                Cancelar
+            </button>
+            <button onclick="submitFirma()" id="btn-submit-firma"
+                style="flex:1; padding:14px; background:#16a34a; border:none; border-radius:14px;
+                       color:#fff; font-size:12px; font-weight:900; cursor:pointer;
+                       text-transform:uppercase; letter-spacing:0.08em;
+                       display:flex; align-items:center; justify-content:center; gap:6px;
+                       box-shadow:0 4px 20px rgba(22,163,74,0.30);">
+                <span id="firma-spinner"
+                    style="display:none; width:16px; height:16px; border:2px solid rgba(255,255,255,0.3);
+                           border-top-color:#fff; border-radius:50%;
+                           animation:sst-spin 0.8s linear infinite; flex-shrink:0;"></span>
+                <span class="material-symbols-outlined" style="font-size:16px;">verified</span>
+                Confirmar Firma
+            </button>
         </div>
     </div>
 </div>

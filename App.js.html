@@ -129,28 +129,71 @@
         mostrarBienvenidaPersonalizada();
 
         if (currentUser && currentUser.rol === 'SUP-SST') {
-            try {
-                cargarObrasAsistencia();
-                configurarAsistencia();
-                cargarOtrasOpciones();
-                verificarEstadoAsistencia();
-            } catch (e) {
-                console.error('[SST] Error en inicialización SUP-SST:', e);
-                switchModule('asistencia');
-            }
+            configurarAsistencia();
+            // ── LLAMADA BATCH: clientes + estado asistencia en 1 sola RPC ──
+            // Antes eran 2 llamadas separadas (~2-4s extra). Ahora es 1 (~1-2s).
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res.status !== 'success') {
+                        console.error('[SST] Error en batch panel:', res.message);
+                        switchModule('asistencia');
+                        ocultarLoader();
+                        return;
+                    }
+                    var d = res.data;
+
+                    // 1. Poblar clientes en ambos selectores (obra e inspección)
+                    llenarClientes({ status: 'success', data: d.clientes });
+                    var selectObra = document.getElementById('idObraAsistencia');
+                    if (selectObra) {
+                        if (d.clientes && d.clientes.length > 0) {
+                            selectObra.innerHTML = '<option value="">Seleccione la obra...</option>';
+                            d.clientes.forEach(function(clie) {
+                                var opt = document.createElement('option');
+                                opt.value = clie.id;
+                                opt.textContent = clie.nombre;
+                                selectObra.appendChild(opt);
+                            });
+                        } else {
+                            selectObra.innerHTML = '<option value="">No hay obras registradas</option>';
+                        }
+                    }
+
+                    // 2. Determinar módulo inicial según estado de asistencia
+                    var exitSection = document.getElementById('exit-section');
+                    if (d.asistencia && d.asistencia.activo) {
+                        if (d.asistencia.obra) {
+                            _obraSeleccionada = d.asistencia.obra;
+                        }
+                        switchModule('inspeccion');
+                        if (exitSection) exitSection.classList.remove('hidden');
+                        _intentarBloqueoEmpresa();
+                    } else {
+                        switchModule('asistencia');
+                        if (exitSection) exitSection.classList.add('hidden');
+                    }
+
+                    ocultarLoader();
+                })
+                .withFailureHandler(function(err) {
+                    console.error('[SST] Error crítico en batch panel:', err);
+                    switchModule('asistencia');
+                    ocultarLoader();
+                })
+                .obtenerDatosPanelSupervisor(currentUser.email);
+
         } else if (currentUser && currentUser.rol === 'ADMIN') {
-            // Ampliar contenedor principal para pantalla completa
             var mainEl = document.querySelector('main');
             if (mainEl) {
                 mainEl.classList.remove('max-w-2xl');
                 mainEl.classList.add('max-w-6xl');
             }
-            // Etiquetar el módulo activo en el header
             actualizarModuloHeader('Administración');
             switchModule('admin');
+            ocultarLoader();
+        } else {
+            ocultarLoader();
         }
-
-        ocultarLoader();
     }
 
     // ================================================================
@@ -367,21 +410,93 @@
             .obtenerEstadoAsistencia(currentUser.email);
     }
 
-    function previewAsistencia(input) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                archivoBase64 = e.target.result;
-                const prev = document.getElementById('asis-img-preview');
-                const cont = document.getElementById('asis-preview-container');
-                const label = document.getElementById('asis-foto-label');
-                if (prev) prev.src = e.target.result;
-                if (cont) cont.classList.remove('hidden');
-                // Ocultar botón de captura para evitar duplicados
-                if (label) label.classList.add('hidden');
+    // ════════════════════════════════════════════════════════════
+    // UTILIDADES DE RENDIMIENTO: Compresión de imágenes + Overlay
+    // ════════════════════════════════════════════════════════════
+
+    /**
+     * Comprime una imagen usando Canvas antes de convertirla a Base64.
+     * Redimensiona al máximo de MAX_DIM px y aplica calidad JPEG del 72%.
+     * Reduce fotos de ~8MB a ~150-250KB sin pérdida visual apreciable.
+     *
+     * @param {File} file  Archivo de imagen seleccionado por el usuario.
+     * @param {number} [maxDim=1000] Dimensión máxima en px (ancho o alto).
+     * @param {number} [quality=0.72] Calidad JPEG 0.0-1.0.
+     * @return {Promise<string>} Base64 comprimido (data:image/jpeg;base64,...).
+     */
+    function comprimirImagen(file, maxDim, quality) {
+        var MAX = maxDim  || 1000;
+        var Q   = quality || 0.72;
+        return new Promise(function(resolve, reject) {
+            var reader = new FileReader();
+            reader.onerror = reject;
+            reader.onload = function(ev) {
+                var img = new Image();
+                img.onerror = reject;
+                img.onload = function() {
+                    var w = img.naturalWidth  || img.width;
+                    var h = img.naturalHeight || img.height;
+                    // Escalar manteniendo proporción
+                    if (w > h) {
+                        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+                    } else {
+                        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+                    }
+                    var canvas = document.createElement('canvas');
+                    canvas.width  = w;
+                    canvas.height = h;
+                    var ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    var resultado = canvas.toDataURL('image/jpeg', Q);
+                    console.log('[SST] Compresión: ' + Math.round(ev.target.result.length / 1024) + 'KB → ' + Math.round(resultado.length / 1024) + 'KB');
+                    resolve(resultado);
+                };
+                img.src = ev.target.result;
             };
-            reader.readAsDataURL(input.files[0]);
-        }
+            reader.readAsDataURL(file);
+        });
+    }
+
+    /**
+     * Muestra el overlay de carga y bloquea interacciones.
+     * @param {string} [mensaje] Texto principal del overlay.
+     */
+    function bloquearPantalla(mensaje) {
+        var overlay = document.getElementById('sst-loading-overlay');
+        var msg     = document.getElementById('sst-loading-msg');
+        if (msg)     msg.textContent = mensaje || 'Procesando...';
+        if (overlay) overlay.style.display = 'flex';
+    }
+
+    /**
+     * Oculta el overlay de carga y restaura las interacciones.
+     */
+    function desbloquearPantalla() {
+        var overlay = document.getElementById('sst-loading-overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PREVIEWS CON COMPRESIÓN AUTOMÁTICA
+    // ════════════════════════════════════════════════════════════
+
+    function previewAsistencia(input) {
+        if (!input.files || !input.files[0]) return;
+        bloquearPantalla('Optimizando foto...');
+        comprimirImagen(input.files[0]).then(function(comprimido) {
+            desbloquearPantalla();
+            archivoBase64 = comprimido;
+            var prev  = document.getElementById('asis-img-preview');
+            var cont  = document.getElementById('asis-preview-container');
+            var label = document.getElementById('asis-foto-label');
+            if (prev)  prev.src = comprimido;
+            if (cont)  cont.classList.remove('hidden');
+            if (label) label.classList.add('hidden');
+        }).catch(function(err) {
+            desbloquearPantalla();
+            console.error('[SST] Error comprimiendo foto asistencia:', err);
+            mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
+        });
     }
 
     /**
@@ -417,6 +532,7 @@
             if (spinner) spinner.classList.remove('hidden');
             if (btnText) btnText.textContent = "REGISTRANDO...";
             if (btnIcon) btnIcon.classList.add('hidden');
+            bloquearPantalla('Registrando ingreso...');
 
             const payload = {
                 userEmail: currentUser.email,
@@ -426,6 +542,7 @@
 
             google.script.run
                 .withSuccessHandler(function (res) {
+                    desbloquearPantalla();
                     console.log('[SST] Respuesta registrarIngreso:', JSON.stringify(res));
 
                     if (res.status === 'success') {
@@ -453,7 +570,20 @@
                         // Notificación amigable (no bloqueante)
                         mostrarNotificacion('✅ ' + res.message, 'success');
                     } else {
-                        mostrarNotificacion(res.message, 'error');
+                        // Jornada activa detectada → ir directo al panel de inspección
+                        if (res.message && res.message.toLowerCase().includes('jornada activa')) {
+                            mostrarNotificacion('Ya tienes una jornada activa. Continuando...', 'success');
+                            // Intentar recuperar la obra de la última jornada activa
+                            if (obraSelect) {
+                                _obraSeleccionada = obraSelect.options[obraSelect.selectedIndex].text;
+                            }
+                            switchModule('inspeccion');
+                            const exitSection = document.getElementById('exit-section');
+                            if (exitSection) exitSection.classList.remove('hidden');
+                            _intentarBloqueoEmpresa();
+                        } else {
+                            mostrarNotificacion(res.message, 'error');
+                        }
                     }
 
                     // Restaurar botón
@@ -463,6 +593,7 @@
                     if (btnIcon) btnIcon.classList.remove('hidden');
                 })
                 .withFailureHandler(function (err) {
+                    desbloquearPantalla();
                     console.error("[SST] Error en registrarIngreso:", err);
                     mostrarNotificacion('Error: ' + err.toString(), 'error');
                     if (btn) btn.disabled = false;
@@ -608,20 +739,22 @@
     }
 
     function previewSalida(input) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                archivoBase64 = e.target.result;
-                const prev = document.getElementById('exit-img-preview');
-                const cont = document.getElementById('exit-preview-container');
-                const label = document.getElementById('exit-foto-label');
-                if (prev) prev.src = e.target.result;
-                if (cont) cont.classList.remove('hidden');
-                // Ocultar botón de captura
-                if (label) label.classList.add('hidden');
-            };
-            reader.readAsDataURL(input.files[0]);
-        }
+        if (!input.files || !input.files[0]) return;
+        bloquearPantalla('Optimizando foto...');
+        comprimirImagen(input.files[0]).then(function(comprimido) {
+            desbloquearPantalla();
+            archivoBase64 = comprimido;
+            var prev  = document.getElementById('exit-img-preview');
+            var cont  = document.getElementById('exit-preview-container');
+            var label = document.getElementById('exit-foto-label');
+            if (prev)  prev.src = comprimido;
+            if (cont)  cont.classList.remove('hidden');
+            if (label) label.classList.add('hidden');
+        }).catch(function(err) {
+            desbloquearPantalla();
+            console.error('[SST] Error comprimiendo foto salida:', err);
+            mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
+        });
     }
 
     function submitSalida() {
@@ -630,40 +763,63 @@
             return;
         }
 
-        const btn = document.getElementById('btn-submit-salida');
-        const spinner = document.getElementById('exit-spinner');
+        var btn     = document.getElementById('btn-submit-salida');
+        var spinner = document.getElementById('exit-spinner');
         if (btn) btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
 
-        // ── PASO 1: Registrar salida en el backend (fire-and-forget) ──────────
-        // No esperamos la respuesta del servidor para cerrar sesión.
-        // La sesión se cierra SIEMPRE, independientemente del resultado del backend.
+        // ── Cerrar modal y mostrar overlay de carga ──────────
+        closeExitModal();
+        bloquearPantalla('Cerrando jornada, por favor espere...');
+
+        // Flag para evitar doble navegación
+        var _navegado = false;
+        function _navegarAlLogin(url) {
+            if (_navegado) return;
+            _navegado = true;
+            desbloquearPantalla();
+            localStorage.clear();
+            sessionStorage.clear();
+            _irAlLogin(url);
+        }
+
+        // ── TIMEOUT DE SEGURIDAD (12s) ──────────────────────
+        // Si el backend no responde en 12 segundos, forzar navegación al login.
+        var _safetyTimeout = setTimeout(function() {
+            console.warn('[SST] Timeout de seguridad: forzando cierre de sesión');
+            var fallbackUrl = (typeof SERVER_URL !== 'undefined' && SERVER_URL) ? SERVER_URL : '';
+            if (fallbackUrl) {
+                _navegarAlLogin(fallbackUrl);
+            } else {
+                desbloquearPantalla();
+                mostrarNotificacion('La jornada se registró pero hubo un error al redirigir. Cierre esta pestaña.', 'warning');
+            }
+        }, 12000);
+
+        // ── PASO 1: Registrar salida (fire-and-forget) ──────
+        // El registro se envía al backend sin esperar respuesta.
+        // Así el supervisor no queda bloqueado si Drive tarda.
         google.script.run
-            .withSuccessHandler(function (r) { console.log("[SST] registrarSalida:", r.status); })
-            .withFailureHandler(function (e) { console.warn("[SST] registrarSalida error:", e); })
+            .withSuccessHandler(function(r) { console.log('[SST] registrarSalida:', r.status); })
+            .withFailureHandler(function(e) { console.warn('[SST] registrarSalida error:', e); })
             .registrarSalida({
                 userEmail: currentUser ? currentUser.email : '',
                 archivoBase64: archivoBase64
             });
 
-        // ── PASO 2: Cerrar modal, notificar y limpiar almacenamiento ──────────
-        closeExitModal();
-        if (btn) btn.disabled = false;
-        if (spinner) spinner.classList.add('hidden');
-        mostrarNotificacion("👋 Jornada finalizada. Cerrando sesión...", "success");
-        localStorage.clear();
-        sessionStorage.clear();
-
-        // ── PASO 3: Obtener URL real del script y navegar al Login ─────────────
-        // Usamos getScriptUrl() porque es la fuente más confiable en GAS.
-        // SERVER_URL puede quedar vacío si el bloque try{} de Index.html falla.
+        // ── PASO 2: Obtener URL y navegar al login ──────────
         google.script.run
-            .withSuccessHandler(_irAlLogin)
-            .withFailureHandler(function () {
-                // Fallback: SERVER_URL si el API falla
-                if (typeof SERVER_URL !== 'undefined' && SERVER_URL) {
-                    _irAlLogin(SERVER_URL);
+            .withSuccessHandler(function(url) {
+                clearTimeout(_safetyTimeout);
+                _navegarAlLogin(url);
+            })
+            .withFailureHandler(function() {
+                clearTimeout(_safetyTimeout);
+                var fallbackUrl = (typeof SERVER_URL !== 'undefined' && SERVER_URL) ? SERVER_URL : '';
+                if (fallbackUrl) {
+                    _navegarAlLogin(fallbackUrl);
                 } else {
+                    desbloquearPantalla();
                     mostrarNotificacion('Error al cerrar sesión. Cierre la pestaña manualmente.', 'error');
                 }
             })
@@ -873,15 +1029,19 @@
      */
     function previewHallazgo(input) {
         if (!input.files || !input.files[0]) return;
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            _rhArchivoBase64 = e.target.result;
-            const prev = document.getElementById('rh-preview-container');
-            const img  = document.getElementById('rh-img-preview');
+        bloquearPantalla('Optimizando foto...');
+        comprimirImagen(input.files[0]).then(function(comprimido) {
+            desbloquearPantalla();
+            _rhArchivoBase64 = comprimido;
+            var prev = document.getElementById('rh-preview-container');
+            var img  = document.getElementById('rh-img-preview');
             if (prev) prev.classList.remove('hidden');
-            if (img)  img.src = _rhArchivoBase64;
-        };
-        reader.readAsDataURL(input.files[0]);
+            if (img)  img.src = comprimido;
+        }).catch(function(err) {
+            desbloquearPantalla();
+            console.error('[SST] Error comprimiendo foto hallazgo:', err);
+            mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
+        });
     }
 
     /**
@@ -908,12 +1068,14 @@
         const sp  = document.getElementById('rh-spinner');
         if (btn) btn.disabled = true;
         if (sp)  sp.classList.remove('hidden');
+        bloquearPantalla('Subiendo hallazgo...');
 
         const empresa = (document.getElementById('rh-empresa-valor') || {}).value
                         || _obraSeleccionada || '';
 
         google.script.run
             .withSuccessHandler(function(res) {
+                desbloquearPantalla();
                 if (sp)  sp.classList.add('hidden');
                 if (btn) btn.disabled = false;
 
@@ -959,6 +1121,7 @@
                 }
             })
             .withFailureHandler(function(err) {
+                desbloquearPantalla();
                 if (sp)  sp.classList.add('hidden');
                 if (btn) btn.disabled = false;
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
@@ -1143,18 +1306,21 @@
 
 
     function previewImagen(input) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            nombreArchivo = input.files[0].name;
-            reader.onload = function (e) {
-                archivoBase64 = e.target.result;
-                const previewCont = document.getElementById('preview-container');
-                const imgP = document.getElementById('img-preview');
-                if (imgP) imgP.src = e.target.result;
-                if (previewCont) previewCont.classList.remove('hidden');
-            };
-            reader.readAsDataURL(input.files[0]);
-        }
+        if (!input.files || !input.files[0]) return;
+        nombreArchivo = input.files[0].name;
+        bloquearPantalla('Optimizando foto...');
+        comprimirImagen(input.files[0]).then(function(comprimido) {
+            desbloquearPantalla();
+            archivoBase64 = comprimido;
+            var previewCont = document.getElementById('preview-container');
+            var imgP        = document.getElementById('img-preview');
+            if (imgP)        imgP.src = comprimido;
+            if (previewCont) previewCont.classList.remove('hidden');
+        }).catch(function(err) {
+            desbloquearPantalla();
+            console.error('[SST] Error comprimiendo foto formato:', err);
+            mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
+        });
     }
 
     function configurarFormulario() {
@@ -1192,6 +1358,7 @@
         if (btnF) btnF.disabled = true;
         if (modo === 'pendiente' && spP) spP.classList.remove('hidden');
         if (modo === 'firma'     && spF) spF.classList.remove('hidden');
+        bloquearPantalla('Subiendo formato...');
 
         const formData = {
             userCode:            currentUser.codigo || '',
@@ -1223,6 +1390,7 @@
 
         google.script.run
             .withSuccessHandler(function(res) {
+                desbloquearPantalla();
                 _resetBotones();
                 if (res.status === 'success') {
                     _resetFormulario();
@@ -1238,6 +1406,7 @@
                 }
             })
             .withFailureHandler(function(err) {
+                desbloquearPantalla();
                 _resetBotones();
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
@@ -1351,34 +1520,42 @@
         if (input)   input.value = '';
         if (idLabel) idLabel.textContent = 'Registro: ' + idRegistro;
 
-        const modal = document.getElementById('firma-modal');
-        if (modal) modal.classList.remove('hidden');
+        // Sin cálculos JS — CSS position:fixed + inset:0 cubre toda la pantalla.
+        // El box se adapta a su contenido (height:auto).
+        var modal = document.getElementById('firma-modal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
     }
 
     function cerrarModalFirma() {
         _firmaBase64 = null;
         _firmaIdRegistro = '';
-        const modal = document.getElementById('firma-modal');
-        if (modal) modal.classList.add('hidden');
+        var modal = document.getElementById('firma-modal');
+        if (modal) modal.style.display = 'none';
+        document.body.style.overflow = '';
     }
 
     /**
      * Muestra la preview de la foto de firma.
      */
     function previewFirma(input) {
-        if (input.files && input.files[0]) {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                _firmaBase64 = e.target.result;
-                const prev  = document.getElementById('firma-img-preview');
-                const cont  = document.getElementById('firma-preview-container');
-                const label = document.getElementById('firma-foto-label');
-                if (prev)  prev.src = e.target.result;
-                if (cont)  cont.classList.remove('hidden');
-                if (label) label.classList.add('hidden');
-            };
-            reader.readAsDataURL(input.files[0]);
-        }
+        if (!input.files || !input.files[0]) return;
+        bloquearPantalla('Optimizando foto...');
+        comprimirImagen(input.files[0]).then(function(comprimido) {
+            desbloquearPantalla();
+            _firmaBase64 = comprimido;
+            var prev  = document.getElementById('firma-img-preview');
+            var cont  = document.getElementById('firma-preview-container');
+            var label = document.getElementById('firma-foto-label');
+            if (prev)  prev.src = comprimido;
+            if (cont)  cont.classList.remove('hidden');
+            if (label) label.classList.add('hidden');
+        }).catch(function(err) {
+            desbloquearPantalla();
+            console.error('[SST] Error comprimiendo foto firma:', err);
+            mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
+        });
     }
 
     /**
@@ -1394,9 +1571,11 @@
         const spinner = document.getElementById('firma-spinner');
         if (btn)     btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
+        bloquearPantalla('Confirmando firma...');
 
         google.script.run
             .withSuccessHandler(function (res) {
+                desbloquearPantalla();
                 if (btn)     btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 cerrarModalFirma();
@@ -1408,6 +1587,7 @@
                 }
             })
             .withFailureHandler(function (err) {
+                desbloquearPantalla();
                 if (btn)     btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');

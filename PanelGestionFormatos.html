@@ -1,67 +1,72 @@
-<!-- PanelGestionFormatos.html — v2.0 -->
-<div id="formatos-container" class="space-y-6">
-    <div class="border-b border-gray-200 pb-4">
-        <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+<!-- PanelGestionFormatos.html — v3.0 dark theme -->
+<div id="formatos-container" class="space-y-5">
+
+    <!-- ── CABECERA ──────────────────────────────────────── -->
+    <div class="border-b border-white/10 pb-4">
+        <h3 class="text-lg font-bold leading-6 text-white tracking-tight flex items-center gap-2">
             <span class="material-symbols-outlined text-primary">description</span>
             Gestión de Formatos Físicos
         </h3>
-        <p class="mt-1 text-sm text-gray-500">Capture y gestione los formatos diligenciados en campo. <span
-                class="text-primary/60 font-mono text-[10px]">v1.1.0-Debug</span></p>
+        <p class="mt-0.5 text-xs text-slate-400 font-medium">Capture y gestione los formatos diligenciados en campo.</p>
     </div>
 
     <!-- ═══════════════════════════════════════ -->
     <!-- SECCIÓN 1: NUEVO REPORTE               -->
     <!-- ═══════════════════════════════════════ -->
-    <div class="bg-blue-50/50 rounded-2xl p-5 border border-blue-100 shadow-sm">
-        <h4 class="text-sm font-bold text-blue-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <span class="material-symbols-outlined text-lg">add_circle</span>
-            Nuevo Registro de Formato
-        </h4>
+    <div class="border border-white/10 rounded-2xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-white/10 flex items-center gap-2"
+            style="background:rgba(197,160,72,0.06);">
+            <span class="material-symbols-outlined text-base text-primary">add_circle</span>
+            <p class="text-xs font-black text-primary/80 uppercase tracking-widest">Nuevo Registro de Formato</p>
+        </div>
 
-        <form id="format-form" class="space-y-4">
+        <form id="format-form" class="p-4 space-y-4">
+
             <!-- Selección de Formato -->
-            <div class="flex gap-2">
-                <select id="idFormato" name="idFormato" required onchange="actualizarDescripcionFormato(this)"
-                    class="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all text-sm font-medium">
-                    <option value="">Cargando formatos...</option>
-                </select>
-                <button type="button" onclick="cargarFormatosSST()" title="Recargar cat\u00e1logo"
-                    class="px-3 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-400 hover:text-primary transition-colors">
-                    <span class="material-symbols-outlined text-lg">refresh</span>
-                </button>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Formato SST</label>
+                <div class="flex gap-2">
+                    <select id="idFormato" name="idFormato" required onchange="actualizarDescripcionFormato(this)"
+                        style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                        class="flex-1 px-3 py-2.5 text-sm font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none">
+                        <option value="" style="background:#1a242f;">Cargando formatos...</option>
+                    </select>
+                    <button type="button" onclick="cargarFormatosSST()" title="Recargar catálogo"
+                        class="px-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 text-slate-400 hover:text-primary transition-colors">
+                        <span class="material-symbols-outlined text-base">refresh</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Descripción automática -->
             <div id="desc-container" class="hidden animate-fade-in">
-                <div
-                    class="bg-white p-3 rounded-lg border border-gray-100 italic text-xs text-gray-500 flex items-start gap-2">
-                    <span class="material-symbols-outlined text-sm text-gray-400">info</span>
-                    <span id="label-descripcion">Descripción del formato seleccionado...</span>
+                <div class="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-start gap-2">
+                    <span class="material-symbols-outlined text-sm text-primary mt-0.5 shrink-0">info</span>
+                    <span id="label-descripcion" class="text-xs text-slate-300 italic leading-relaxed">Descripción del formato seleccionado...</span>
                 </div>
             </div>
 
             <!-- Captura de Foto Inicial -->
             <div>
-                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Foto del
-                    Formato Físico</label>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Foto del Formato Físico</label>
 
                 <div id="format-preview-container"
-                    class="hidden mb-3 rounded-xl overflow-hidden shadow-md border-2 border-primary/20 aspect-video relative">
+                    class="hidden mb-3 rounded-xl overflow-hidden border-2 border-primary/30 relative"
+                    style="max-height:160px;">
                     <img id="format-img-preview" src="" class="w-full h-full object-cover">
                     <button type="button" onclick="cancelarFotoFormato()"
-                        class="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full shadow-lg">
+                        class="absolute top-2 right-2 bg-red-500/90 text-white p-1 rounded-full shadow-lg">
                         <span class="material-symbols-outlined text-sm">close</span>
                     </button>
-                    <span
-                        class="absolute bottom-2 left-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">INICIAL</span>
+                    <span class="absolute bottom-2 left-2 bg-primary text-black text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">INICIAL</span>
                 </div>
 
                 <label for="fotoFormato" id="format-foto-label"
-                    class="cursor-pointer border-2 border-dashed border-gray-200 rounded-xl p-5 flex flex-col items-center hover:border-primary/40 hover:bg-white transition-all group">
-                    <div class="bg-primary/5 p-2 rounded-full group-hover:scale-110 transition-transform">
+                    class="cursor-pointer border-2 border-dashed border-white/10 rounded-xl py-5 flex flex-col items-center hover:border-primary/40 hover:bg-white/5 transition-all group">
+                    <div class="bg-primary/10 p-2.5 rounded-full group-hover:scale-110 transition-transform border border-primary/20">
                         <span class="material-symbols-outlined text-2xl text-primary">add_a_photo</span>
                     </div>
-                    <span class="mt-1 text-[10px] font-bold text-gray-400 uppercase">Cámara / Archivo</span>
+                    <span class="mt-2 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Cámara / Archivo</span>
                     <input type="file" id="fotoFormato" accept="image/*" capture="camera" class="hidden"
                         onchange="previewFotoFormato(this)">
                 </label>
@@ -69,9 +74,11 @@
 
             <!-- Botón Guardar -->
             <button type="submit" id="btn-save-format"
-                class="w-full bg-primary text-white py-4 rounded-xl font-bold text-sm shadow-lg hover:opacity-90 active:scale-[0.98] transition-all flex justify-center items-center gap-2">
+                class="w-full flex justify-center items-center gap-2 py-4 rounded-xl text-[11px] font-black text-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-40"
+                style="background:var(--color-primario); box-shadow:0 6px 20px rgba(197,160,72,0.25);">
                 <span id="format-spinner"
-                    class="hidden animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
+                    class="hidden animate-spin border-2 border-black border-t-transparent rounded-full w-4 h-4"></span>
+                <span class="material-symbols-outlined text-base shrink-0">save</span>
                 <span id="format-btn-text">GUARDAR COMO PENDIENTE</span>
             </button>
         </form>
@@ -80,27 +87,30 @@
     <!-- ═══════════════════════════════════════ -->
     <!-- SECCIÓN 2: LISTADO DE PENDIENTES       -->
     <!-- ═══════════════════════════════════════ -->
-    <div class="mt-8">
-        <div class="flex justify-between items-center mb-3">
-            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2">
-                <span class="material-symbols-outlined text-lg text-amber-500">pending_actions</span>
-                Formatos Pendientes de Firma
-            </h4>
+    <div class="mt-2">
+        <div class="flex items-center justify-between mb-3">
+            <div>
+                <h4 class="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-amber-400">pending_actions</span>
+                    Formatos Pendientes
+                </h4>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Esperando firma de jefe de obra</p>
+            </div>
             <span id="count-pendientes"
-                class="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-full">0</span>
+                class="bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider">0</span>
         </div>
 
-        <!-- Barra de búsqueda/filtro -->
-        <div class="relative mb-4">
-            <span
-                class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base">search</span>
+        <!-- Barra de búsqueda -->
+        <div class="relative mb-3">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none">search</span>
             <input type="text" id="filtro-pendientes" placeholder="Buscar por ID o descripción..."
                 oninput="filtrarPendientes(this.value)"
-                class="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all">
+                style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all placeholder-slate-600">
         </div>
 
-        <div id="lista-pendientes" class="space-y-3">
-            <div class="text-center py-6 text-gray-400 italic text-xs">
+        <div id="lista-pendientes" class="space-y-2.5">
+            <div class="text-center py-6 text-slate-500 italic text-xs">
                 Cargando registros pendientes...
             </div>
         </div>
@@ -108,73 +118,78 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<!-- MODAL DE CAPTURA DE FIRMA                              -->
+<!-- MODAL DE CAPTURA DE FIRMA — GAS iframe compatible      -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div id="firma-modal"
-    class="fixed inset-0 bg-black/60 z-[60] flex items-end sm:items-center justify-center hidden backdrop-blur-sm"
-    style="display:none" onclick="if(event.target===this) cerrarModalFirma()">
-    <div class="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md overflow-hidden animate-slide-up">
+    style="display:none; position:absolute; z-index:70; left:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);"
+    onclick="if(event.target===this) cerrarModalFirma()">
+    <div id="firma-modal-box"
+        class="rounded-t-3xl sm:rounded-2xl shadow-2xl border border-white/10 flex flex-col"
+        style="background:#101922; width:92%; max-width:420px; margin:auto;">
+
         <!-- Handle bar (mobile) -->
-        <div class="sm:hidden flex justify-center pt-3 pb-1">
-            <div class="w-10 h-1 bg-gray-300 rounded-full"></div>
+        <div class="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
         </div>
 
         <!-- Header del modal -->
-        <div class="px-6 pt-5 pb-4 text-center">
-            <div class="inline-flex items-center justify-center w-14 h-14 bg-green-100 rounded-2xl mb-3">
-                <span class="material-symbols-outlined text-3xl text-green-600">fact_check</span>
+        <div class="px-5 pt-4 pb-3 border-b border-white/10 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-500/10 rounded-xl flex items-center justify-center border border-green-500/20 shrink-0">
+                    <span class="material-symbols-outlined text-2xl text-green-400">fact_check</span>
+                </div>
+                <div>
+                    <h3 class="text-base font-black text-white tracking-tight">Cerrar con Firma</h3>
+                    <p id="firma-modal-subtitulo" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Capture el documento firmado</p>
+                </div>
             </div>
-            <h3 class="text-xl font-bold text-gray-800">Cerrar con Firma</h3>
-            <p id="firma-modal-subtitulo" class="text-gray-400 text-sm mt-1">Capture el documento ya firmado por el jefe
-                de obra</p>
         </div>
 
-        <div class="px-6 pb-6 space-y-4">
+        <div class="px-5 py-4 space-y-4 overflow-y-auto">
             <!-- Info del formato a cerrar -->
-            <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 flex items-center gap-3">
-                <span class="material-symbols-outlined text-amber-500 text-2xl">description</span>
-                <div>
-                    <p id="firma-modal-consecutivo" class="text-xs font-black text-amber-600 uppercase tracking-widest">
-                    </p>
-                    <p id="firma-modal-descripcion" class="text-sm font-bold text-gray-800 leading-tight"></p>
+            <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-center gap-3">
+                <span class="material-symbols-outlined text-amber-400 text-2xl shrink-0">description</span>
+                <div class="min-w-0">
+                    <p id="firma-modal-consecutivo" class="text-[9px] font-black text-amber-400 uppercase tracking-widest"></p>
+                    <p id="firma-modal-descripcion" class="text-sm font-bold text-white leading-tight truncate"></p>
                 </div>
             </div>
 
             <!-- Preview de la foto de firma capturada -->
             <div id="firma-preview-container"
-                class="hidden rounded-xl overflow-hidden shadow-md border-2 border-green-200 relative">
-                <img id="firma-img-preview" src="" class="w-full h-48 object-cover">
+                class="hidden rounded-xl overflow-hidden border-2 border-green-500/30 relative"
+                style="max-height:150px;">
+                <img id="firma-img-preview" src="" class="w-full h-full object-cover">
                 <button type="button" onclick="cancelarFotoFirma()"
-                    class="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full shadow-lg">
+                    class="absolute top-2 right-2 bg-red-500/90 text-white p-1 rounded-full shadow-lg">
                     <span class="material-symbols-outlined text-sm">close</span>
                 </button>
-                <span
-                    class="absolute bottom-2 left-2 bg-green-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">FIRMA</span>
+                <span class="absolute bottom-2 left-2 bg-green-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">FIRMA</span>
             </div>
 
             <!-- Botón de captura de firma -->
             <label for="foto-firma" id="firma-foto-label"
-                class="cursor-pointer border-2 border-dashed border-green-200 rounded-xl p-5 flex flex-col items-center hover:border-green-400 hover:bg-green-50/50 transition-all group">
-                <div class="bg-green-100 p-3 rounded-full group-hover:scale-110 transition-transform">
-                    <span class="material-symbols-outlined text-2xl text-green-600">add_a_photo</span>
+                class="cursor-pointer border-2 border-dashed border-white/10 rounded-xl py-5 flex flex-col items-center hover:border-green-500/40 hover:bg-white/5 transition-all group">
+                <div class="bg-green-500/10 p-2.5 rounded-full group-hover:scale-110 transition-transform border border-green-500/20">
+                    <span class="material-symbols-outlined text-2xl text-green-400">add_a_photo</span>
                 </div>
-                <span class="mt-2 text-xs font-bold text-gray-500 uppercase">Capture el formato firmado</span>
+                <span class="mt-2 text-[11px] font-bold text-slate-400">Toque para fotografiar el formato firmado</span>
                 <input type="file" id="foto-firma" accept="image/*" capture="camera" class="hidden"
                     onchange="previewFotoFirma(this)">
             </label>
 
             <!-- Botones de acción -->
-            <div class="flex space-x-3 pt-1">
+            <div class="flex gap-3 pt-1 pb-1">
                 <button onclick="cerrarModalFirma()"
-                    class="flex-1 py-3.5 text-gray-500 font-bold hover:bg-gray-100 rounded-xl transition text-sm border border-gray-200">
+                    class="flex-1 py-3 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">
                     Cancelar
                 </button>
                 <button onclick="submitCierreFormato()" id="btn-confirmar-firma"
-                    class="flex-1 py-3.5 bg-gradient-to-r from-green-600 to-emerald-500 text-white font-bold rounded-xl shadow-lg hover:from-green-700 hover:to-emerald-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm">
+                    class="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-black rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
                     <span id="firma-spinner"
                         class="hidden animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span>
                     <span class="material-symbols-outlined text-base">verified</span>
-                    Confirmar Cierre
+                    Confirmar
                 </button>
             </div>
         </div>

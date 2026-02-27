@@ -76,6 +76,8 @@ function obtenerGaleriaHallazgosAdmin()           { _injectSS_(); return SST_COR
 function obtenerAsistenciaAdmin()                 { _injectSS_(); return SST_CORE_MASTER.obtenerAsistenciaAdmin(); }
 function obtenerEstadoAsistencia(email)           { _injectSS_(); return SST_CORE_MASTER.obtenerEstadoAsistencia(email); }
 function registrarIngreso(datos)                  { _injectSS_(); return SST_CORE_MASTER.registrarIngreso(datos); }
+function registrarSalida(datos)                   { _injectSS_(); return SST_CORE_MASTER.registrarSalida(datos); }
+function obtenerDatosPanelSupervisor(email)       { _injectSS_(); return SST_CORE_MASTER.obtenerDatosPanelSupervisor(email); }
 
 function obtenerMetricasSupervisoresSTT(params)   { _injectSS_(); return SST_CORE_MASTER.obtenerMetricasSupervisoresSTT(params); }
 function obtenerReporteDesempenoSTT(params)       { _injectSS_(); return SST_CORE_MASTER.obtenerReporteDesempenoSTT(params); }

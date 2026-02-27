@@ -60,10 +60,20 @@ function guardarRegistroFormato(data) {
     const idRegistro = _generarProximoIdRegistro(data.idFormato, ss);
     const fechaHora  = new Date();
 
-    // 2. Solo se almacena la foto con firma digital al cerrar el registro.
-    //    La evidencia inicial NO se guarda en Drive para optimizar el almacenamiento
-    //    de las carpetas del cliente (ver cerrarRegistroFormato).
-    const urlFoto = "Sin foto";
+    // 2. Guardar foto inicial en Drive → ROOT/[Empresa]/Evidencia_Formatos/
+    let urlFoto = "Sin foto";
+    if (data.archivoBase64) {
+      try {
+        const params        = getParametros().data || {};
+        const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
+        const nombreArchivo = 'Formato_' + _sanitizeName(idRegistro) + '_' + _sanitizeName(nombreEmpresa) + '_' + _fechaParaNombre() + '.png';
+        urlFoto = guardarImagenEnDrive(
+          data.archivoBase64, nombreArchivo, nombreEmpresa, idCarpetaRaiz, 'Evidencia_Formatos'
+        );
+      } catch (eDrive) {
+        Logger.log('Advertencia: no se pudo guardar foto inicial: ' + eDrive.toString());
+      }
+    }
 
     // 3. Preparar fila — orden exacto del sheet DB_INSPECCIONES:
     // A:Id_formato | B:Consecutivo | C:Descripcion_Formato | D:Fecha_Hora
@@ -97,6 +107,21 @@ function guardarRegistroFormato(data) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Wrapper para PanelGestionFormatos que mapea los nombres de campo.
+ * PanelGestionFormatos envía: { idFormato, descripcionFormato, nombreEmpresa, archivoBase64, userCode }
+ * guardarRegistroFormato espera: { idFormato, descripcionRegistro, nombreCliente, archivoBase64, userCode }
+ */
+function guardarGestionFormato(data) {
+  return guardarRegistroFormato({
+    idFormato:           data.idFormato,
+    descripcionRegistro: data.descripcionFormato || '',
+    nombreCliente:       data.nombreEmpresa || 'Empresa_General',
+    archivoBase64:       data.archivoBase64,
+    userCode:            data.userCode || ''
+  });
 }
 
 /**
@@ -184,14 +209,10 @@ function cerrarRegistroFormato(idRegistro, archivoBase64) {
           try {
             const params        = getParametros().data || {};
             const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
-            const nombreArchivo = `${idRegistro}_${empresa}_FIRMA.png`;
-
-            // Determinar subcarpeta según Tipo_Documento del formato
-            const idFormato = (data[i][0] || '').toString().trim();
-            const subCarpeta = _subcarpetaPorTipo_(idFormato, empresa, ss);
+            const nombreArchivo = 'Firma_' + _sanitizeName(idRegistro) + '_' + _sanitizeName(empresa) + '_' + _fechaParaNombre() + '.png';
 
             urlFirma = guardarImagenEnDrive(
-              archivoBase64, nombreArchivo, empresa, idCarpetaRaiz, subCarpeta
+              archivoBase64, nombreArchivo, empresa, idCarpetaRaiz, 'Evidencia_Formatos'
             );
           } catch (eDrive) {
             Logger.log('Advertencia: no se pudo guardar foto de firma: ' + eDrive.toString());
@@ -320,40 +341,99 @@ function _subcarpetaPorTipo_(idFormato, empresa, ss) {
  * @param {string} [subCarpeta] Nombre de subcarpeta adicional (ej: 'FORMATOS_GESTIONADOS').
  * @return {string} URL pública del archivo creado.
  */
+/**
+ * Extrae el ID de carpeta desde una URL de Google Drive o lo retorna tal cual si ya es un ID.
+ * Soporta: https://drive.google.com/drive/folders/FOLDER_ID, o solo FOLDER_ID
+ */
+function _parseFolderId(valor) {
+  if (!valor) return null;
+  var str = valor.toString().trim();
+  // Si contiene /folders/, extraer el ID
+  var match = str.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (match) return match[1];
+  // Si no tiene slashes ni puntos, asumir que ya es un ID
+  if (str.indexOf('/') === -1 && str.indexOf('.') === -1) return str;
+  return str;
+}
+
+/**
+ * Formatea una fecha como DD_MM_YYYY para usar en nombres de archivo.
+ * @param {Date} [fecha] Fecha a formatear (por defecto: ahora).
+ * @return {string} Ej: "27_02_2026"
+ */
+function _fechaParaNombre(fecha) {
+  var d = fecha || new Date();
+  var dd = ('0' + d.getDate()).slice(-2);
+  var mm = ('0' + (d.getMonth() + 1)).slice(-2);
+  var yyyy = d.getFullYear();
+  return dd + '_' + mm + '_' + yyyy;
+}
+
+/**
+ * Limpia un string para usarlo como nombre de archivo/carpeta.
+ * Reemplaza espacios por _ y elimina caracteres especiales.
+ * @param {string} str Texto a limpiar.
+ * @return {string} Texto seguro para nombres de archivo.
+ */
+function _sanitizeName(str) {
+  if (!str) return 'General';
+  return str.toString().trim()
+    .replace(/[\/\\:*?"<>|]/g, '')
+    .replace(/\s+/g, '_');
+}
+
+/**
+ * Guarda una imagen Base64 en Drive.
+ * Estructura de carpetas:
+ *   - Con empresa: ROOT / [Empresa] / [subCarpeta] / archivo
+ *   - Sin empresa (null/vacío): ROOT / [subCarpeta] / archivo
+ *
+ * @param {string} base64Data   Datos base64 (data:image/...;base64,...).
+ * @param {string} nombreArchivo Nombre del archivo a crear.
+ * @param {string} nombreEmpresa Nombre de la empresa (null para carpeta raíz directa).
+ * @param {string} idCarpetaRaiz ID o URL de la carpeta raíz en Drive.
+ * @param {string} [subCarpeta]  Subcarpeta (ej: 'Evidencia_Formatos').
+ * @return {string} URL pública del archivo creado.
+ */
 function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpetaRaiz, subCarpeta) {
   // 1. Decodificar la imagen
-  const partes = base64Data.split(',');
-  const contentType = partes[0].split(':')[1].split(';')[0];
-  const decodedData = Utilities.base64Decode(partes[1]);
-  const blob = Utilities.newBlob(decodedData, contentType, nombreArchivo);
+  var partes = base64Data.split(',');
+  var contentType = partes[0].split(':')[1].split(';')[0];
+  var decodedData = Utilities.base64Decode(partes[1]);
+  var blob = Utilities.newBlob(decodedData, contentType, nombreArchivo);
 
-  // 2. Carpeta raíz
-  let carpetaRaiz;
+  // 2. Carpeta raíz (soporta URL completa o solo ID)
+  var folderId = _parseFolderId(idCarpetaRaiz);
+  var carpetaRaiz;
   try {
-    carpetaRaiz = DriveApp.getFolderById(idCarpetaRaiz);
+    carpetaRaiz = DriveApp.getFolderById(folderId);
   } catch (e) {
     Logger.log("Error al acceder a la carpeta raíz: " + e.toString());
-    const iterador = DriveApp.getFoldersByName("SST_RESPALDO_EV");
+    var iterador = DriveApp.getFoldersByName("SST_RESPALDO_EV");
     carpetaRaiz = iterador.hasNext() ? iterador.next() : DriveApp.createFolder("SST_RESPALDO_EV");
   }
 
-  // 3. Subcarpeta por cliente
-  const iterCliente = carpetaRaiz.getFoldersByName(nombreEmpresa);
-  const carpetaCliente = iterCliente.hasNext()
-    ? iterCliente.next()
-    : carpetaRaiz.createFolder(nombreEmpresa);
+  // 3. Determinar carpeta base: con empresa → ROOT/[Empresa], sin empresa → ROOT
+  var carpetaBase = carpetaRaiz;
+  var empSanitized = nombreEmpresa ? _sanitizeName(nombreEmpresa) : '';
+  if (empSanitized) {
+    var iterCliente = carpetaRaiz.getFoldersByName(empSanitized);
+    carpetaBase = iterCliente.hasNext()
+      ? iterCliente.next()
+      : carpetaRaiz.createFolder(empSanitized);
+  }
 
-  // 4. Subcarpeta adicional si se especificó (ej: FORMATOS_GESTIONADOS)
-  let carpetaDestino = carpetaCliente;
+  // 4. Subcarpeta adicional si se especificó (ej: Evidencia_Formatos)
+  var carpetaDestino = carpetaBase;
   if (subCarpeta) {
-    const iterSub = carpetaCliente.getFoldersByName(subCarpeta);
+    var iterSub = carpetaBase.getFoldersByName(subCarpeta);
     carpetaDestino = iterSub.hasNext()
       ? iterSub.next()
-      : carpetaCliente.createFolder(subCarpeta);
+      : carpetaBase.createFolder(subCarpeta);
   }
 
   // 5. Crear archivo y dar permisos de lectura
-  const archivo = carpetaDestino.createFile(blob);
+  var archivo = carpetaDestino.createFile(blob);
   archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return archivo.getUrl();
 }
@@ -1212,46 +1292,64 @@ function obtenerOpcionesFormulario() {
  * @param {Object} data Datos del ingreso (Obra, Foto Base64).
  */
 function registrarIngreso(data) {
+  // Lock por usuario — evita doble-ingreso si el supervisor toca el botón dos veces
+  const lock = LockService.getUserLock();
   try {
-    const ss = _getSpreadsheet();
+    lock.waitLock(5000);
+
+    const ss   = _getSpreadsheet();
     const hoja = ss.getSheetByName('DB_ASISTENCIA');
-    const user = getUserDataFromApp(data.userEmail); // Función auxiliar para validar contra DB_USUARIOS
-    
-    const fechaActual = new Date();
-    const idAsistencia = "ASIS-" + fechaActual.getTime();
-    
-    // Determinar Tipo de Día
-    const tipoDia = getTipoDia(fechaActual);
-    
-    // Guardar Foto en Drive
-    let urlFoto = "Sin foto";
-    if (data.archivoBase64) {
-      const params = getParametros().data || {};
-      const folderId = params.DRIVE_ROOT_FOLDER_ID;
-      // Carpeta dedicada según requerimiento
-      const nombreCarpeta = "FOTOS_REGISTRO_ASISTENCIA_SUP_STT";
-      urlFoto = guardarImagenEnDrive(data.archivoBase64, `INGRESO_${user.nombre}_${fechaActual.getTime()}.png`, nombreCarpeta, folderId);
+    const user = getUserDataFromApp(data.userEmail);
+
+    // Verificar que no exista ya un ACTIVO para este usuario hoy
+    const today     = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy');
+    const filasPrev = hoja.getDataRange().getValues();
+    for (let i = filasPrev.length - 1; i >= 1; i--) {
+      if ((filasPrev[i][1] || '') === user.email &&
+          (filasPrev[i][10] || '') === 'ACTIVO' &&
+          (filasPrev[i][3] || '').toString().trim() === today) {
+        return { status: 'error', message: 'Ya tienes una jornada activa registrada hoy.' };
+      }
     }
 
-    // [ID_Asis, Email, Nombre, Fecha, H_In, H_Out, Tipo, Obra, Foto_In, Foto_Out, Estado]
-    const nuevaFila = [
+    const fechaActual  = new Date();
+    const idAsistencia = 'ASIS-' + fechaActual.getTime();
+    const tipoDia      = getTipoDia(fechaActual);
+
+    // Guardar Foto en Drive → ROOT/Evidencia_Asistencias/
+    let urlFoto = 'Sin foto';
+    if (data.archivoBase64) {
+      try {
+        const params     = getParametros().data || {};
+        const obraNombre = data.obra || 'General';
+        const nombreArchivo = 'Ingreso_' + _sanitizeName(user.nombre) + '_' + _sanitizeName(obraNombre) + '_' + _fechaParaNombre() + '.png';
+        urlFoto = guardarImagenEnDrive(data.archivoBase64, nombreArchivo, null, params.DRIVE_ROOT_FOLDER_ID, 'Evidencia_Asistencias');
+      } catch (eDrive) {
+        Logger.log('registrarIngreso Drive: ' + eDrive.toString());
+      }
+    }
+
+    hoja.appendRow([
       idAsistencia,
       user.email,
       user.nombre,
-      Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), "dd/MM/yyyy"),
-      Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), "HH:mm:ss"),
-      "", // Hora Salida
+      Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
+      Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), 'HH:mm:ss'),
+      '',       // Hora Salida
       tipoDia,
-      data.obra || "Generica",
+      data.obra || 'Generica',
       urlFoto,
-      "", // Foto Salida
-      "ACTIVO"
-    ];
+      '',       // Foto Salida
+      'ACTIVO'
+    ]);
+    SpreadsheetApp.flush();
+    return { status: 'success', message: 'Ingreso registrado correctamente.', data: { id: idAsistencia } };
 
-    hoja.appendRow(nuevaFila);
-    return { status: "success", message: "Ingreso registrado correctamente.", data: { id: idAsistencia } };
   } catch (e) {
-    return { status: "error", message: "Error al registrar ingreso: " + e.toString() };
+    Logger.log('Error en registrarIngreso: ' + e.toString());
+    return { status: 'error', message: 'Error al registrar ingreso: ' + e.toString() };
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -1259,39 +1357,52 @@ function registrarIngreso(data) {
  * REGISTRO DE ASISTENCIA (SALIDA)
  */
 function registrarSalida(data) {
+  const lock = LockService.getUserLock();
   try {
-    const ss = _getSpreadsheet();
-    const hoja = ss.getSheetByName('DB_ASISTENCIA');
+    lock.waitLock(5000);
+
+    const ss    = _getSpreadsheet();
+    const hoja  = ss.getSheetByName('DB_ASISTENCIA');
     const email = data.userEmail;
-    
+
     const datos = hoja.getDataRange().getValues();
     let filaIndex = -1;
-    
-    // Buscar registro ACTIVO del usuario
+
     for (let i = datos.length - 1; i >= 1; i--) {
-      if (datos[i][1] === email && datos[i][10] === "ACTIVO") {
+      if (datos[i][1] === email && datos[i][10] === 'ACTIVO') {
         filaIndex = i + 1;
         break;
       }
     }
-    
-    if (filaIndex === -1) throw new Error("No se encontró un ingreso activo para cerrar.");
+
+    if (filaIndex === -1) throw new Error('No se encontró un ingreso activo para cerrar.');
 
     const fechaActual = new Date();
-    let urlFoto = "Sin foto";
+    let urlFoto = 'Sin foto';
     if (data.archivoBase64) {
-      const params = getParametros().data || {};
-      const nombreCarpeta = "FOTOS_REGISTRO_ASISTENCIA_SUP_STT";
-      urlFoto = guardarImagenEnDrive(data.archivoBase64, `SALIDA_${email}_${fechaActual.getTime()}.png`, nombreCarpeta, params.DRIVE_ROOT_FOLDER_ID);
+      try {
+        const params     = getParametros().data || {};
+        const nombreUser = (datos[filaIndex - 1][2] || email).toString().trim();
+        const obraNombre = (datos[filaIndex - 1][7] || 'General').toString().trim();
+        const nombreArchivo = 'Salida_' + _sanitizeName(nombreUser) + '_' + _sanitizeName(obraNombre) + '_' + _fechaParaNombre() + '.png';
+        urlFoto = guardarImagenEnDrive(data.archivoBase64, nombreArchivo, null, params.DRIVE_ROOT_FOLDER_ID, 'Evidencia_Asistencias');
+      } catch (eDrive) {
+        Logger.log('registrarSalida Drive: ' + eDrive.toString());
+      }
     }
 
-    hoja.getRange(filaIndex, 6).setValue(Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), "HH:mm:ss"));
+    hoja.getRange(filaIndex, 6).setValue(Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), 'HH:mm:ss'));
     hoja.getRange(filaIndex, 10).setValue(urlFoto);
-    hoja.getRange(filaIndex, 11).setValue("CERRADO");
+    hoja.getRange(filaIndex, 11).setValue('CERRADO');
+    SpreadsheetApp.flush();
 
-    return { status: "success", message: "Salida registrada. ¡Buen descanso!" };
+    return { status: 'success', message: '¡Salida registrada! Buen descanso.' };
+
   } catch (e) {
-    return { status: "error", message: "Error al registrar salida: " + e.toString() };
+    Logger.log('Error en registrarSalida: ' + e.toString());
+    return { status: 'error', message: 'Error al registrar salida: ' + e.toString() };
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -1327,20 +1438,35 @@ function getUserDataFromApp(email) {
     } catch(e) { /* cache corrupto, leer de hoja */ }
   }
 
-  // ── Cache miss: leer hoja ─────────────────────────────────────────
-  const ss   = _getSpreadsheet();
-  const hoja = ss.getSheetByName('DB_USUARIOS');
-  const datos = hoja.getDataRange().getValues();
+  // ── Cache miss: leer hoja y poblar caché para próximas llamadas ───
+  const ss    = _getSpreadsheet();
+  const hoja  = ss.getSheetByName('DB_USUARIOS');
+  const datos = hoja ? hoja.getDataRange().getValues() : [];
+
+  // Construir y guardar lista completa en cache (600s = 10 min)
+  const listaCache = [];
   for (let i = 1; i < datos.length; i++) {
-    if ((datos[i][0] || '').toString().trim().toLowerCase() === emailLower) {
-      return {
-        email:  datos[i][0],
-        nombre: datos[i][1],
-        codigo: (datos[i][4] || '').toString()   // ID_Cliente_Asociado → Codigo_Supervisor
-      };
+    const emailRow = (datos[i][0] || '').toString().trim().toLowerCase();
+    if (emailRow) {
+      listaCache.push({
+        email:     emailRow,
+        nombre:    datos[i][1],
+        rol:       datos[i][2],
+        password:  (datos[i][3] || '').toString(),
+        idCliente: (datos[i][4] || '').toString(),
+        estado:    (datos[i][7] || 'activo').toString().toLowerCase()
+      });
     }
   }
-  return { email: email, nombre: "Supervisor", codigo: '' };
+  try { cache.put('db_usuarios_v1', JSON.stringify(listaCache), 600); } catch(ec) {}
+
+  // Buscar el usuario solicitado en la lista recién cargada
+  for (let i = 0; i < listaCache.length; i++) {
+    if (listaCache[i].email === emailLower) {
+      return { email: listaCache[i].email, nombre: listaCache[i].nombre, codigo: listaCache[i].idCliente || '' };
+    }
+  }
+  return { email: email, nombre: 'Supervisor', codigo: '' };
 }
 
 /**
@@ -1378,6 +1504,38 @@ function obtenerEstadoAsistencia(email) {
     return { status: "success", data: { activo: false } };
   } catch (e) {
     return { status: "error", message: e.toString() };
+  }
+}
+
+/**
+ * BATCH DE INICIALIZACIÓN DEL SUPERVISOR
+ * Combina en UNA sola llamada RPC lo que antes requería 2:
+ *   - obtenerClientesRegistrados() (para selector de obra e inspección)
+ *   - obtenerEstadoAsistencia(email) (para detectar jornada activa)
+ *
+ * Reduce la latencia de inicio del panel ~50% en conexiones móviles 4G.
+ *
+ * @param {string} email Email del supervisor logueado.
+ * @return {Object} { status, data: { clientes, asistencia } }
+ */
+function obtenerDatosPanelSupervisor(email) {
+  try {
+    // 1. Clientes (reutiliza la función existente para no duplicar lógica)
+    const resClientes = obtenerClientesRegistrados();
+
+    // 2. Estado de asistencia (reutiliza la función existente)
+    const resAsistencia = obtenerEstadoAsistencia(email);
+
+    return {
+      status: 'success',
+      data: {
+        clientes:    resClientes.data   || [],
+        asistencia:  resAsistencia.data || { activo: false }
+      }
+    };
+  } catch (e) {
+    Logger.log('Error en obtenerDatosPanelSupervisor: ' + e.toString());
+    return { status: 'error', message: e.toString() };
   }
 }
 
@@ -1496,17 +1654,19 @@ function guardarHallazgo(data) {
     const descSlug    = _slugify_((data.descripcion || '').split(' ').slice(0, 3).join(' '), 30);
     const idHallazgo  = 'RH-' + consecutivo + '-' + empSlug + '-' + descSlug;
 
-    // Guardar foto de evidencia en Drive → {empresa}/Hallazgos/
+    // Guardar foto de evidencia en Drive → ROOT/[Empresa]/Evidencia_Hallazgos/
     let urlFoto = 'Sin foto';
     if (data.fotoBase64) {
       try {
         const params = getParametros().data || {};
+        const empNombre = (data.empresaContratista || '').toString().trim();
+        const nombreArchivo = 'Hallazgo_' + _sanitizeName(idHallazgo) + '_' + _sanitizeName(empNombre) + '_' + _fechaParaNombre() + '.png';
         urlFoto = guardarImagenEnDrive(
           data.fotoBase64,
-          idHallazgo + '_EVIDENCIA.png',
-          (data.empresaContratista || '').toString().trim(),
+          nombreArchivo,
+          empNombre,
           params.DRIVE_ROOT_FOLDER_ID,
-          'Hallazgos'
+          'Evidencia_Hallazgos'
         );
       } catch (eDrive) {
         Logger.log('guardarHallazgo Drive: ' + eDrive.toString());
@@ -1568,17 +1728,18 @@ function cerrarHallazgo(data) {
         const tz      = Session.getScriptTimeZone();
         const ahora   = new Date();
 
-        // Guardar foto de cierre en Drive → {empresa}/Hallazgos/
+        // Guardar foto de cierre en Drive → ROOT/[Empresa]/Evidencia_Hallazgos/
         let urlFotoCierre = 'Sin foto cierre';
         if (data.fotoBase64) {
           try {
             const params = getParametros().data || {};
+            const nombreArchivo = 'Hallazgo_Cierre_' + _sanitizeName(idBusca) + '_' + _sanitizeName(empresa) + '_' + _fechaParaNombre() + '.png';
             urlFotoCierre = guardarImagenEnDrive(
               data.fotoBase64,
-              idBusca + '_CIERRE.png',
+              nombreArchivo,
               empresa,
               params.DRIVE_ROOT_FOLDER_ID,
-              'Hallazgos'
+              'Evidencia_Hallazgos'
             );
           } catch (eDrive) {
             Logger.log('cerrarHallazgo Drive: ' + eDrive.toString());
@@ -2182,4 +2343,257 @@ function obtenerGaleriaHallazgosAdmin() {
     Logger.log('Error en obtenerGaleriaHallazgosAdmin: ' + e.toString());
     return { status: 'error', message: e.toString() };
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// MIGRACIÓN: Reorganizar evidencias existentes a nueva estructura
+// Ejecutar UNA VEZ desde el Editor de Apps Script → Ejecutar
+// ══════════════════════════════════════════════════════════════════════
+
+/**
+ * Extrae el ID de un archivo de Google Drive desde su URL.
+ * Soporta: /file/d/ID/, /open?id=ID, id=ID en query params.
+ * @param {string} url URL del archivo en Drive.
+ * @return {string|null} ID del archivo o null.
+ */
+function _extraerFileIdDeUrl(url) {
+  if (!url) return null;
+  var str = url.toString().trim();
+  // /file/d/FILE_ID/
+  var m1 = str.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m1) return m1[1];
+  // ?id=FILE_ID o &id=FILE_ID
+  var m2 = str.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m2) return m2[1];
+  // /open?id=FILE_ID
+  var m3 = str.match(/open\?id=([a-zA-Z0-9_-]+)/);
+  if (m3) return m3[1];
+  return null;
+}
+
+/**
+ * Mueve un archivo de Drive a una carpeta destino y lo renombra.
+ * @param {string} fileId      ID del archivo en Drive.
+ * @param {Folder} carpetaDest Carpeta destino.
+ * @param {string} nuevoNombre Nuevo nombre para el archivo.
+ * @return {boolean} true si se movió correctamente.
+ */
+function _moverYRenombrar(fileId, carpetaDest, nuevoNombre) {
+  try {
+    var archivo = DriveApp.getFileById(fileId);
+    // Renombrar
+    if (nuevoNombre) archivo.setName(nuevoNombre);
+    // Mover: agregar a nueva carpeta, quitar de las anteriores
+    var padresIt = archivo.getParents();
+    carpetaDest.addFile(archivo);
+    while (padresIt.hasNext()) {
+      var padre = padresIt.next();
+      if (padre.getId() !== carpetaDest.getId()) {
+        padre.removeFile(archivo);
+      }
+    }
+    return true;
+  } catch (e) {
+    Logger.log('_moverYRenombrar error [' + fileId + ']: ' + e.toString());
+    return false;
+  }
+}
+
+/**
+ * Obtiene o crea una subcarpeta dentro de una carpeta padre.
+ */
+function _getOrCreateFolder(padre, nombre) {
+  var it = padre.getFoldersByName(nombre);
+  return it.hasNext() ? it.next() : padre.createFolder(nombre);
+}
+
+/**
+ * Parsea una fecha en formato "dd/MM/yyyy" a un objeto Date.
+ */
+function _parseFechaDDMMYYYY(str) {
+  if (!str) return null;
+  if (str instanceof Date) return str;
+  var s = str.toString().trim();
+  var p = s.split('/');
+  if (p.length === 3) return new Date(p[2], parseInt(p[1]) - 1, p[0]);
+  return new Date(s);
+}
+
+/**
+ * EJECUTAR UNA VEZ — Migra TODAS las evidencias existentes a la nueva estructura:
+ *   ROOT/[Empresa]/Evidencia_Formatos/
+ *   ROOT/[Empresa]/Evidencia_Hallazgos/
+ *   ROOT/Evidencia_Asistencias/
+ *
+ * También renombra archivos con la convención: Tipo_Consecutivo_Empresa_DD_MM_YYYY
+ *
+ * Ejecutar desde: Editor de Apps Script → seleccionar función → ▶ Ejecutar
+ * Ver resultados en: Ver → Registro de ejecución
+ */
+function migrarEvidenciasANuevaEstructura() {
+  var ss = _getSpreadsheet();
+  var params = getParametros().data || {};
+  var rootId = _parseFolderId(params.DRIVE_ROOT_FOLDER_ID);
+
+  if (!rootId) {
+    Logger.log('❌ ERROR: No se encontró DRIVE_ROOT_FOLDER_ID en PARAM_SISTEMA');
+    return;
+  }
+
+  var carpetaRaiz;
+  try {
+    carpetaRaiz = DriveApp.getFolderById(rootId);
+  } catch (e) {
+    Logger.log('❌ ERROR: No se pudo acceder a la carpeta raíz: ' + e.toString());
+    return;
+  }
+
+  var totalMovidos = 0;
+  var totalErrores = 0;
+  var totalOmitidos = 0;
+
+  // ── 1. DB_INSPECCIONES (Formatos) ─────────────────────────────────
+  Logger.log('═══ MIGRANDO FORMATOS (DB_INSPECCIONES) ═══');
+  var hojaInsp = ss.getSheetByName('DB_INSPECCIONES');
+  if (hojaInsp) {
+    var datosInsp = hojaInsp.getDataRange().getValues();
+    // Schema: A(0):Id_formato | B(1):Consecutivo | C(2):Descripcion | D(3):Fecha_Hora
+    //         E(4):Empresa | F(5):Foto_Formato_URL | G(6):Reportado_Por | H(7):Estado
+    //         I(8):Foto_Firma_URL | J(9):Fecha_Cierre
+    for (var i = 1; i < datosInsp.length; i++) {
+      var consecutivo = (datosInsp[i][1] || '').toString().trim();
+      var empresa     = (datosInsp[i][4] || '').toString().trim();
+      var fotoUrl     = (datosInsp[i][5] || '').toString().trim();
+      var firmaUrl    = (datosInsp[i][8] || '').toString().trim();
+      var fechaReg    = datosInsp[i][3]; // Date object o string
+
+      if (!empresa) { totalOmitidos++; continue; }
+
+      var carpetaEmp = _getOrCreateFolder(carpetaRaiz, _sanitizeName(empresa));
+      var carpetaFmt = _getOrCreateFolder(carpetaEmp, 'Evidencia_Formatos');
+      var fechaStr   = _fechaParaNombre(fechaReg instanceof Date ? fechaReg : _parseFechaDDMMYYYY(fechaReg));
+
+      // Foto inicial del formato
+      if (fotoUrl && fotoUrl !== 'Sin foto') {
+        var fId = _extraerFileIdDeUrl(fotoUrl);
+        if (fId) {
+          var nombre = 'Formato_' + _sanitizeName(consecutivo) + '_' + _sanitizeName(empresa) + '_' + fechaStr + '.png';
+          if (_moverYRenombrar(fId, carpetaFmt, nombre)) {
+            totalMovidos++;
+            Logger.log('  ✅ Formato: ' + nombre);
+          } else { totalErrores++; }
+        } else { totalOmitidos++; }
+      }
+
+      // Foto de firma
+      if (firmaUrl && firmaUrl !== 'Sin foto firma' && firmaUrl !== '') {
+        var fIdFirma = _extraerFileIdDeUrl(firmaUrl);
+        if (fIdFirma) {
+          var nombreFirma = 'Firma_' + _sanitizeName(consecutivo) + '_' + _sanitizeName(empresa) + '_' + fechaStr + '.png';
+          if (_moverYRenombrar(fIdFirma, carpetaFmt, nombreFirma)) {
+            totalMovidos++;
+            Logger.log('  ✅ Firma: ' + nombreFirma);
+          } else { totalErrores++; }
+        } else { totalOmitidos++; }
+      }
+    }
+  }
+
+  // ── 2. DB_HALLAZGOS ───────────────────────────────────────────────
+  Logger.log('═══ MIGRANDO HALLAZGOS (DB_HALLAZGOS) ═══');
+  var hojaHall = ss.getSheetByName('DB_HALLAZGOS');
+  if (hojaHall) {
+    var datosHall = hojaHall.getDataRange().getValues();
+    // Schema: A(0):Id_hallazgo | B(1):Fecha | C(2):Hora | ... | E(4):Descripcion
+    //         F(5):Foto_URL | G(6):Empresa | ... | L(11):Estado | ... | O(14):Foto_Cierre
+    for (var j = 1; j < datosHall.length; j++) {
+      var idHall      = (datosHall[j][0] || '').toString().trim();
+      var fechaHall   = datosHall[j][1]; // string dd/MM/yyyy
+      var fotoHall    = (datosHall[j][5] || '').toString().trim();
+      var empresaHall = (datosHall[j][6] || '').toString().trim();
+      var fotoCierre  = (datosHall[j][14] || '').toString().trim();
+
+      if (!empresaHall) { totalOmitidos++; continue; }
+
+      var carpetaEmpH = _getOrCreateFolder(carpetaRaiz, _sanitizeName(empresaHall));
+      var carpetaHall = _getOrCreateFolder(carpetaEmpH, 'Evidencia_Hallazgos');
+      var fechaHStr   = _fechaParaNombre(_parseFechaDDMMYYYY(fechaHall));
+
+      // Foto de evidencia del hallazgo
+      if (fotoHall && fotoHall !== 'Sin foto') {
+        var fIdH = _extraerFileIdDeUrl(fotoHall);
+        if (fIdH) {
+          var nombreH = 'Hallazgo_' + _sanitizeName(idHall) + '_' + _sanitizeName(empresaHall) + '_' + fechaHStr + '.png';
+          if (_moverYRenombrar(fIdH, carpetaHall, nombreH)) {
+            totalMovidos++;
+            Logger.log('  ✅ Hallazgo: ' + nombreH);
+          } else { totalErrores++; }
+        } else { totalOmitidos++; }
+      }
+
+      // Foto de cierre
+      if (fotoCierre && fotoCierre !== 'Sin foto cierre' && fotoCierre !== '') {
+        var fIdC = _extraerFileIdDeUrl(fotoCierre);
+        if (fIdC) {
+          var fechaCStr = _fechaParaNombre(_parseFechaDDMMYYYY(datosHall[j][12])) || fechaHStr;
+          var nombreC = 'Hallazgo_Cierre_' + _sanitizeName(idHall) + '_' + _sanitizeName(empresaHall) + '_' + fechaCStr + '.png';
+          if (_moverYRenombrar(fIdC, carpetaHall, nombreC)) {
+            totalMovidos++;
+            Logger.log('  ✅ Cierre: ' + nombreC);
+          } else { totalErrores++; }
+        } else { totalOmitidos++; }
+      }
+    }
+  }
+
+  // ── 3. DB_ASISTENCIA ──────────────────────────────────────────────
+  Logger.log('═══ MIGRANDO ASISTENCIAS (DB_ASISTENCIA) ═══');
+  var hojaAsis = ss.getSheetByName('DB_ASISTENCIA');
+  if (hojaAsis) {
+    var datosAsis = hojaAsis.getDataRange().getValues();
+    var carpetaAsist = _getOrCreateFolder(carpetaRaiz, 'Evidencia_Asistencias');
+    // Schema: A(0):ID | B(1):Email | C(2):Nombre | D(3):Fecha | ... | H(7):Obra
+    //         I(8):Foto_Entrada_URL | J(9):Foto_Salida_URL
+    for (var k = 1; k < datosAsis.length; k++) {
+      var nombreSup = (datosAsis[k][2] || '').toString().trim();
+      var fechaAsis = datosAsis[k][3]; // string dd/MM/yyyy
+      var obraAsis  = (datosAsis[k][7] || 'General').toString().trim();
+      var fotoIn    = (datosAsis[k][8] || '').toString().trim();
+      var fotoOut   = (datosAsis[k][9] || '').toString().trim();
+      var fechaAStr = _fechaParaNombre(_parseFechaDDMMYYYY(fechaAsis));
+
+      // Foto de ingreso
+      if (fotoIn && fotoIn !== 'Sin foto') {
+        var fIdIn = _extraerFileIdDeUrl(fotoIn);
+        if (fIdIn) {
+          var nombreIn = 'Ingreso_' + _sanitizeName(nombreSup) + '_' + _sanitizeName(obraAsis) + '_' + fechaAStr + '.png';
+          if (_moverYRenombrar(fIdIn, carpetaAsist, nombreIn)) {
+            totalMovidos++;
+            Logger.log('  ✅ Ingreso: ' + nombreIn);
+          } else { totalErrores++; }
+        } else { totalOmitidos++; }
+      }
+
+      // Foto de salida
+      if (fotoOut && fotoOut !== 'Sin foto') {
+        var fIdOut = _extraerFileIdDeUrl(fotoOut);
+        if (fIdOut) {
+          var nombreOut = 'Salida_' + _sanitizeName(nombreSup) + '_' + _sanitizeName(obraAsis) + '_' + fechaAStr + '.png';
+          if (_moverYRenombrar(fIdOut, carpetaAsist, nombreOut)) {
+            totalMovidos++;
+            Logger.log('  ✅ Salida: ' + nombreOut);
+          } else { totalErrores++; }
+        } else { totalOmitidos++; }
+      }
+    }
+  }
+
+  // ── RESUMEN ───────────────────────────────────────────────────────
+  Logger.log('');
+  Logger.log('══════════════════════════════════════════');
+  Logger.log('  MIGRACIÓN COMPLETADA');
+  Logger.log('  ✅ Movidos y renombrados: ' + totalMovidos);
+  Logger.log('  ⚠️ Omitidos (sin URL válida): ' + totalOmitidos);
+  Logger.log('  ❌ Errores: ' + totalErrores);
+  Logger.log('══════════════════════════════════════════');
 }
