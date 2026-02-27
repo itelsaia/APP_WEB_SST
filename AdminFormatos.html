@@ -126,82 +126,110 @@
 <!-- MODAL: CREAR / EDITAR FORMATO                             -->
 <!-- ══════════════════════════════════════════════════════════ -->
 <div id="fmt-modal"
-    class="fixed inset-0 bg-black/85 z-[70] flex items-end sm:items-center justify-center hidden backdrop-blur-md"
+    style="display:none; position:absolute; z-index:70; left:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);"
     onclick="if(event.target===this) cerrarModalFormato()">
-    <div class="bg-[#101922] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md border border-white/10 animate-slide-up">
 
-        <!-- Handle móvil -->
-        <div class="sm:hidden flex justify-center pt-3 pb-1">
-            <div class="w-10 h-1 bg-white/20 rounded-full"></div>
+    <!-- Contenedor principal del modal -->
+    <div id="fmt-modal-box" class="rounded-2xl border border-white/10 shadow-2xl"
+        style="background:#0f1923; display:flex; flex-direction:column; width:92%; max-width:380px; margin:auto;">
+
+        <!-- ── Cabecera ── -->
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-white/8 shrink-0"
+            style="background:linear-gradient(135deg,rgba(197,160,72,0.08) 0%,transparent 60%);">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border border-white/10"
+                style="background:rgba(197,160,72,0.12);">
+                <span class="material-symbols-outlined text-xl" style="color:var(--color-primario)">description</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <h3 id="fmt-modal-titulo" class="text-sm font-black text-white tracking-tight truncate">Nuevo Formato</h3>
+                <p id="fmt-modal-sub" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate"></p>
+            </div>
+            <button onclick="cerrarModalFormato()"
+                class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/8 transition shrink-0">
+                <span class="material-symbols-outlined text-base">close</span>
+            </button>
         </div>
 
-        <!-- Cabecera modal -->
-        <div class="px-6 pt-4 pb-3 border-b border-white/10 flex items-center gap-3">
-            <div class="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center border border-primary/20 shrink-0">
-                <span class="material-symbols-outlined text-2xl text-primary">description</span>
-            </div>
-            <div>
-                <h3 id="fmt-modal-titulo" class="text-base font-black text-white tracking-tight">Nuevo Formato</h3>
-                <p id="fmt-modal-sub" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest"></p>
-            </div>
-        </div>
+        <!-- ── Cuerpo (scrollable) ── -->
+        <div style="overflow-y:auto; flex:1; min-height:0; padding:1.25rem 1.25rem; display:flex; flex-direction:column; gap:1rem;">
 
-        <!-- Cuerpo del formulario -->
-        <div class="px-6 py-4 space-y-3 overflow-y-auto" style="max-height:60vh;">
-
-            <!-- Código Id_Formato -->
+            <!-- Código -->
             <div>
-                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Código Formato *</label>
+                <label class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    <span class="material-symbols-outlined text-xs" style="color:var(--color-primario)">tag</span>
+                    Código Formato <span class="text-red-400">*</span>
+                </label>
                 <input type="text" id="fmt-inp-id" placeholder="Ej: ATS, PMA, IHM..."
-                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
-                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
-                <p id="fmt-nota-id" class="text-[9px] text-slate-500 mt-1">Código corto único para identificar el formato dentro de la empresa.</p>
+                    style="background:#1a2535; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm font-medium border border-white/10 rounded-xl outline-none focus:border-amber-500/50 transition-all placeholder:text-slate-600">
+                <p id="fmt-nota-id" class="text-[9px] text-slate-600 mt-1.5 hidden">Puede modificar el código si hubo un error al crearlo.</p>
             </div>
 
             <!-- Descripción -->
             <div>
-                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Descripción *</label>
+                <label class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    <span class="material-symbols-outlined text-xs" style="color:var(--color-primario)">subject</span>
+                    Descripción <span class="text-red-400">*</span>
+                </label>
                 <input type="text" id="fmt-inp-descripcion" placeholder="Ej: Análisis de Trabajo Seguro"
-                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
-                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all">
+                    style="background:#1a2535; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm font-medium border border-white/10 rounded-xl outline-none focus:border-amber-500/50 transition-all placeholder:text-slate-600">
             </div>
 
             <!-- Tipo de Documento -->
             <div>
-                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Tipo de Documento *</label>
+                <label class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    <span class="material-symbols-outlined text-xs" style="color:var(--color-primario)">category</span>
+                    Tipo de Documento <span class="text-red-400">*</span>
+                </label>
                 <select id="fmt-inp-tipo"
-                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
-                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none">
-                    <option value="" style="background:#1a242f;">Seleccione el tipo...</option>
-                    <option value="Registro" style="background:#1a242f;">Registro</option>
-                    <option value="Permiso" style="background:#1a242f;">Permiso</option>
-                    <option value="Inspeccion" style="background:#1a242f;">Inspección</option>
-                    <option value="Ejecucion" style="background:#1a242f;">Ejecución</option>
+                    style="background:#1a2535; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm font-medium border border-white/10 rounded-xl outline-none focus:border-amber-500/50 transition-all appearance-none cursor-pointer">
+                    <option value="" style="background:#1a2535;">Seleccione el tipo...</option>
+                    <option value="Registro" style="background:#1a2535;">Registro</option>
+                    <option value="Permiso" style="background:#1a2535;">Permiso</option>
+                    <option value="Inspeccion" style="background:#1a2535;">Inspección</option>
+                    <option value="Ejecucion" style="background:#1a2535;">Ejecución</option>
                 </select>
             </div>
 
             <!-- Empresa Contratista -->
             <div>
-                <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Empresa Contratista *</label>
+                <label class="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    <span class="material-symbols-outlined text-xs" style="color:var(--color-primario)">location_city</span>
+                    Empresa Contratista <span class="text-red-400">*</span>
+                </label>
+                <!-- Modo CREAR -->
                 <select id="fmt-inp-empresa"
-                    style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
-                    class="w-full px-3 py-2.5 text-xs border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all appearance-none">
-                    <option value="" style="background:#1a242f;">Seleccione la empresa...</option>
+                    style="background:#1a2535; color:#f8fafc; color-scheme:dark;"
+                    class="w-full px-3 py-2.5 text-sm font-medium border border-white/10 rounded-xl outline-none focus:border-amber-500/50 transition-all appearance-none cursor-pointer">
+                    <option value="" style="background:#1a2535;">Seleccione la empresa...</option>
                 </select>
+                <!-- Modo EDITAR: texto fijo -->
+                <div id="fmt-empresa-display" style="display:none; background:#1a2535;"
+                    class="px-3 py-2.5 rounded-xl border border-amber-500/20">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm text-amber-500/60">lock</span>
+                        <span id="fmt-empresa-texto" class="text-sm font-bold text-white flex-1"></span>
+                        <span class="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded"
+                            style="color:rgba(197,160,72,0.7); background:rgba(197,160,72,0.08); border:1px solid rgba(197,160,72,0.2)">Fijo</span>
+                    </div>
+                    <p class="text-[9px] text-slate-600 mt-1">Para cambiarla, elimine el formato y créelo de nuevo.</p>
+                </div>
             </div>
         </div>
 
-        <!-- Footer -->
-        <div class="px-6 pb-5 pt-3 flex gap-3 border-t border-white/5">
+        <!-- ── Footer ── -->
+        <div class="px-5 py-4 flex gap-3 border-t border-white/8 shrink-0" style="background:#0d1720;">
             <button onclick="cerrarModalFormato()"
-                class="flex-1 py-3 text-slate-300 font-bold hover:bg-white/5 rounded-xl transition text-sm border border-white/10">
+                class="flex-1 py-2.5 text-slate-400 font-bold hover:bg-white/5 rounded-xl transition text-xs uppercase tracking-widest border border-white/10">
                 Cancelar
             </button>
             <button onclick="guardarFormato()" id="fmt-btn-guardar"
-                style="background:var(--color-primario); box-shadow:0 4px 14px rgba(197,160,72,0.25);"
-                class="flex-1 py-3 text-black font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
-                <span id="fmt-spinner-guardar" class="hidden animate-spin border-2 border-black border-t-transparent rounded-full w-4 h-4"></span>
-                <span class="material-symbols-outlined text-base">save</span>
+                style="background:var(--color-primario); box-shadow:0 4px 14px rgba(197,160,72,0.3);"
+                class="flex-1 py-2.5 text-black font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 text-xs uppercase tracking-widest">
+                <span id="fmt-spinner-guardar" class="hidden animate-spin border-2 border-black border-t-transparent rounded-full w-3.5 h-3.5"></span>
+                <span class="material-symbols-outlined text-sm">save</span>
                 Guardar
             </button>
         </div>

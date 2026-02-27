@@ -2750,6 +2750,10 @@
         // Poblar el select de empresas desde _clientesParaModal (cache compartido con usuarios)
         _poblarSelectEmpresasFormatos();
 
+        var selEmp     = document.getElementById('fmt-inp-empresa');
+        var empDisplay = document.getElementById('fmt-empresa-display');
+        var empTexto   = document.getElementById('fmt-empresa-texto');
+
         if (!idEnc) {
             // CREAR
             _fmtEditando = null;
@@ -2758,10 +2762,11 @@
             inpId.value        = '';
             inpId.readOnly     = false;
             inpId.style.opacity = '1';
-            if (nota) nota.classList.remove('hidden');
+            if (nota) nota.classList.add('hidden');
             document.getElementById('fmt-inp-descripcion').value = '';
             document.getElementById('fmt-inp-tipo').value        = '';
-            document.getElementById('fmt-inp-empresa').value     = '';
+            if (selEmp) { selEmp.value = ''; selEmp.style.display = ''; }
+            if (empDisplay) empDisplay.style.display = 'none';
         } else {
             // EDITAR
             var id      = decodeURIComponent(idEnc);
@@ -2772,22 +2777,52 @@
             titulo.textContent = 'Editar Formato';
             sub.textContent    = f.id + ' · ' + f.empresa;
             inpId.value        = f.id;
-            inpId.readOnly     = true;
-            inpId.style.opacity = '0.5';
-            if (nota) nota.classList.add('hidden');
+            inpId.readOnly     = false;
+            inpId.style.opacity = '1';
+            if (nota) { nota.classList.remove('hidden'); }
             document.getElementById('fmt-inp-descripcion').value = f.descripcion;
             document.getElementById('fmt-inp-tipo').value        = f.tipo;
-            document.getElementById('fmt-inp-empresa').value     = f.empresa;
-            document.getElementById('fmt-inp-empresa').disabled  = true;
+            // Empresa fija: ocultar select, mostrar display
+            if (selEmp)     selEmp.style.display     = 'none';
+            if (empDisplay) empDisplay.style.display  = 'block';
+            if (empTexto)   empTexto.textContent      = f.empresa;
         }
-        modal.classList.remove('hidden');
+        // Posicionar modal dinámicamente sobre el viewport visible del iframe GAS
+        _fmtAbrirModalGAS(modal);
+    }
+
+    /** Abre el modal posicionado exactamente sobre la ventana visible (compatible GAS iframe) */
+    function _fmtAbrirModalGAS(modal) {
+        var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var viewH   = window.innerHeight || document.documentElement.clientHeight || 600;
+        var viewW   = window.innerWidth  || document.documentElement.clientWidth  || 400;
+
+        // El overlay cubre exactamente el viewport visible
+        modal.style.top       = scrollY + 'px';
+        modal.style.width     = viewW + 'px';
+        modal.style.height    = viewH + 'px';
+        modal.style.display   = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+
+        // Ajustar max-height del contenedor del modal
+        var box = document.getElementById('fmt-modal-box');
+        if (box) {
+            box.style.maxHeight = Math.max(viewH - 40, 300) + 'px';
+        }
+
+        // Bloquear scroll del body mientras el modal está abierto
+        document.body.style.overflow = 'hidden';
     }
 
     function cerrarModalFormato() {
         var modal = document.getElementById('fmt-modal');
-        if (modal) modal.classList.add('hidden');
-        var selEmp = document.getElementById('fmt-inp-empresa');
-        if (selEmp) selEmp.disabled = false;
+        if (modal) modal.style.display = 'none';
+        document.body.style.overflow = '';
+        var selEmp     = document.getElementById('fmt-inp-empresa');
+        var empDisplay = document.getElementById('fmt-empresa-display');
+        if (selEmp)     { selEmp.style.display = ''; selEmp.disabled = false; }
+        if (empDisplay) empDisplay.style.display = 'none';
         _fmtEditando = null;
     }
 
@@ -2807,6 +2842,10 @@
                     if (res && res.status === 'success') {
                         _clientesParaModal = res.data || [];
                         _llenarSelectEmpresasFormatos(sel);
+                        // Restaurar empresa seleccionada si estamos en modo edición
+                        if (_fmtEditando && _fmtEditando.empresa) {
+                            sel.value = _fmtEditando.empresa;
+                        }
                     }
                 })
                 .obtenerClientesParaUsuarios();
@@ -2826,7 +2865,8 @@
         var id          = ((document.getElementById('fmt-inp-id')          || {}).value || '').trim().toUpperCase();
         var descripcion = ((document.getElementById('fmt-inp-descripcion') || {}).value || '').trim();
         var tipo        = ((document.getElementById('fmt-inp-tipo')        || {}).value || '').trim();
-        var empresa     = ((document.getElementById('fmt-inp-empresa')     || {}).value || '').trim();
+        var empresa     = _fmtEditando ? _fmtEditando.empresa
+                        : ((document.getElementById('fmt-inp-empresa') || {}).value || '').trim();
 
         if (!id)          { mostrarNotificacion('⚠️ El código del formato es obligatorio.', 'warning'); return; }
         if (!descripcion) { mostrarNotificacion('⚠️ La descripción es obligatoria.',        'warning'); return; }
@@ -2857,7 +2897,8 @@
 
         var datos = { id: id, descripcion: descripcion, tipo: tipo, empresa: empresa };
         if (_fmtEditando) {
-            datos.empresa = _fmtEditando.empresa; // usar la empresa original como clave
+            datos.empresa    = _fmtEditando.empresa; // empresa original como clave (no cambia)
+            datos.idOriginal = _fmtEditando.id;      // ID original para encontrar la fila
             google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).actualizarFormato(datos);
         } else {
             google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).crearFormato(datos);

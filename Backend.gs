@@ -793,7 +793,10 @@ function crearFormato(datos) {
 }
 
 /**
- * Actualiza descripción y tipo de un formato (el código y empresa son la clave, no se cambian).
+ * Actualiza un formato de LISTAS_FORMATOS.
+ * Busca la fila por datos.idOriginal + datos.empresa (claves originales).
+ * Actualiza columnas A (Id_Formato), B (Descripcion) y C (Tipo_Documento).
+ * La empresa (col D) nunca cambia — es la clave del cliente.
  */
 function actualizarFormato(datos) {
   try {
@@ -801,16 +804,20 @@ function actualizarFormato(datos) {
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
 
-    const idBusca  = (datos.id      || '').toString().trim().toUpperCase();
-    const empBusca = (datos.empresa || '').toString().trim();
-    const filas    = hoja.getDataRange().getValues();
+    // Clave original para encontrar la fila
+    const idOriginal = ((datos.idOriginal || datos.id) || '').toString().trim().toUpperCase();
+    const empBusca   = (datos.empresa || '').toString().trim();
+    // Nuevo valor del código (puede ser distinto al original si el usuario lo editó)
+    const nuevoId    = (datos.id || '').toString().trim().toUpperCase();
+    const filas      = hoja.getDataRange().getValues();
 
     for (let i = 1; i < filas.length; i++) {
-      if ((filas[i][0] || '').toString().trim().toUpperCase() === idBusca &&
+      if ((filas[i][0] || '').toString().trim().toUpperCase() === idOriginal &&
           (filas[i][3] || '').toString().trim()                === empBusca) {
         const fila = i + 1;
-        hoja.getRange(fila, 2).setValue((datos.descripcion || '').toString().trim()); // B
-        hoja.getRange(fila, 3).setValue((datos.tipo        || '').toString().trim()); // C
+        hoja.getRange(fila, 1).setValue(nuevoId);                                      // A: Id_Formato
+        hoja.getRange(fila, 2).setValue((datos.descripcion || '').toString().trim());   // B: Descripcion
+        hoja.getRange(fila, 3).setValue((datos.tipo        || '').toString().trim());   // C: Tipo_Documento
         SpreadsheetApp.flush();
         return { status: 'success', message: 'Formato actualizado correctamente.' };
       }

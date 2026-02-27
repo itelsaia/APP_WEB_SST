@@ -1,5 +1,14 @@
 node_modules/
 .DS_Store
 *.log
-.clasp.json
 .gemini/
+
+# Archivos clasp con IDs de proyectos (sensibles)
+.clasp.json
+.clasp.prod.json
+.clasp.dev.json
+_cliente/.clasp.json
+_cliente/appsscript.json
+
+# Secretos — nunca subir a GitHub
+SECRETOS.md
