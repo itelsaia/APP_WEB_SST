@@ -42,7 +42,6 @@
         const btn = document.getElementById('btn-login');
         const spinner = document.getElementById('login-spinner');
         const btnText = document.getElementById('btn-text');
-
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
 
@@ -71,31 +70,19 @@
                     };
                     localStorage.setItem('userSST', JSON.stringify(userData));
 
-                    // Efecto de salida y redirección
+                    // URL de destino
+                    const baseUrl = (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL)
+                        ? SCRIPT_URL
+                        : window.location.href.split('?')[0];
+                    const role = response.data.rol || 'USER';
+                    const emailEnc = encodeURIComponent(response.data.email || '');
+                    const destination = baseUrl + '?page=app&role=' + role + '&email=' + emailEnc;
+
+                    // Efecto de salida
                     document.getElementById('login-container').classList.add('scale-95', 'opacity-0', 'transition-all', 'duration-500');
-                    setTimeout(() => {
-                        // Usar la URL real del deployment (SCRIPT_URL), NO window.location.href
-                        // window.location.href devuelve la URL del iframe (googleusercontent.com)
-                        // que NO pasa parámetros a doGet()
-                        const baseUrl = (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL)
-                            ? SCRIPT_URL
-                            : window.location.href.split('?')[0];
 
-                        const role = response.data.rol || 'USER';
-                        const email = encodeURIComponent(response.data.email || '');
-                        const destination = baseUrl + '?page=app&role=' + role + '&email=' + email;
-
-                        console.log('[SST-Login] Redirigiendo a:', destination);
-
-                        // Usar anchor con target="_top" para navegar fuera del iframe de GAS
-                        // Esta es la forma oficialmente soportada por Google Apps Script
-                        var link = document.createElement('a');
-                        link.href = destination;
-                        link.target = '_top';
-                        link.style.display = 'none';
-                        document.body.appendChild(link);
-                        link.click();
-                    }, 500);
+                    // Redirección directa
+                    window.top.location.href = destination;
                 } else {
                     showLoginError(response.message || 'Credenciales incorrectas');
                     resetButton();

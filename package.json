@@ -1,0 +1,14 @@
+{
+    "name": "app-web-sst",
+    "version": "1.0.0",
+    "description": "Sistema de Gestión SST con entornos DEV/PROD",
+    "scripts": {
+        "use-dev": "copy /y .clasp.dev.json .clasp.json && echo --- ACTIVADO ENTORNO DE PRUEBAS (DEV) ---",
+        "use-prod": "copy /y .clasp.prod.json .clasp.json && echo --- ACTIVADO ENTORNO MAESTRO (PROD) ---",
+        "push": "clasp push",
+        "deploy": "clasp deploy"
+    },
+    "keywords": [],
+    "author": "ITELSA IA",
+    "license": "ISC"
+}

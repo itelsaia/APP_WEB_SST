@@ -133,7 +133,7 @@
             // ── LLAMADA BATCH: clientes + estado asistencia en 1 sola RPC ──
             // Antes eran 2 llamadas separadas (~2-4s extra). Ahora es 1 (~1-2s).
             google.script.run
-                .withSuccessHandler(function(res) {
+                .withSuccessHandler(function (res) {
                     if (res.status !== 'success') {
                         console.error('[SST] Error en batch panel:', res.message);
                         switchModule('asistencia');
@@ -148,7 +148,7 @@
                     if (selectObra) {
                         if (d.clientes && d.clientes.length > 0) {
                             selectObra.innerHTML = '<option value="">Seleccione la obra...</option>';
-                            d.clientes.forEach(function(clie) {
+                            d.clientes.forEach(function (clie) {
                                 var opt = document.createElement('option');
                                 opt.value = clie.id;
                                 opt.textContent = clie.nombre;
@@ -175,7 +175,7 @@
 
                     ocultarLoader();
                 })
-                .withFailureHandler(function(err) {
+                .withFailureHandler(function (err) {
                     console.error('[SST] Error crítico en batch panel:', err);
                     switchModule('asistencia');
                     ocultarLoader();
@@ -261,16 +261,16 @@
 
         if (rol === 'ADMIN') {
             // Para admin: poblar la bienvenida inline del portal (no la sección flotante)
-            var inlineMsg  = document.getElementById('admin-welcome-msg');
-            var inlineSub  = document.getElementById('admin-welcome-sub');
+            var inlineMsg = document.getElementById('admin-welcome-msg');
+            var inlineSub = document.getElementById('admin-welcome-sub');
             var inlineIcon = document.getElementById('admin-welcome-icon');
-            if (inlineMsg)  inlineMsg.textContent  = config.msg;
-            if (inlineSub)  inlineSub.textContent  = config.sub;
+            if (inlineMsg) inlineMsg.textContent = config.msg;
+            if (inlineSub) inlineSub.textContent = config.sub;
             if (inlineIcon) inlineIcon.textContent = config.icon;
             // welcome-section permanece oculta para evitar solapamiento con el modal
         } else {
-            if (welcomeMsg)  welcomeMsg.textContent  = config.msg;
-            if (welcomeSub)  welcomeSub.textContent  = config.sub;
+            if (welcomeMsg) welcomeMsg.textContent = config.msg;
+            if (welcomeSub) welcomeSub.textContent = config.sub;
             if (welcomeIcon) welcomeIcon.textContent = config.icon;
             const mobileGreet = document.getElementById('welcome-message-mobile');
             if (mobileGreet) mobileGreet.textContent = '¡Hola, ' + nombre + '!';
@@ -318,10 +318,12 @@
         }
     }
 
-    // Helper: navega al Login usando anchor target="_top" (método oficial en GAS iframes)
+    // Helper: navega al Login — intenta top.location, luego window.open, luego anchor click
     function _irAlLogin(urlBase) {
         var url = urlBase.split('?')[0] + '?page=login';
         console.log("[SST] Navegando al Login:", url);
+        try { window.top.location.href = url; return; } catch(e) {}
+        try { window.open(url, '_top'); return; } catch(e) {}
         var a = document.createElement('a');
         a.href = url;
         a.target = '_top';
@@ -425,16 +427,16 @@
      * @return {Promise<string>} Base64 comprimido (data:image/jpeg;base64,...).
      */
     function comprimirImagen(file, maxDim, quality) {
-        var MAX = maxDim  || 1000;
-        var Q   = quality || 0.72;
-        return new Promise(function(resolve, reject) {
+        var MAX = maxDim || 1000;
+        var Q = quality || 0.70;
+        return new Promise(function (resolve, reject) {
             var reader = new FileReader();
             reader.onerror = reject;
-            reader.onload = function(ev) {
+            reader.onload = function (ev) {
                 var img = new Image();
                 img.onerror = reject;
-                img.onload = function() {
-                    var w = img.naturalWidth  || img.width;
+                img.onload = function () {
+                    var w = img.naturalWidth || img.width;
                     var h = img.naturalHeight || img.height;
                     // Escalar manteniendo proporción
                     if (w > h) {
@@ -443,7 +445,7 @@
                         if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
                     }
                     var canvas = document.createElement('canvas');
-                    canvas.width  = w;
+                    canvas.width = w;
                     canvas.height = h;
                     var ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, w, h);
@@ -463,8 +465,8 @@
      */
     function bloquearPantalla(mensaje) {
         var overlay = document.getElementById('sst-loading-overlay');
-        var msg     = document.getElementById('sst-loading-msg');
-        if (msg)     msg.textContent = mensaje || 'Procesando...';
+        var msg = document.getElementById('sst-loading-msg');
+        if (msg) msg.textContent = mensaje || 'Procesando...';
         if (overlay) overlay.style.display = 'flex';
     }
 
@@ -476,6 +478,67 @@
         if (overlay) overlay.style.display = 'none';
     }
 
+    /**
+     * Muestra pantalla de despedida y redirige al login automáticamente.
+     * Usa window.location.href (iframe propio) porque el sandbox de GAS
+     * bloquea top-navigation desde contextos sin gesto de usuario (setTimeout).
+     */
+    function _mostrarDespedidaYCerrar() {
+        var overlay = document.getElementById('sst-loading-overlay');
+        if (!overlay) return;
+
+        localStorage.clear();
+        sessionStorage.clear();
+
+        var nombre = (currentUser && currentUser.nombre)
+            ? currentUser.nombre.split(' ')[0]
+            : 'Supervisor';
+
+        // Obtener URL de login
+        var loginUrl = '';
+        if (typeof SERVER_URL !== 'undefined' && SERVER_URL) {
+            loginUrl = SERVER_URL.split('?')[0] + '?page=login';
+        }
+
+        overlay.innerHTML = [
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:20px;',
+                'padding:0 28px;text-align:center;max-width:340px;">',
+            '  <div style="width:76px;height:76px;border-radius:50%;',
+            '       background:rgba(34,197,94,0.12);border:2px solid rgba(34,197,94,0.35);',
+            '       display:flex;align-items:center;justify-content:center;">',
+            '    <span style="font-size:38px;color:#22c55e;line-height:1;">✓</span>',
+            '  </div>',
+            '  <div>',
+            '    <p style="font-size:19px;font-weight:900;color:#f8fafc;margin:0 0 8px;',
+            '         letter-spacing:-0.02em;">¡Hasta pronto, ' + nombre + '!</p>',
+            '    <p style="font-size:12px;font-weight:500;color:#94a3b8;margin:0 0 16px;',
+            '         line-height:1.65;">Tu jornada ha sido registrada exitosamente.<br>',
+            '       Gracias por tu labor y compromiso<br>con la seguridad de nuestra comunidad.</p>',
+            '    <p style="font-size:9px;font-weight:800;color:#C5A048;',
+            '         letter-spacing:0.14em;text-transform:uppercase;opacity:0.8;">',
+            '       Cerrando sesión automáticamente...</p>',
+            '  </div>',
+            '</div>'
+        ].join('');
+
+        // Navegar después de 3s — usa window.location (iframe propio, sin restricción de sandbox)
+        setTimeout(function () {
+            if (loginUrl) {
+                window.location.href = loginUrl;
+            } else {
+                google.script.run
+                    .withSuccessHandler(function (url) {
+                        window.location.href = url.split('?')[0] + '?page=login';
+                    })
+                    .withFailureHandler(function () {
+                        desbloquearPantalla();
+                        mostrarNotificacion('Salida registrada. Cierre esta pestaña.', 'warning');
+                    })
+                    .getScriptUrl();
+            }
+        }, 3000);
+    }
+
     // ════════════════════════════════════════════════════════════
     // PREVIEWS CON COMPRESIÓN AUTOMÁTICA
     // ════════════════════════════════════════════════════════════
@@ -483,16 +546,16 @@
     function previewAsistencia(input) {
         if (!input.files || !input.files[0]) return;
         bloquearPantalla('Optimizando foto...');
-        comprimirImagen(input.files[0]).then(function(comprimido) {
+        comprimirImagen(input.files[0]).then(function (comprimido) {
             desbloquearPantalla();
             archivoBase64 = comprimido;
-            var prev  = document.getElementById('asis-img-preview');
-            var cont  = document.getElementById('asis-preview-container');
+            var prev = document.getElementById('asis-img-preview');
+            var cont = document.getElementById('asis-preview-container');
             var label = document.getElementById('asis-foto-label');
-            if (prev)  prev.src = comprimido;
-            if (cont)  cont.classList.remove('hidden');
+            if (prev) prev.src = comprimido;
+            if (cont) cont.classList.remove('hidden');
             if (label) label.classList.add('hidden');
-        }).catch(function(err) {
+        }).catch(function (err) {
             desbloquearPantalla();
             console.error('[SST] Error comprimiendo foto asistencia:', err);
             mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
@@ -648,16 +711,16 @@
      */
     function mostrarConfirmacion(titulo, mensaje, onConfirm, opts) {
         opts = opts || {};
-        var tipo        = opts.tipo        || 'danger';
-        var txtConfirm  = opts.btnConfirmar || (tipo === 'danger' ? 'Eliminar' : 'Confirmar');
-        var txtCancel   = opts.btnCancelar  || 'Cancelar';
+        var tipo = opts.tipo || 'danger';
+        var txtConfirm = opts.btnConfirmar || (tipo === 'danger' ? 'Eliminar' : 'Confirmar');
+        var txtCancel = opts.btnCancelar || 'Cancelar';
 
         var existing = document.getElementById('sst-confirm-modal');
         if (existing) existing.remove();
 
-        var iconName  = tipo === 'danger'  ? 'delete_forever' : tipo === 'warning' ? 'warning' : 'help';
-        var iconColor = tipo === 'danger'  ? '#f87171'         : tipo === 'warning' ? '#fbbf24'  : '#94a3b8';
-        var iconBg    = tipo === 'danger'  ? 'rgba(239,68,68,0.1)'  : tipo === 'warning' ? 'rgba(251,191,36,0.1)' : 'rgba(148,163,184,0.1)';
+        var iconName = tipo === 'danger' ? 'delete_forever' : tipo === 'warning' ? 'warning' : 'help';
+        var iconColor = tipo === 'danger' ? '#f87171' : tipo === 'warning' ? '#fbbf24' : '#94a3b8';
+        var iconBg = tipo === 'danger' ? 'rgba(239,68,68,0.1)' : tipo === 'warning' ? 'rgba(251,191,36,0.1)' : 'rgba(148,163,184,0.1)';
         var btnOkStyle = tipo === 'danger'
             ? 'background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;'
             : tipo === 'warning'
@@ -665,7 +728,7 @@
                 : 'background:rgba(197,160,72,0.15);border:1px solid rgba(197,160,72,0.3);color:#C5A048;';
 
         var overlay = document.createElement('div');
-        overlay.id  = 'sst-confirm-modal';
+        overlay.id = 'sst-confirm-modal';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;'
             + 'justify-content:center;padding:1rem;background:rgba(0,0,0,0.65);'
             + 'backdrop-filter:blur(10px);animation:sst-fadeIn 0.15s ease;';
@@ -674,30 +737,30 @@
             '<div style="background:rgba(16,25,34,0.98);border:1px solid rgba(197,160,72,0.15);'
             + 'border-radius:1.25rem;padding:2rem 1.75rem;max-width:360px;width:100%;'
             + 'box-shadow:0 30px 70px rgba(0,0,0,0.6);animation:sst-slideUp 0.22s cubic-bezier(0.34,1.56,0.64,1);">'
-            +   '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:1.125rem;">'
-            +     '<div style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:' + iconBg + ';">'
-            +       '<span class="material-symbols-outlined" style="font-size:28px;color:' + iconColor + ';">' + iconName + '</span>'
-            +     '</div>'
-            +     '<div>'
-            +       '<p style="font-weight:800;font-size:1rem;color:#f1f5f9;margin:0 0 0.4rem;letter-spacing:-0.01em;">' + titulo + '</p>'
-            +       '<p style="font-size:0.78rem;color:#94a3b8;margin:0;line-height:1.55;">' + mensaje + '</p>'
-            +     '</div>'
-            +     '<div style="display:flex;gap:0.75rem;width:100%;margin-top:0.25rem;">'
-            +       '<button id="sst-confirm-cancel" style="flex:1;padding:0.625rem 1rem;border-radius:0.75rem;'
-            +         'border:1px solid rgba(148,163,184,0.15);background:rgba(148,163,184,0.06);color:#64748b;'
-            +         'font-size:0.7rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;'
-            +         'transition:all 0.2s;">' + txtCancel + '</button>'
-            +       '<button id="sst-confirm-ok" style="flex:1;padding:0.625rem 1rem;border-radius:0.75rem;'
-            +         'font-size:0.7rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;'
-            +         'transition:all 0.2s;' + btnOkStyle + '">' + txtConfirm + '</button>'
-            +     '</div>'
-            +   '</div>'
+            + '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:1.125rem;">'
+            + '<div style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:' + iconBg + ';">'
+            + '<span class="material-symbols-outlined" style="font-size:28px;color:' + iconColor + ';">' + iconName + '</span>'
+            + '</div>'
+            + '<div>'
+            + '<p style="font-weight:800;font-size:1rem;color:#f1f5f9;margin:0 0 0.4rem;letter-spacing:-0.01em;">' + titulo + '</p>'
+            + '<p style="font-size:0.78rem;color:#94a3b8;margin:0;line-height:1.55;">' + mensaje + '</p>'
+            + '</div>'
+            + '<div style="display:flex;gap:0.75rem;width:100%;margin-top:0.25rem;">'
+            + '<button id="sst-confirm-cancel" style="flex:1;padding:0.625rem 1rem;border-radius:0.75rem;'
+            + 'border:1px solid rgba(148,163,184,0.15);background:rgba(148,163,184,0.06);color:#64748b;'
+            + 'font-size:0.7rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;'
+            + 'transition:all 0.2s;">' + txtCancel + '</button>'
+            + '<button id="sst-confirm-ok" style="flex:1;padding:0.625rem 1rem;border-radius:0.75rem;'
+            + 'font-size:0.7rem;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;'
+            + 'transition:all 0.2s;' + btnOkStyle + '">' + txtConfirm + '</button>'
+            + '</div>'
+            + '</div>'
             + '</div>';
 
         // Inyectar keyframes si aún no existen
         if (!document.getElementById('sst-modal-kf')) {
             var s = document.createElement('style');
-            s.id  = 'sst-modal-kf';
+            s.id = 'sst-modal-kf';
             s.textContent = '@keyframes sst-fadeIn{from{opacity:0}to{opacity:1}}'
                 + '@keyframes sst-slideUp{from{opacity:0;transform:translateY(1.5rem) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}';
             document.head.appendChild(s);
@@ -741,16 +804,16 @@
     function previewSalida(input) {
         if (!input.files || !input.files[0]) return;
         bloquearPantalla('Optimizando foto...');
-        comprimirImagen(input.files[0]).then(function(comprimido) {
+        comprimirImagen(input.files[0]).then(function (comprimido) {
             desbloquearPantalla();
             archivoBase64 = comprimido;
-            var prev  = document.getElementById('exit-img-preview');
-            var cont  = document.getElementById('exit-preview-container');
+            var prev = document.getElementById('exit-img-preview');
+            var cont = document.getElementById('exit-preview-container');
             var label = document.getElementById('exit-foto-label');
-            if (prev)  prev.src = comprimido;
-            if (cont)  cont.classList.remove('hidden');
+            if (prev) prev.src = comprimido;
+            if (cont) cont.classList.remove('hidden');
             if (label) label.classList.add('hidden');
-        }).catch(function(err) {
+        }).catch(function (err) {
             desbloquearPantalla();
             console.error('[SST] Error comprimiendo foto salida:', err);
             mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
@@ -763,7 +826,10 @@
             return;
         }
 
-        var btn     = document.getElementById('btn-submit-salida');
+        // Capturar foto ANTES de cerrar el modal — closeExitModal() limpia archivoBase64
+        var fotoSalida = archivoBase64;
+
+        var btn = document.getElementById('btn-submit-salida');
         var spinner = document.getElementById('exit-spinner');
         if (btn) btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
@@ -783,47 +849,40 @@
             _irAlLogin(url);
         }
 
-        // ── TIMEOUT DE SEGURIDAD (12s) ──────────────────────
-        // Si el backend no responde en 12 segundos, forzar navegación al login.
-        var _safetyTimeout = setTimeout(function() {
+        // ── TIMEOUT DE SEGURIDAD (18s) ──────────────────────
+        var _safetyTimeout = setTimeout(function () {
             console.warn('[SST] Timeout de seguridad: forzando cierre de sesión');
             var fallbackUrl = (typeof SERVER_URL !== 'undefined' && SERVER_URL) ? SERVER_URL : '';
             if (fallbackUrl) {
                 _navegarAlLogin(fallbackUrl);
             } else {
                 desbloquearPantalla();
-                mostrarNotificacion('La jornada se registró pero hubo un error al redirigir. Cierre esta pestaña.', 'warning');
+                mostrarNotificacion('Hubo un error al redirigir. Cierre esta pestaña.', 'warning');
             }
-        }, 12000);
+        }, 18000);
 
-        // ── PASO 1: Registrar salida (fire-and-forget) ──────
-        // El registro se envía al backend sin esperar respuesta.
-        // Así el supervisor no queda bloqueado si Drive tarda.
+        // ── PASO 1: Registrar salida y LUEGO redirigir ──────
+        // Es necesario esperar a que registrarSalida termine antes de navegar, 
+        // de lo contrario la petición RPC se cancelaría por el cambio de página.
         google.script.run
-            .withSuccessHandler(function(r) { console.log('[SST] registrarSalida:', r.status); })
-            .withFailureHandler(function(e) { console.warn('[SST] registrarSalida error:', e); })
+            .withSuccessHandler(function (r) {
+                console.log('[SST] registrarSalida completado:', r.status);
+                clearTimeout(_safetyTimeout);
+
+                // Mostrar despedida y redirigir al login
+                _navegado = true;
+                _mostrarDespedidaYCerrar();
+            })
+            .withFailureHandler(function (e) {
+                console.warn('[SST] registrarSalida error:', e);
+                clearTimeout(_safetyTimeout);
+                desbloquearPantalla();
+                mostrarNotificacion('Error al registrar salida. Intente de nuevo.', 'error');
+            })
             .registrarSalida({
                 userEmail: currentUser ? currentUser.email : '',
-                archivoBase64: archivoBase64
+                archivoBase64: fotoSalida
             });
-
-        // ── PASO 2: Obtener URL y navegar al login ──────────
-        google.script.run
-            .withSuccessHandler(function(url) {
-                clearTimeout(_safetyTimeout);
-                _navegarAlLogin(url);
-            })
-            .withFailureHandler(function() {
-                clearTimeout(_safetyTimeout);
-                var fallbackUrl = (typeof SERVER_URL !== 'undefined' && SERVER_URL) ? SERVER_URL : '';
-                if (fallbackUrl) {
-                    _navegarAlLogin(fallbackUrl);
-                } else {
-                    desbloquearPantalla();
-                    mostrarNotificacion('Error al cerrar sesión. Cierre la pestaña manualmente.', 'error');
-                }
-            })
-            .getScriptUrl();
     }
 
     // ================================================================
@@ -842,7 +901,7 @@
 
     function cargarOtrasOpciones() {
         google.script.run
-            .withSuccessHandler(function(response) {
+            .withSuccessHandler(function (response) {
                 // 1. Rellenar selector de inspección (idCliente)
                 llenarClientes(response);
 
@@ -851,7 +910,7 @@
                 if (selectObra) {
                     if (response.status === 'success' && response.data && response.data.length > 0) {
                         selectObra.innerHTML = '<option value="">Seleccione la obra...</option>';
-                        response.data.forEach(function(clie) {
+                        response.data.forEach(function (clie) {
                             const opt = document.createElement('option');
                             opt.value = clie.id;
                             opt.textContent = clie.nombre;
@@ -862,7 +921,7 @@
                     }
                 }
             })
-            .withFailureHandler(function() {
+            .withFailureHandler(function () {
                 const selectObra = document.getElementById('idObraAsistencia');
                 if (selectObra) selectObra.innerHTML = '<option value="">Error al cargar obras</option>';
             })
@@ -936,7 +995,7 @@
      * De lo contrario, muestra el formulario estándar de inspección.
      */
     function onCambioFormato(select) {
-        const fmtId   = select.value;
+        const fmtId = select.value;
         const fmtData = _formatosDisponibles.find(f => f.id === fmtId);
 
         // Detectar formato RH → Reporte de Hallazgo
@@ -969,11 +1028,11 @@
         if (sstBody) {
             // Ocultar foto + botones del formulario estándar (mantener selects visibles)
             ['fotoEvidencia', 'preview-container', 'btn-pendiente', 'btn-con-firma',
-             'formato-descripcion-container'].forEach(function(id) {
-                const el = document.querySelector('[id="' + id + '"]') ||
-                           document.querySelector('label[for="' + id + '"]');
-                // Ocultar la sección de foto y botones envolviéndola
-            });
+                'formato-descripcion-container'].forEach(function (id) {
+                    const el = document.querySelector('[id="' + id + '"]') ||
+                        document.querySelector('label[for="' + id + '"]');
+                    // Ocultar la sección de foto y botones envolviéndola
+                });
             // Ocultar todo el form excepto los selects
             sstBody.classList.add('hidden');
         }
@@ -993,19 +1052,19 @@
         // Auto-rellenar empresa desde la jornada activa
         const empresa = _obraSeleccionada || '';
         const rhNombre = document.getElementById('rh-empresa-nombre');
-        const rhValor  = document.getElementById('rh-empresa-valor');
+        const rhValor = document.getElementById('rh-empresa-valor');
         if (rhNombre) rhNombre.textContent = empresa || 'No detectada';
-        if (rhValor)  rhValor.value = empresa;
+        if (rhValor) rhValor.value = empresa;
 
         // Auto-rellenar contacto y celular desde el cache de clientes
-        const clienteData = _clientesCompletos.find(function(c) {
+        const clienteData = _clientesCompletos.find(function (c) {
             return c.nombre.toLowerCase().trim() === empresa.toLowerCase().trim();
         });
         if (clienteData) {
-            const rhA   = document.getElementById('rh-reportado-a');
+            const rhA = document.getElementById('rh-reportado-a');
             const rhTel = document.getElementById('rh-telefono');
-            if (rhA   && clienteData.contacto) rhA.value   = clienteData.contacto;
-            if (rhTel && clienteData.celular)  rhTel.value = clienteData.celular;
+            if (rhA && clienteData.contacto) rhA.value = clienteData.contacto;
+            if (rhTel && clienteData.celular) rhTel.value = clienteData.celular;
         }
 
         // Limpiar foto previa
@@ -1030,14 +1089,14 @@
     function previewHallazgo(input) {
         if (!input.files || !input.files[0]) return;
         bloquearPantalla('Optimizando foto...');
-        comprimirImagen(input.files[0]).then(function(comprimido) {
+        comprimirImagen(input.files[0]).then(function (comprimido) {
             desbloquearPantalla();
             _rhArchivoBase64 = comprimido;
             var prev = document.getElementById('rh-preview-container');
-            var img  = document.getElementById('rh-img-preview');
+            var img = document.getElementById('rh-img-preview');
             if (prev) prev.classList.remove('hidden');
-            if (img)  img.src = comprimido;
-        }).catch(function(err) {
+            if (img) img.src = comprimido;
+        }).catch(function (err) {
             desbloquearPantalla();
             console.error('[SST] Error comprimiendo foto hallazgo:', err);
             mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
@@ -1049,10 +1108,10 @@
      * Al tener éxito construye el enlace wa.me y lo abre automáticamente.
      */
     function reportarHallazgo() {
-        const ubicacion  = (document.getElementById('rh-ubicacion')  || {}).value || '';
-        const descripcion= (document.getElementById('rh-descripcion') || {}).value || '';
-        const reportadoA = (document.getElementById('rh-reportado-a')|| {}).value || '';
-        const telefono   = (document.getElementById('rh-telefono')   || {}).value || '';
+        const ubicacion = (document.getElementById('rh-ubicacion') || {}).value || '';
+        const descripcion = (document.getElementById('rh-descripcion') || {}).value || '';
+        const reportadoA = (document.getElementById('rh-reportado-a') || {}).value || '';
+        const telefono = (document.getElementById('rh-telefono') || {}).value || '';
 
         if (!ubicacion.trim()) {
             mostrarNotificacion('⚠️ Ingrese la ubicación del hallazgo.', 'warning'); return;
@@ -1065,18 +1124,18 @@
         }
 
         const btn = document.getElementById('btn-reportar-hallazgo');
-        const sp  = document.getElementById('rh-spinner');
+        const sp = document.getElementById('rh-spinner');
         if (btn) btn.disabled = true;
-        if (sp)  sp.classList.remove('hidden');
+        if (sp) sp.classList.remove('hidden');
         bloquearPantalla('Subiendo hallazgo...');
 
         const empresa = (document.getElementById('rh-empresa-valor') || {}).value
-                        || _obraSeleccionada || '';
+            || _obraSeleccionada || '';
 
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 desbloquearPantalla();
-                if (sp)  sp.classList.add('hidden');
+                if (sp) sp.classList.add('hidden');
                 if (btn) btn.disabled = false;
 
                 if (res.status === 'success') {
@@ -1101,7 +1160,7 @@
                     }
 
                     // Limpiar formulario de hallazgo y volver al estándar
-                    ['rh-ubicacion', 'rh-descripcion', 'rh-reportado-a', 'rh-telefono'].forEach(function(id) {
+                    ['rh-ubicacion', 'rh-descripcion', 'rh-reportado-a', 'rh-telefono'].forEach(function (id) {
                         const el = document.getElementById(id);
                         if (el) el.value = '';
                     });
@@ -1120,20 +1179,20 @@
                     mostrarNotificacion('❌ ' + res.message, 'error');
                 }
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 desbloquearPantalla();
-                if (sp)  sp.classList.add('hidden');
+                if (sp) sp.classList.add('hidden');
                 if (btn) btn.disabled = false;
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
             .guardarHallazgo({
-                ubicacion:          ubicacion.trim(),
-                descripcion:        descripcion.trim(),
+                ubicacion: ubicacion.trim(),
+                descripcion: descripcion.trim(),
                 empresaContratista: empresa,
-                reportadoPor:       currentUser ? (currentUser.codigo || currentUser.nombre) : '',
-                reportadoA:         reportadoA.trim(),
-                numeroContacto:     telefono.trim(),
-                fotoBase64:         _rhArchivoBase64
+                reportadoPor: currentUser ? (currentUser.codigo || currentUser.nombre) : '',
+                reportadoA: reportadoA.trim(),
+                numeroContacto: telefono.trim(),
+                fotoBase64: _rhArchivoBase64
             });
     }
 
@@ -1203,7 +1262,7 @@
         ].join('');
 
         // Cerrar al tocar el fondo
-        overlay.addEventListener('click', function(e) {
+        overlay.addEventListener('click', function (e) {
             if (e.target === overlay) overlay.remove();
         });
 
@@ -1309,14 +1368,14 @@
         if (!input.files || !input.files[0]) return;
         nombreArchivo = input.files[0].name;
         bloquearPantalla('Optimizando foto...');
-        comprimirImagen(input.files[0]).then(function(comprimido) {
+        comprimirImagen(input.files[0]).then(function (comprimido) {
             desbloquearPantalla();
             archivoBase64 = comprimido;
             var previewCont = document.getElementById('preview-container');
-            var imgP        = document.getElementById('img-preview');
-            if (imgP)        imgP.src = comprimido;
+            var imgP = document.getElementById('img-preview');
+            if (imgP) imgP.src = comprimido;
             if (previewCont) previewCont.classList.remove('hidden');
-        }).catch(function(err) {
+        }).catch(function (err) {
             desbloquearPantalla();
             console.error('[SST] Error comprimiendo foto formato:', err);
             mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
@@ -1338,13 +1397,13 @@
     function enviarInspeccion(modo) {
         const btnP = document.getElementById('btn-pendiente');
         const btnF = document.getElementById('btn-con-firma');
-        const spP  = document.getElementById('spinner-pendiente');
-        const spF  = document.getElementById('spinner-firma');
+        const spP = document.getElementById('spinner-pendiente');
+        const spF = document.getElementById('spinner-firma');
 
         const selectCliente = document.getElementById('idCliente');
         const selectFormato = document.getElementById('idFormato');
         const fmtData = _formatosDisponibles.find(
-            function(f) { return f.id === (selectFormato ? selectFormato.value : ''); }
+            function (f) { return f.id === (selectFormato ? selectFormato.value : ''); }
         );
 
         // Validar campos mínimos
@@ -1357,24 +1416,24 @@
         if (btnP) btnP.disabled = true;
         if (btnF) btnF.disabled = true;
         if (modo === 'pendiente' && spP) spP.classList.remove('hidden');
-        if (modo === 'firma'     && spF) spF.classList.remove('hidden');
+        if (modo === 'firma' && spF) spF.classList.remove('hidden');
         bloquearPantalla('Subiendo formato...');
 
         const formData = {
-            userCode:            currentUser.codigo || '',
-            nombreCliente:       selectCliente
-                                    ? selectCliente.options[selectCliente.selectedIndex].text
-                                    : _obraSeleccionada,
-            idFormato:           selectFormato.value,
+            userCode: currentUser.codigo || '',
+            nombreCliente: selectCliente
+                ? selectCliente.options[selectCliente.selectedIndex].text
+                : _obraSeleccionada,
+            idFormato: selectFormato.value,
             descripcionRegistro: fmtData ? fmtData.descripcion : '',
-            archivoBase64:       archivoBase64
+            archivoBase64: archivoBase64
         };
 
         function _resetBotones() {
             if (btnP) btnP.disabled = false;
             if (btnF) btnF.disabled = false;
-            if (spP)  spP.classList.add('hidden');
-            if (spF)  spF.classList.add('hidden');
+            if (spP) spP.classList.add('hidden');
+            if (spF) spF.classList.add('hidden');
         }
 
         function _resetFormulario() {
@@ -1389,7 +1448,7 @@
         }
 
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 desbloquearPantalla();
                 _resetBotones();
                 if (res.status === 'success') {
@@ -1405,7 +1464,7 @@
                     mostrarNotificacion('❌ ' + res.message, 'error');
                 }
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 desbloquearPantalla();
                 _resetBotones();
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
@@ -1456,7 +1515,7 @@
         registros.forEach(function (reg) {
             const card = document.createElement('div');
             card.className = 'pendiente-card bg-white/5 border border-amber-500/20 rounded-xl p-3 animate-fade-in';
-            card.dataset.id  = reg.id;
+            card.dataset.id = reg.id;
             card.dataset.fmt = (reg.formato + ' ' + reg.descripcion).toLowerCase();
 
             card.innerHTML = `
@@ -1512,12 +1571,12 @@
 
         // Reset visual del modal
         const preview = document.getElementById('firma-preview-container');
-        const label   = document.getElementById('firma-foto-label');
-        const input   = document.getElementById('firma-foto');
+        const label = document.getElementById('firma-foto-label');
+        const input = document.getElementById('firma-foto');
         const idLabel = document.getElementById('firma-modal-id');
         if (preview) preview.classList.add('hidden');
-        if (label)   label.classList.remove('hidden');
-        if (input)   input.value = '';
+        if (label) label.classList.remove('hidden');
+        if (input) input.value = '';
         if (idLabel) idLabel.textContent = 'Registro: ' + idRegistro;
 
         // Sin cálculos JS — CSS position:fixed + inset:0 cubre toda la pantalla.
@@ -1542,16 +1601,16 @@
     function previewFirma(input) {
         if (!input.files || !input.files[0]) return;
         bloquearPantalla('Optimizando foto...');
-        comprimirImagen(input.files[0]).then(function(comprimido) {
+        comprimirImagen(input.files[0]).then(function (comprimido) {
             desbloquearPantalla();
             _firmaBase64 = comprimido;
-            var prev  = document.getElementById('firma-img-preview');
-            var cont  = document.getElementById('firma-preview-container');
+            var prev = document.getElementById('firma-img-preview');
+            var cont = document.getElementById('firma-preview-container');
             var label = document.getElementById('firma-foto-label');
-            if (prev)  prev.src = comprimido;
-            if (cont)  cont.classList.remove('hidden');
+            if (prev) prev.src = comprimido;
+            if (cont) cont.classList.remove('hidden');
             if (label) label.classList.add('hidden');
-        }).catch(function(err) {
+        }).catch(function (err) {
             desbloquearPantalla();
             console.error('[SST] Error comprimiendo foto firma:', err);
             mostrarNotificacion('⚠️ No se pudo procesar la foto. Intente de nuevo.', 'warning');
@@ -1567,16 +1626,16 @@
             return;
         }
 
-        const btn     = document.getElementById('btn-submit-firma');
+        const btn = document.getElementById('btn-submit-firma');
         const spinner = document.getElementById('firma-spinner');
-        if (btn)     btn.disabled = true;
+        if (btn) btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
         bloquearPantalla('Confirmando firma...');
 
         google.script.run
             .withSuccessHandler(function (res) {
                 desbloquearPantalla();
-                if (btn)     btn.disabled = false;
+                if (btn) btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 cerrarModalFirma();
                 if (res.status === 'success') {
@@ -1588,7 +1647,7 @@
             })
             .withFailureHandler(function (err) {
                 desbloquearPantalla();
-                if (btn)     btn.disabled = false;
+                if (btn) btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
@@ -1604,8 +1663,8 @@
     // MÓDULO: ADMINISTRACIÓN DE CLIENTES/EMPRESAS
     // ================================================================
 
-    let _clientesAdmin   = [];   // Cache completo de clientes
-    let _filtroAdmin     = 'todas'; // Filtro activo actual
+    let _clientesAdmin = [];   // Cache completo de clientes
+    let _filtroAdmin = 'todas'; // Filtro activo actual
     let _clienteEditando = null; // Cliente en edición (null = nuevo)
 
     /**
@@ -1656,7 +1715,7 @@
         if (portal) portal.classList.remove('hidden');
 
         // Ocultar todos los workspaces
-        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios', 'admin-workspace-formatos', 'admin-workspace-supervisor-stt', 'admin-workspace-hallazgos'].forEach(function(id) {
+        ['admin-workspace-clientes', 'admin-workspace-asistencia', 'admin-workspace-usuarios', 'admin-workspace-formatos', 'admin-workspace-supervisor-stt', 'admin-workspace-hallazgos'].forEach(function (id) {
             var ws = document.getElementById(id);
             if (ws) ws.classList.add('hidden');
         });
@@ -1707,16 +1766,16 @@
      * Actualiza los contadores en las tarjetas de estadísticas.
      */
     function actualizarStatsClientes() {
-        const total     = _clientesAdmin.length;
-        const activas   = _clientesAdmin.filter(function(c) { return c.estado === 'ACTIVO'; }).length;
-        const inactivas = _clientesAdmin.filter(function(c) { return c.estado === 'INACTIVO'; }).length;
+        const total = _clientesAdmin.length;
+        const activas = _clientesAdmin.filter(function (c) { return c.estado === 'ACTIVO'; }).length;
+        const inactivas = _clientesAdmin.filter(function (c) { return c.estado === 'INACTIVO'; }).length;
 
-        var elTotal     = document.getElementById('stat-total');
-        var elActivas   = document.getElementById('stat-activas');
+        var elTotal = document.getElementById('stat-total');
+        var elActivas = document.getElementById('stat-activas');
         var elInactivas = document.getElementById('stat-inactivas');
 
-        if (elTotal)     elTotal.querySelector('.stat-num').textContent     = total;
-        if (elActivas)   elActivas.querySelector('.stat-num').textContent   = activas;
+        if (elTotal) elTotal.querySelector('.stat-num').textContent = total;
+        if (elActivas) elActivas.querySelector('.stat-num').textContent = activas;
         if (elInactivas) elInactivas.querySelector('.stat-num').textContent = inactivas;
     }
 
@@ -1731,14 +1790,14 @@
         document.querySelectorAll('[data-filtro]').forEach(function (btn) {
             const isActive = btn.dataset.filtro === tipo;
             btn.style.backgroundColor = isActive ? 'rgba(197,160,72,0.18)' : 'rgba(255,255,255,0.05)';
-            btn.style.borderColor     = isActive ? 'rgba(197,160,72,0.40)' : 'rgba(255,255,255,0.10)';
-            btn.style.color           = isActive ? 'var(--color-primario)'  : 'rgb(148,163,184)';
+            btn.style.borderColor = isActive ? 'rgba(197,160,72,0.40)' : 'rgba(255,255,255,0.10)';
+            btn.style.color = isActive ? 'var(--color-primario)' : 'rgb(148,163,184)';
         });
 
         // Filtrar y renderizar
         var filtrados = _clientesAdmin;
-        if (tipo === 'activas')   filtrados = _clientesAdmin.filter(function(c) { return c.estado === 'ACTIVO'; });
-        if (tipo === 'inactivas') filtrados = _clientesAdmin.filter(function(c) { return c.estado === 'INACTIVO'; });
+        if (tipo === 'activas') filtrados = _clientesAdmin.filter(function (c) { return c.estado === 'ACTIVO'; });
+        if (tipo === 'inactivas') filtrados = _clientesAdmin.filter(function (c) { return c.estado === 'INACTIVO'; });
 
         renderizarTablaClientes(filtrados);
     }
@@ -1763,12 +1822,12 @@
         }
 
         tbody.innerHTML = clientes.map(function (c) {
-            const esActivo    = c.estado === 'ACTIVO';
+            const esActivo = c.estado === 'ACTIVO';
             const badgeClases = esActivo
                 ? 'bg-green-500/15 text-green-400 border border-green-500/30'
                 : 'bg-red-500/15 text-red-400 border border-red-500/30';
-            const toggleIcon  = esActivo ? 'toggle_on' : 'toggle_off';
-            const toggleTip   = esActivo ? 'Desactivar' : 'Activar';
+            const toggleIcon = esActivo ? 'toggle_on' : 'toggle_off';
+            const toggleTip = esActivo ? 'Desactivar' : 'Activar';
             const toggleClase = esActivo
                 ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20'
                 : 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20';
@@ -1783,31 +1842,31 @@
                 '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.celular || '<span class="text-slate-600">-</span>') + '</td>' +
                 '<td class="px-3 py-3 text-[11px] text-slate-400 whitespace-nowrap">' + (c.obra || '<span class="text-slate-600">-</span>') + '</td>' +
                 '<td class="px-3 py-3 whitespace-nowrap">' +
-                    '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ' + badgeClases + '">' + c.estado + '</span>' +
+                '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ' + badgeClases + '">' + c.estado + '</span>' +
                 '</td>' +
                 '<td class="px-3 py-3 whitespace-nowrap">' +
-                    '<div class="flex items-center gap-1">' +
-                        (c.carpeta
-                          ? '<a href="' + c.carpeta + '" target="_blank" rel="noopener" ' +
-                              'class="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all" title="Carpeta Drive">' +
-                              '<span class="material-symbols-outlined text-sm">folder_open</span>' +
-                            '</a>'
-                          : '') +
-                        '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
-                            'class="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all" title="Editar">' +
-                            '<span class="material-symbols-outlined text-sm">edit</span>' +
-                        '</button>' +
-                        '<button onclick="toggleEstadoCliente(\'' + _esc(c.id) + '\',\'' + c.estado + '\')" ' +
-                            'class="p-1.5 rounded-lg ' + toggleClase + ' transition-all" title="' + toggleTip + '">' +
-                            '<span class="material-symbols-outlined text-sm">' + toggleIcon + '</span>' +
-                        '</button>' +
-                        '<button onclick="confirmarEliminarCliente(\'' + _esc(c.id) + '\',\'' + _escAttr(c.nombre) + '\')" ' +
-                            'class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all" title="Eliminar">' +
-                            '<span class="material-symbols-outlined text-sm">delete</span>' +
-                        '</button>' +
-                    '</div>' +
+                '<div class="flex items-center gap-1">' +
+                (c.carpeta
+                    ? '<a href="' + c.carpeta + '" target="_blank" rel="noopener" ' +
+                    'class="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all" title="Carpeta Drive">' +
+                    '<span class="material-symbols-outlined text-sm">folder_open</span>' +
+                    '</a>'
+                    : '') +
+                '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
+                'class="p-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all" title="Editar">' +
+                '<span class="material-symbols-outlined text-sm">edit</span>' +
+                '</button>' +
+                '<button onclick="toggleEstadoCliente(\'' + _esc(c.id) + '\',\'' + c.estado + '\')" ' +
+                'class="p-1.5 rounded-lg ' + toggleClase + ' transition-all" title="' + toggleTip + '">' +
+                '<span class="material-symbols-outlined text-sm">' + toggleIcon + '</span>' +
+                '</button>' +
+                '<button onclick="confirmarEliminarCliente(\'' + _esc(c.id) + '\',\'' + _escAttr(c.nombre) + '\')" ' +
+                'class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all" title="Eliminar">' +
+                '<span class="material-symbols-outlined text-sm">delete</span>' +
+                '</button>' +
+                '</div>' +
                 '</td>' +
-            '</tr>';
+                '</tr>';
         }).join('');
     }
 
@@ -1843,11 +1902,11 @@
         }
 
         lista.innerHTML = clientes.map(function (c) {
-            var esActivo    = c.estado === 'ACTIVO';
+            var esActivo = c.estado === 'ACTIVO';
             var badgeClases = esActivo
                 ? 'bg-green-500/15 text-green-400 border border-green-500/30'
                 : 'bg-red-500/15 text-red-400 border border-red-500/30';
-            var toggleIcon  = esActivo ? 'toggle_on' : 'toggle_off';
+            var toggleIcon = esActivo ? 'toggle_on' : 'toggle_off';
             var toggleLabel = esActivo ? 'Desactivar' : 'Activar';
             var toggleClase = esActivo
                 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
@@ -1855,44 +1914,44 @@
 
             // Campos secundarios visibles en tarjeta
             var extras = '';
-            if (c.nit)     extras += '<div><span class="text-slate-600">NIT</span><br><span class="text-slate-300 font-medium">' + _esc(c.nit) + '</span></div>';
+            if (c.nit) extras += '<div><span class="text-slate-600">NIT</span><br><span class="text-slate-300 font-medium">' + _esc(c.nit) + '</span></div>';
             if (c.celular) extras += '<div><span class="text-slate-600">Celular</span><br><span class="text-slate-300 font-medium">' + _esc(c.celular) + '</span></div>';
-            if (c.correo)  extras += '<div class="col-span-2"><span class="text-slate-600">Correo</span><br><span class="text-slate-300 font-medium break-all">' + _esc(c.correo) + '</span></div>';
+            if (c.correo) extras += '<div class="col-span-2"><span class="text-slate-600">Correo</span><br><span class="text-slate-300 font-medium break-all">' + _esc(c.correo) + '</span></div>';
 
             return '<div class="bg-white/5 border border-white/10 rounded-xl p-3.5 animate-fade-in' + (esActivo ? '' : ' opacity-60') + '">' +
                 // Cabecera tarjeta: ID + Nombre + Badge estado
                 '<div class="flex items-start justify-between gap-2 mb-2.5">' +
-                    '<div class="min-w-0 flex-1">' +
-                        '<p class="text-[9px] font-black uppercase tracking-widest mb-0.5" style="color:var(--color-primario)">' + _esc(c.id) + '</p>' +
-                        '<p class="text-sm font-black text-white leading-tight">' + _esc(c.nombre) + '</p>' +
-                        (c.obra ? '<p class="text-[10px] text-slate-500 font-medium mt-0.5 leading-tight">' + _esc(c.obra) + '</p>' : '') +
-                    '</div>' +
-                    '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest shrink-0 ' + badgeClases + '">' + c.estado + '</span>' +
+                '<div class="min-w-0 flex-1">' +
+                '<p class="text-[9px] font-black uppercase tracking-widest mb-0.5" style="color:var(--color-primario)">' + _esc(c.id) + '</p>' +
+                '<p class="text-sm font-black text-white leading-tight">' + _esc(c.nombre) + '</p>' +
+                (c.obra ? '<p class="text-[10px] text-slate-500 font-medium mt-0.5 leading-tight">' + _esc(c.obra) + '</p>' : '') +
+                '</div>' +
+                '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest shrink-0 ' + badgeClases + '">' + c.estado + '</span>' +
                 '</div>' +
                 // Campos secundarios
                 (extras ? '<div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px] mb-3 pb-3 border-b border-white/5">' + extras + '</div>' : '') +
                 // Acciones
                 '<div class="flex gap-2">' +
-                    (c.carpeta
-                      ? '<a href="' + c.carpeta + '" target="_blank" rel="noopener" ' +
-                          'class="w-10 flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 transition-all active:scale-95" title="Carpeta Drive">' +
-                          '<span class="material-symbols-outlined text-sm">folder_open</span>' +
-                        '</a>'
-                      : '') +
-                    '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
-                        'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">' +
-                        '<span class="material-symbols-outlined text-sm">edit</span>Editar' +
-                    '</button>' +
-                    '<button onclick="toggleEstadoCliente(\'' + _esc(c.id) + '\',\'' + c.estado + '\')" ' +
-                        'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl ' + toggleClase + ' border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">' +
-                        '<span class="material-symbols-outlined text-sm">' + toggleIcon + '</span>' + toggleLabel +
-                    '</button>' +
-                    '<button onclick="confirmarEliminarCliente(\'' + _esc(c.id) + '\',\'' + _escAttr(c.nombre) + '\')" ' +
-                        'class="w-10 flex items-center justify-center rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 transition-all active:scale-95" title="Eliminar">' +
-                        '<span class="material-symbols-outlined text-sm">delete</span>' +
-                    '</button>' +
+                (c.carpeta
+                    ? '<a href="' + c.carpeta + '" target="_blank" rel="noopener" ' +
+                    'class="w-10 flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 transition-all active:scale-95" title="Carpeta Drive">' +
+                    '<span class="material-symbols-outlined text-sm">folder_open</span>' +
+                    '</a>'
+                    : '') +
+                '<button onclick="abrirModalClientePorId(\'' + _esc(c.id) + '\')" ' +
+                'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">' +
+                '<span class="material-symbols-outlined text-sm">edit</span>Editar' +
+                '</button>' +
+                '<button onclick="toggleEstadoCliente(\'' + _esc(c.id) + '\',\'' + c.estado + '\')" ' +
+                'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl ' + toggleClase + ' border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95">' +
+                '<span class="material-symbols-outlined text-sm">' + toggleIcon + '</span>' + toggleLabel +
+                '</button>' +
+                '<button onclick="confirmarEliminarCliente(\'' + _esc(c.id) + '\',\'' + _escAttr(c.nombre) + '\')" ' +
+                'class="w-10 flex items-center justify-center rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 transition-all active:scale-95" title="Eliminar">' +
+                '<span class="material-symbols-outlined text-sm">delete</span>' +
+                '</button>' +
                 '</div>' +
-            '</div>';
+                '</div>';
         }).join('');
     }
 
@@ -1900,7 +1959,7 @@
      * Abre el modal de creación/edición buscando el cliente por ID en el caché.
      */
     function abrirModalClientePorId(id) {
-        var cliente = _clientesAdmin.find(function(c) { return c.id === id; }) || null;
+        var cliente = _clientesAdmin.find(function (c) { return c.id === id; }) || null;
         abrirModalCliente(cliente);
     }
 
@@ -1910,20 +1969,20 @@
      */
     function abrirModalCliente(cliente) {
         _clienteEditando = cliente;
-        var modal  = document.getElementById('modal-cliente');
+        var modal = document.getElementById('modal-cliente');
         var titulo = document.getElementById('modal-cliente-titulo');
         var estadoWrapper = document.getElementById('mc-estado-wrapper');
         if (!modal) return;
 
         // Poblar campos
-        document.getElementById('mc-id').value        = cliente ? cliente.id        : '';
-        document.getElementById('mc-nombre').value    = cliente ? cliente.nombre    : '';
+        document.getElementById('mc-id').value = cliente ? cliente.id : '';
+        document.getElementById('mc-nombre').value = cliente ? cliente.nombre : '';
         document.getElementById('mc-direccion').value = cliente ? cliente.direccion : '';
-        document.getElementById('mc-nit').value       = cliente ? cliente.nit       : '';
-        document.getElementById('mc-correo').value    = cliente ? cliente.correo    : '';
-        document.getElementById('mc-contacto').value  = cliente ? cliente.contacto  : '';
-        document.getElementById('mc-celular').value   = cliente ? cliente.celular   : '';
-        document.getElementById('mc-obra').value      = cliente ? cliente.obra      : '';
+        document.getElementById('mc-nit').value = cliente ? cliente.nit : '';
+        document.getElementById('mc-correo').value = cliente ? cliente.correo : '';
+        document.getElementById('mc-contacto').value = cliente ? cliente.contacto : '';
+        document.getElementById('mc-celular').value = cliente ? cliente.celular : '';
+        document.getElementById('mc-obra').value = cliente ? cliente.obra : '';
         var selectEstado = document.getElementById('mc-estado');
         if (selectEstado) selectEstado.value = cliente ? cliente.estado : 'ACTIVO';
 
@@ -1955,25 +2014,25 @@
         }
 
         var data = {
-            id:        (document.getElementById('mc-id').value || '').trim(),
-            nombre:    nombre,
+            id: (document.getElementById('mc-id').value || '').trim(),
+            nombre: nombre,
             direccion: (document.getElementById('mc-direccion').value || '').trim(),
-            nit:       (document.getElementById('mc-nit').value || '').trim(),
-            correo:    (document.getElementById('mc-correo').value || '').trim(),
-            contacto:  (document.getElementById('mc-contacto').value || '').trim(),
-            celular:   (document.getElementById('mc-celular').value || '').trim(),
-            obra:      (document.getElementById('mc-obra').value || '').trim(),
-            estado:    (document.getElementById('mc-estado') ? document.getElementById('mc-estado').value : 'ACTIVO')
+            nit: (document.getElementById('mc-nit').value || '').trim(),
+            correo: (document.getElementById('mc-correo').value || '').trim(),
+            contacto: (document.getElementById('mc-contacto').value || '').trim(),
+            celular: (document.getElementById('mc-celular').value || '').trim(),
+            obra: (document.getElementById('mc-obra').value || '').trim(),
+            estado: (document.getElementById('mc-estado') ? document.getElementById('mc-estado').value : 'ACTIVO')
         };
 
-        var btn     = document.getElementById('btn-guardar-cliente');
+        var btn = document.getElementById('btn-guardar-cliente');
         var spinner = document.getElementById('spinner-guardar-cliente');
-        if (btn)     btn.disabled = true;
+        if (btn) btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
 
         google.script.run
             .withSuccessHandler(function (res) {
-                if (btn)     btn.disabled = false;
+                if (btn) btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 if (res.status === 'success') {
                     cerrarModalCliente();
@@ -1984,7 +2043,7 @@
                 }
             })
             .withFailureHandler(function (err) {
-                if (btn)     btn.disabled = false;
+                if (btn) btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
@@ -2052,28 +2111,28 @@
     // MÓDULO: CONTROL DE ASISTENCIA (PERSONAL / SUPERVISORES)
     // ================================================================
 
-    let _asistenciaTotal    = [];    // Cache completo de registros
-    let _filtroEstadoAsist  = 'todos'; // Filtro de estado activo
+    let _asistenciaTotal = [];    // Cache completo de registros
+    let _filtroEstadoAsist = 'todos'; // Filtro de estado activo
 
     /**
      * Carga todos los registros desde el servidor.
      */
     function cargarAsistenciaAdmin() {
-        var tbody  = document.getElementById('asis-tabla-body');
-        var movil  = document.getElementById('asis-lista-mobile');
+        var tbody = document.getElementById('asis-tabla-body');
+        var movil = document.getElementById('asis-lista-mobile');
         var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
-                     '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
-                     '<span>Cargando asistencia...</span></div>';
+            '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+            '<span>Cargando asistencia...</span></div>';
 
-        if (tbody)  tbody.innerHTML  = '<tr><td colspan="10" class="py-10 text-center">' + loader + '</td></tr>';
-        if (movil)  movil.innerHTML  = loader;
+        if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="py-10 text-center">' + loader + '</td></tr>';
+        if (movil) movil.innerHTML = loader;
 
         // Reiniciar selects de filtro
         var selEst = document.getElementById('asis-filtro-estado');
         if (selEst) selEst.value = '';
 
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 if (res.status === 'success') {
                     _asistenciaTotal = res.data || [];
                     _poblarSelectsAsistencia(_asistenciaTotal);
@@ -2083,7 +2142,7 @@
                     if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-red-400 text-xs">Error al cargar datos</td></tr>';
                 }
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
             })
             .obtenerAsistenciaAdmin();
@@ -2095,21 +2154,21 @@
      */
     function _poblarSelectsAsistencia(registros) {
         var selNombre = document.getElementById('asis-filtro-nombre');
-        var selObra   = document.getElementById('asis-filtro-obra');
+        var selObra = document.getElementById('asis-filtro-obra');
         if (!selNombre || !selObra) return;
 
         var valNombre = selNombre.value;
-        var valObra   = selObra.value;
+        var valObra = selObra.value;
 
         // Supervisores únicos ordenados por nombre
         var supervisores = {};
-        registros.forEach(function(r) {
+        registros.forEach(function (r) {
             if (r.email) supervisores[r.email] = r.nombre || r.email;
         });
         selNombre.innerHTML = '<option value="" style="background:#1a242f;">Todos los supervisores...</option>';
-        Object.keys(supervisores).sort(function(a, b) {
+        Object.keys(supervisores).sort(function (a, b) {
             return supervisores[a].localeCompare(supervisores[b]);
-        }).forEach(function(email) {
+        }).forEach(function (email) {
             var opt = document.createElement('option');
             opt.value = email;
             opt.textContent = supervisores[email];
@@ -2119,9 +2178,9 @@
 
         // Obras únicas ordenadas alfabéticamente
         var obras = {};
-        registros.forEach(function(r) { if (r.obra) obras[r.obra] = true; });
+        registros.forEach(function (r) { if (r.obra) obras[r.obra] = true; });
         selObra.innerHTML = '<option value="" style="background:#1a242f;">Todas las obras...</option>';
-        Object.keys(obras).sort(function(a, b) { return a.localeCompare(b); }).forEach(function(obra) {
+        Object.keys(obras).sort(function (a, b) { return a.localeCompare(b); }).forEach(function (obra) {
             var opt = document.createElement('option');
             opt.value = obra;
             opt.textContent = obra;
@@ -2131,20 +2190,20 @@
 
         // Restaurar selección previa si aún existe
         if (valNombre) selNombre.value = valNombre;
-        if (valObra)   selObra.value   = valObra;
+        if (valObra) selObra.value = valObra;
     }
 
     /**
      * Aplica los filtros de supervisor + obra + estado y actualiza la vista.
      */
     function filtrarAsistencia() {
-        var emailSel  = ((document.getElementById('asis-filtro-nombre')  || {}).value || '').trim();
-        var obraSel   = ((document.getElementById('asis-filtro-obra')    || {}).value || '').trim();
-        var estadoSel = ((document.getElementById('asis-filtro-estado')  || {}).value || '').trim();
+        var emailSel = ((document.getElementById('asis-filtro-nombre') || {}).value || '').trim();
+        var obraSel = ((document.getElementById('asis-filtro-obra') || {}).value || '').trim();
+        var estadoSel = ((document.getElementById('asis-filtro-estado') || {}).value || '').trim();
 
-        var filtrados = _asistenciaTotal.filter(function(r) {
-            var coincideNombre = !emailSel  || r.email === emailSel;
-            var coincideObra   = !obraSel   || (r.obra || '') === obraSel;
+        var filtrados = _asistenciaTotal.filter(function (r) {
+            var coincideNombre = !emailSel || r.email === emailSel;
+            var coincideObra = !obraSel || (r.obra || '') === obraSel;
             var coincideEstado = !estadoSel || r.estado === estadoSel;
             return coincideNombre && coincideObra && coincideEstado;
         });
@@ -2160,15 +2219,15 @@
      */
     function actualizarStatsAsistencia(registros) {
         var emailsUnicos = {};
-        registros.forEach(function(r) { if (r.email) emailsUnicos[r.email] = true; });
+        registros.forEach(function (r) { if (r.email) emailsUnicos[r.email] = true; });
         var supervisores = Object.keys(emailsUnicos).length;
-        var activas      = registros.filter(function(r) { return r.estado === 'ACTIVO'; }).length;
-        var cerradas     = registros.filter(function(r) { return r.estado === 'CERRADO'; }).length;
+        var activas = registros.filter(function (r) { return r.estado === 'ACTIVO'; }).length;
+        var cerradas = registros.filter(function (r) { return r.estado === 'CERRADO'; }).length;
 
-        var elSup  = document.getElementById('asis-stat-supervisores');
-        var elTot  = document.getElementById('asis-stat-total');
-        var elAct  = document.getElementById('asis-stat-activas');
-        var elCer  = document.getElementById('asis-stat-cerradas');
+        var elSup = document.getElementById('asis-stat-supervisores');
+        var elTot = document.getElementById('asis-stat-total');
+        var elAct = document.getElementById('asis-stat-activas');
+        var elCer = document.getElementById('asis-stat-cerradas');
 
         if (elSup) elSup.querySelector('.stat-num').textContent = supervisores;
         if (elTot) elTot.querySelector('.stat-num').textContent = registros.length;
@@ -2191,13 +2250,13 @@
             return;
         }
 
-        tbody.innerHTML = registros.map(function(r) {
+        tbody.innerHTML = registros.map(function (r) {
             var esActiva = r.estado === 'ACTIVO';
             var badge = esActiva
                 ? '<span class="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-lg">' +
-                  '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>ACTIVA</span>'
+                '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>ACTIVA</span>'
                 : '<span class="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-lg">' +
-                  '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>CERRADA</span>';
+                '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>CERRADA</span>';
 
             var tipoBadge = r.tipoDia === 'HABIL'
                 ? '<span class="text-slate-400 text-[10px]">' + _esc(r.tipoDia) + '</span>'
@@ -2227,14 +2286,14 @@
             return;
         }
 
-        lista.innerHTML = registros.map(function(r) {
+        lista.innerHTML = registros.map(function (r) {
             var esActiva = r.estado === 'ACTIVO';
             var borderClass = esActiva ? 'border-amber-500/30' : 'border-green-500/20';
             var estadoBadge = esActiva
                 ? '<span class="text-[9px] font-black text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-lg flex items-center gap-1">' +
-                  '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>ACTIVA</span>'
+                '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>ACTIVA</span>'
                 : '<span class="text-[9px] font-black text-green-400 bg-green-500/15 border border-green-500/30 px-2 py-0.5 rounded-lg flex items-center gap-1">' +
-                  '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>CERRADA</span>';
+                '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>CERRADA</span>';
 
             return '<div class="bg-white/5 border ' + borderClass + ' rounded-xl p-3 animate-fade-in">' +
                 '<div class="flex items-start justify-between gap-2 mb-2">' +
@@ -2260,34 +2319,34 @@
         }
 
         var encabezado = ['Nombre_Supervisor', 'Email', 'Fecha', 'Hora_Entrada', 'Hora_Salida',
-                          'Tipo_Dia', 'Cliente_Empresa', 'Estado'];
+            'Tipo_Dia', 'Cliente_Empresa', 'Estado'];
 
         // Usar los datos actualmente filtrados (iguales a lo visible en pantalla)
-        var emailSel  = ((document.getElementById('asis-filtro-nombre')  || {}).value || '').trim();
-        var obraSel   = ((document.getElementById('asis-filtro-obra')    || {}).value || '').trim();
-        var estadoSel = ((document.getElementById('asis-filtro-estado')  || {}).value || '').trim();
-        var datos = _asistenciaTotal.filter(function(r) {
-            var n = !emailSel  || r.email === emailSel;
-            var o = !obraSel   || (r.obra || '') === obraSel;
+        var emailSel = ((document.getElementById('asis-filtro-nombre') || {}).value || '').trim();
+        var obraSel = ((document.getElementById('asis-filtro-obra') || {}).value || '').trim();
+        var estadoSel = ((document.getElementById('asis-filtro-estado') || {}).value || '').trim();
+        var datos = _asistenciaTotal.filter(function (r) {
+            var n = !emailSel || r.email === emailSel;
+            var o = !obraSel || (r.obra || '') === obraSel;
             var e = !estadoSel || r.estado === estadoSel;
             return n && o && e;
         });
 
         var csv = encabezado.join(',') + '\n';
-        csv += datos.map(function(r) {
+        csv += datos.map(function (r) {
             return [r.nombre, r.email, r.fecha, r.horaEntrada, r.horaSalida,
-                    r.tipoDia, r.obra, r.estado]
-                .map(function(v) {
+            r.tipoDia, r.obra, r.estado]
+                .map(function (v) {
                     var s = (v || '').toString().replace(/"/g, '""');
                     return '"' + s + '"';
                 }).join(',');
         }).join('\n');
 
-        var blob     = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-        var url      = URL.createObjectURL(blob);
-        var link     = document.createElement('a');
-        var fecha    = new Date().toISOString().slice(0, 10);
-        link.href    = url;
+        var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        var fecha = new Date().toISOString().slice(0, 10);
+        link.href = url;
         link.download = 'Asistencia_SST_' + fecha + '.csv';
         document.body.appendChild(link);
         link.click();
@@ -2301,22 +2360,22 @@
     // MÓDULO: GESTIÓN DE USUARIOS
     // ================================================================
 
-    let _usuariosTotal   = [];   // Cache completo
-    let _usrEditandoId    = null; // ID del usuario en edición (null = nuevo)
-    let _usrResetId       = null; // ID del usuario en reset de contraseña
+    let _usuariosTotal = [];   // Cache completo
+    let _usrEditandoId = null; // ID del usuario en edición (null = nuevo)
+    let _usrResetId = null; // ID del usuario en reset de contraseña
     let _clientesParaModal = [];  // Cache de clientes DB_CLIENTES para el selector CLI
 
     function cargarUsuariosAdmin() {
         var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
-                     '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
-                     '<span>Cargando usuarios...</span></div>';
+            '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+            '<span>Cargando usuarios...</span></div>';
         var tbody = document.getElementById('usr-tabla-body');
         var movil = document.getElementById('usr-lista-mobile');
         if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="py-10 text-center">' + loader + '</td></tr>';
         if (movil) movil.innerHTML = loader;
 
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 if (res.status === 'success') {
                     _usuariosTotal = res.data || [];
                     _poblarSelectRoles();
@@ -2325,7 +2384,7 @@
                     mostrarNotificacion('❌ ' + res.message, 'error');
                 }
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
             })
             .obtenerUsuariosAdmin();
@@ -2336,9 +2395,9 @@
         if (!sel) return;
         var valActual = sel.value;
         var roles = {};
-        _usuariosTotal.forEach(function(u) { if (u.rol) roles[u.rol] = true; });
+        _usuariosTotal.forEach(function (u) { if (u.rol) roles[u.rol] = true; });
         sel.innerHTML = '<option value="" style="background:#1a242f;">Todos los roles</option>';
-        Object.keys(roles).sort().forEach(function(r) {
+        Object.keys(roles).sort().forEach(function (r) {
             var opt = document.createElement('option');
             opt.value = r; opt.textContent = r; opt.style.background = '#1a242f';
             sel.appendChild(opt);
@@ -2347,13 +2406,13 @@
     }
 
     function filtrarUsuarios() {
-        var q      = ((document.getElementById('usr-filtro-texto')  || {}).value || '').trim().toLowerCase();
-        var rol    = ((document.getElementById('usr-filtro-rol')    || {}).value || '').trim();
+        var q = ((document.getElementById('usr-filtro-texto') || {}).value || '').trim().toLowerCase();
+        var rol = ((document.getElementById('usr-filtro-rol') || {}).value || '').trim();
         var estado = ((document.getElementById('usr-filtro-estado') || {}).value || '').trim();
 
-        var filtrados = _usuariosTotal.filter(function(u) {
-            var coincideTexto  = !q      || u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-            var coincideRol    = !rol    || u.rol === rol;
+        var filtrados = _usuariosTotal.filter(function (u) {
+            var coincideTexto = !q || u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+            var coincideRol = !rol || u.rol === rol;
             var coincideEstado = !estado || u.estado === estado;
             return coincideTexto && coincideRol && coincideEstado;
         });
@@ -2364,10 +2423,10 @@
     }
 
     function _actualizarStatsUsuarios(registros) {
-        var activos   = registros.filter(function(u) { return u.estado === 'ACTIVO'; }).length;
-        var inactivos = registros.filter(function(u) { return u.estado === 'INACTIVO'; }).length;
-        var roles     = {};
-        registros.forEach(function(u) { if (u.rol) roles[u.rol] = true; });
+        var activos = registros.filter(function (u) { return u.estado === 'ACTIVO'; }).length;
+        var inactivos = registros.filter(function (u) { return u.estado === 'INACTIVO'; }).length;
+        var roles = {};
+        registros.forEach(function (u) { if (u.rol) roles[u.rol] = true; });
 
         var elTot = document.getElementById('usr-stat-total');
         var elAct = document.getElementById('usr-stat-activos');
@@ -2391,13 +2450,13 @@
             return;
         }
 
-        tbody.innerHTML = registros.map(function(u) {
+        tbody.innerHTML = registros.map(function (u) {
             var esActivo = u.estado === 'ACTIVO';
             var estadoBadge = esActivo
                 ? '<span class="inline-flex items-center gap-1 text-[9px] font-black bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-lg">' +
-                  '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>ACTIVO</span>'
+                '<span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>ACTIVO</span>'
                 : '<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-lg">' +
-                  '<span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>INACTIVO</span>';
+                '<span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>INACTIVO</span>';
 
             var rolBadge = '<span class="text-[9px] font-black px-2 py-0.5 rounded-lg" style="background:rgba(197,160,72,0.12);color:var(--color-primario);border:1px solid rgba(197,160,72,0.3)">' +
                 _esc(u.rol) + '</span>';
@@ -2411,20 +2470,20 @@
                 '<td class="px-3 py-2.5 text-[11px] text-slate-400 whitespace-nowrap">' + _esc(u.celular || '-') + '</td>' +
                 '<td class="px-3 py-2.5 whitespace-nowrap">' + estadoBadge + '</td>' +
                 '<td class="px-3 py-2.5 whitespace-nowrap">' +
-                    '<div class="flex items-center gap-1.5">' +
-                    '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" title="Editar" ' +
-                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-primary/20 border border-white/10 hover:border-primary/30 flex items-center justify-center transition-all">' +
-                        '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-primary">edit</span></button>' +
-                    '<button onclick="abrirModalResetPassword(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" title="Reset contraseña" ' +
-                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/30 flex items-center justify-center transition-all">' +
-                        '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-amber-400">key</span></button>' +
-                    '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" title="' + (esActivo ? 'Desactivar' : 'Activar') + '" ' +
-                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-' + (esActivo ? 'red' : 'green') + '-500/20 border border-white/10 flex items-center justify-center transition-all">' +
-                        '<span class="material-symbols-outlined text-sm ' + (esActivo ? 'text-green-400 hover:text-red-400' : 'text-red-400 hover:text-green-400') + '">' + (esActivo ? 'toggle_on' : 'toggle_off') + '</span></button>' +
-                    '<button onclick="confirmarEliminarUsuario(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" title="Eliminar usuario" ' +
-                        'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-all">' +
-                        '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-red-400">delete</span></button>' +
-                    '</div>' +
+                '<div class="flex items-center gap-1.5">' +
+                '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" title="Editar" ' +
+                'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-primary/20 border border-white/10 hover:border-primary/30 flex items-center justify-center transition-all">' +
+                '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-primary">edit</span></button>' +
+                '<button onclick="abrirModalResetPassword(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" title="Reset contraseña" ' +
+                'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/30 flex items-center justify-center transition-all">' +
+                '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-amber-400">key</span></button>' +
+                '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" title="' + (esActivo ? 'Desactivar' : 'Activar') + '" ' +
+                'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-' + (esActivo ? 'red' : 'green') + '-500/20 border border-white/10 flex items-center justify-center transition-all">' +
+                '<span class="material-symbols-outlined text-sm ' + (esActivo ? 'text-green-400 hover:text-red-400' : 'text-red-400 hover:text-green-400') + '">' + (esActivo ? 'toggle_on' : 'toggle_off') + '</span></button>' +
+                '<button onclick="confirmarEliminarUsuario(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" title="Eliminar usuario" ' +
+                'class="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-all">' +
+                '<span class="material-symbols-outlined text-sm text-slate-400 hover:text-red-400">delete</span></button>' +
+                '</div>' +
                 '</td>' +
                 '</tr>';
         }).join('');
@@ -2439,7 +2498,7 @@
             return;
         }
 
-        lista.innerHTML = registros.map(function(u) {
+        lista.innerHTML = registros.map(function (u) {
             var esActivo = u.estado === 'ACTIVO';
             var estadoBadge = esActivo
                 ? '<span class="text-[9px] font-black text-green-400 bg-green-500/15 border border-green-500/30 px-2 py-0.5 rounded-lg">ACTIVO</span>'
@@ -2459,17 +2518,17 @@
                 '</div>' +
                 '<div class="grid grid-cols-2 gap-2 border-t border-white/5 pt-2">' +
                 '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" ' +
-                    'class="py-1.5 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center gap-1">' +
-                    '<span class="material-symbols-outlined text-xs">edit</span>Editar</button>' +
+                'class="py-1.5 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center gap-1">' +
+                '<span class="material-symbols-outlined text-xs">edit</span>Editar</button>' +
                 '<button onclick="abrirModalResetPassword(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" ' +
-                    'class="py-1.5 text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center gap-1">' +
-                    '<span class="material-symbols-outlined text-xs">key</span>Password</button>' +
+                'class="py-1.5 text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-center gap-1">' +
+                '<span class="material-symbols-outlined text-xs">key</span>Password</button>' +
                 '<button onclick="toggleEstadoUsuario(\'' + _esc(u.id) + '\')" ' +
-                    'class="py-1.5 text-[10px] font-black ' + (esActivo ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20') + ' border rounded-lg flex items-center justify-center gap-1">' +
-                    '<span class="material-symbols-outlined text-xs">' + (esActivo ? 'toggle_off' : 'toggle_on') + '</span>' + (esActivo ? 'Desactivar' : 'Activar') + '</button>' +
+                'class="py-1.5 text-[10px] font-black ' + (esActivo ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-green-400 bg-green-500/10 border-green-500/20') + ' border rounded-lg flex items-center justify-center gap-1">' +
+                '<span class="material-symbols-outlined text-xs">' + (esActivo ? 'toggle_off' : 'toggle_on') + '</span>' + (esActivo ? 'Desactivar' : 'Activar') + '</button>' +
                 '<button onclick="confirmarEliminarUsuario(\'' + _esc(u.id) + '\',\'' + _esc(u.nombre) + '\')" ' +
-                    'class="py-1.5 text-[10px] font-black text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-center gap-1">' +
-                    '<span class="material-symbols-outlined text-xs">delete</span>Eliminar</button>' +
+                'class="py-1.5 text-[10px] font-black text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-center gap-1">' +
+                '<span class="material-symbols-outlined text-xs">delete</span>Eliminar</button>' +
                 '</div></div>';
         }).join('');
     }
@@ -2478,26 +2537,26 @@
 
     function abrirModalUsuario(id) {
         _usrEditandoId = id || null;
-        var modal    = document.getElementById('usr-modal');
-        var titulo   = document.getElementById('usr-modal-titulo');
-        var subId    = document.getElementById('usr-modal-id');
-        var fldPwd   = document.getElementById('usr-campo-password');
-        var fldEst   = document.getElementById('usr-campo-estado');
+        var modal = document.getElementById('usr-modal');
+        var titulo = document.getElementById('usr-modal-titulo');
+        var subId = document.getElementById('usr-modal-id');
+        var fldPwd = document.getElementById('usr-campo-password');
+        var fldEst = document.getElementById('usr-campo-estado');
 
         var fldEmpresa = document.getElementById('usr-campo-empresa');
 
         if (!id) {
             // NUEVO
             titulo.textContent = 'Nuevo Usuario';
-            subId.textContent  = 'Código se asignará automáticamente';
-            document.getElementById('usr-inp-nombre').value    = '';
-            document.getElementById('usr-inp-email').value     = '';
-            document.getElementById('usr-inp-email').readOnly  = false;
+            subId.textContent = 'Código se asignará automáticamente';
+            document.getElementById('usr-inp-nombre').value = '';
+            document.getElementById('usr-inp-email').value = '';
+            document.getElementById('usr-inp-email').readOnly = false;
             document.getElementById('usr-inp-email').style.opacity = '1';
-            document.getElementById('usr-inp-rol').value       = '';
-            document.getElementById('usr-inp-password').value  = '';
-            document.getElementById('usr-inp-cedula').value    = '';
-            document.getElementById('usr-inp-celular').value   = '';
+            document.getElementById('usr-inp-rol').value = '';
+            document.getElementById('usr-inp-password').value = '';
+            document.getElementById('usr-inp-cedula').value = '';
+            document.getElementById('usr-inp-celular').value = '';
             var selEmp = document.getElementById('usr-inp-empresa');
             if (selEmp) selEmp.value = '';
             fldPwd.classList.remove('hidden');
@@ -2505,18 +2564,18 @@
             if (fldEmpresa) fldEmpresa.classList.add('hidden'); // se mostrará al elegir CLI
         } else {
             // EDICIÓN
-            var u = _usuariosTotal.find(function(x) { return x.id === id; });
+            var u = _usuariosTotal.find(function (x) { return x.id === id; });
             if (!u) return;
             titulo.textContent = 'Editar Usuario';
-            subId.textContent  = u.id;
-            document.getElementById('usr-inp-nombre').value    = u.nombre;
-            document.getElementById('usr-inp-email').value     = u.email;
-            document.getElementById('usr-inp-email').readOnly  = true;
+            subId.textContent = u.id;
+            document.getElementById('usr-inp-nombre').value = u.nombre;
+            document.getElementById('usr-inp-email').value = u.email;
+            document.getElementById('usr-inp-email').readOnly = true;
             document.getElementById('usr-inp-email').style.opacity = '0.5';
-            document.getElementById('usr-inp-rol').value       = u.rol;
-            document.getElementById('usr-inp-cedula').value    = u.cedula || '';
-            document.getElementById('usr-inp-celular').value   = u.celular || '';
-            document.getElementById('usr-inp-estado').value    = u.estado;
+            document.getElementById('usr-inp-rol').value = u.rol;
+            document.getElementById('usr-inp-cedula').value = u.cedula || '';
+            document.getElementById('usr-inp-celular').value = u.celular || '';
+            document.getElementById('usr-inp-estado').value = u.estado;
             fldPwd.classList.add('hidden');
             fldEst.classList.remove('hidden');
             // En edición nunca se muestra el selector de empresa (el código ya está asignado)
@@ -2534,7 +2593,7 @@
 
     // Muestra/oculta el selector de empresa según el rol elegido
     function onCambioRolUsuario() {
-        var rol          = ((document.getElementById('usr-inp-rol') || {}).value || '');
+        var rol = ((document.getElementById('usr-inp-rol') || {}).value || '');
         var campoEmpresa = document.getElementById('usr-campo-empresa');
         if (!campoEmpresa) return;
 
@@ -2552,7 +2611,7 @@
     function _cargarClientesParaModal() {
         if (_clientesParaModal.length > 0) { _poblarSelectEmpresas(); return; }
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 if (res && res.status === 'success') {
                     _clientesParaModal = res.data || [];
                     _poblarSelectEmpresas();
@@ -2560,7 +2619,7 @@
                     mostrarNotificacion('❌ No se pudieron cargar las empresas.', 'error');
                 }
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 mostrarNotificacion('❌ Error cargando empresas: ' + err.toString(), 'error');
             })
             .obtenerClientesParaUsuarios();
@@ -2572,15 +2631,15 @@
         if (!sel) return;
         var valActual = sel.value;
         sel.innerHTML = '<option value="" style="background:#1a242f;">Seleccione una empresa...</option>';
-        _clientesParaModal.forEach(function(c) {
-            var opt             = document.createElement('option');
-            opt.value           = c.id;
-            opt.textContent     = c.id + ' — ' + c.nombre;
+        _clientesParaModal.forEach(function (c) {
+            var opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.id + ' — ' + c.nombre;
             opt.style.background = '#1a242f';
             // Guardamos los datos del cliente como atributos para auto-completar
-            opt.dataset.correo   = c.correo;
+            opt.dataset.correo = c.correo;
             opt.dataset.contacto = c.contacto;
-            opt.dataset.celular  = c.celular;
+            opt.dataset.celular = c.celular;
             sel.appendChild(opt);
         });
         if (valActual) sel.value = valActual;
@@ -2590,31 +2649,31 @@
     function onSeleccionClienteUsuario() {
         var sel = document.getElementById('usr-inp-empresa');
         if (!sel || !sel.value) return;
-        var opt     = sel.options[sel.selectedIndex];
-        var correo  = opt.dataset.correo   || '';
+        var opt = sel.options[sel.selectedIndex];
+        var correo = opt.dataset.correo || '';
         var contacto = opt.dataset.contacto || '';
-        var celular = opt.dataset.celular  || '';
+        var celular = opt.dataset.celular || '';
 
-        var inpEmail   = document.getElementById('usr-inp-email');
-        var inpNombre  = document.getElementById('usr-inp-nombre');
+        var inpEmail = document.getElementById('usr-inp-email');
+        var inpNombre = document.getElementById('usr-inp-nombre');
         var inpCelular = document.getElementById('usr-inp-celular');
-        if (inpEmail  && !inpEmail.readOnly)  inpEmail.value   = correo;
-        if (inpNombre && !inpNombre.readOnly) inpNombre.value  = contacto;
+        if (inpEmail && !inpEmail.readOnly) inpEmail.value = correo;
+        if (inpNombre && !inpNombre.readOnly) inpNombre.value = contacto;
         if (inpCelular) inpCelular.value = celular;
     }
 
     function guardarUsuario() {
-        var nombre   = (document.getElementById('usr-inp-nombre')   || {}).value || '';
-        var email    = (document.getElementById('usr-inp-email')    || {}).value || '';
-        var rol      = (document.getElementById('usr-inp-rol')      || {}).value || '';
+        var nombre = (document.getElementById('usr-inp-nombre') || {}).value || '';
+        var email = (document.getElementById('usr-inp-email') || {}).value || '';
+        var rol = (document.getElementById('usr-inp-rol') || {}).value || '';
         var password = (document.getElementById('usr-inp-password') || {}).value || '';
-        var cedula   = (document.getElementById('usr-inp-cedula')   || {}).value || '';
-        var celular  = (document.getElementById('usr-inp-celular')  || {}).value || '';
-        var estado   = (document.getElementById('usr-inp-estado')   || {}).value || 'ACTIVO';
+        var cedula = (document.getElementById('usr-inp-cedula') || {}).value || '';
+        var celular = (document.getElementById('usr-inp-celular') || {}).value || '';
+        var estado = (document.getElementById('usr-inp-estado') || {}).value || 'ACTIVO';
 
         if (!nombre.trim()) { mostrarNotificacion('⚠️ El nombre es obligatorio.', 'warning'); return; }
-        if (!email.trim())  { mostrarNotificacion('⚠️ El email es obligatorio.', 'warning'); return; }
-        if (!rol)           { mostrarNotificacion('⚠️ Seleccione un rol.', 'warning'); return; }
+        if (!email.trim()) { mostrarNotificacion('⚠️ El email es obligatorio.', 'warning'); return; }
+        if (!rol) { mostrarNotificacion('⚠️ Seleccione un rol.', 'warning'); return; }
         if (!_usrEditandoId && !password.trim()) { mostrarNotificacion('⚠️ La contraseña es obligatoria.', 'warning'); return; }
 
         // Para CLI en creación validar que se seleccionó empresa
@@ -2625,17 +2684,19 @@
             if (!idClienteAsociado) { mostrarNotificacion('⚠️ Seleccione la empresa para el usuario cliente.', 'warning'); return; }
         }
 
-        var btn     = document.getElementById('usr-btn-guardar');
+        var btn = document.getElementById('usr-btn-guardar');
         var spinner = document.getElementById('usr-spinner-guardar');
-        if (btn)     btn.disabled = true;
+        if (btn) btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
 
-        var datos = { nombre: nombre.trim(), email: email.trim(), rol: rol.trim(),
-                      cedula: cedula.trim(), celular: celular.trim(),
-                      idClienteAsociado: idClienteAsociado };
+        var datos = {
+            nombre: nombre.trim(), email: email.trim(), rol: rol.trim(),
+            cedula: cedula.trim(), celular: celular.trim(),
+            idClienteAsociado: idClienteAsociado
+        };
 
-        var fnExito = function(res) {
-            if (btn)     btn.disabled = false;
+        var fnExito = function (res) {
+            if (btn) btn.disabled = false;
             if (spinner) spinner.classList.add('hidden');
             if (res.status === 'success') {
                 mostrarNotificacion('✅ ' + res.message, 'success');
@@ -2645,14 +2706,14 @@
                 mostrarNotificacion('❌ ' + res.message, 'error');
             }
         };
-        var fnError = function(err) {
-            if (btn)     btn.disabled = false;
+        var fnError = function (err) {
+            if (btn) btn.disabled = false;
             if (spinner) spinner.classList.add('hidden');
             mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
         };
 
         if (_usrEditandoId) {
-            datos.id     = _usrEditandoId;
+            datos.id = _usrEditandoId;
             datos.estado = estado;
             google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).actualizarUsuario(datos);
         } else {
@@ -2667,9 +2728,9 @@
         _usrResetId = id;
         var modal = document.getElementById('usr-reset-modal');
         var nomEl = document.getElementById('usr-reset-nombre');
-        var inp   = document.getElementById('usr-reset-inp');
+        var inp = document.getElementById('usr-reset-inp');
         if (nomEl) nomEl.textContent = nombre || id;
-        if (inp)   inp.value = '';
+        if (inp) inp.value = '';
         if (modal) modal.classList.remove('hidden');
     }
 
@@ -2684,14 +2745,14 @@
         if (!newPass) { mostrarNotificacion('⚠️ Ingrese la nueva contraseña.', 'warning'); return; }
         if (newPass.length < 4) { mostrarNotificacion('⚠️ La contraseña debe tener al menos 4 caracteres.', 'warning'); return; }
 
-        var btn     = document.getElementById('usr-btn-reset');
+        var btn = document.getElementById('usr-btn-reset');
         var spinner = document.getElementById('usr-spinner-reset');
-        if (btn)     btn.disabled = true;
+        if (btn) btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
 
         google.script.run
-            .withSuccessHandler(function(res) {
-                if (btn)     btn.disabled = false;
+            .withSuccessHandler(function (res) {
+                if (btn) btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 if (res.status === 'success') {
                     mostrarNotificacion('✅ ' + res.message, 'success');
@@ -2700,8 +2761,8 @@
                     mostrarNotificacion('❌ ' + res.message, 'error');
                 }
             })
-            .withFailureHandler(function(err) {
-                if (btn)     btn.disabled = false;
+            .withFailureHandler(function (err) {
+                if (btn) btn.disabled = false;
                 if (spinner) spinner.classList.add('hidden');
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
@@ -2736,8 +2797,8 @@
     // ── Toggle estado usuario ─────────────────────────────────────────
 
     function toggleEstadoUsuario(id) {
-        var u          = _usuariosTotal.find(function (x) { return x.id === id; });
-        var esActivo   = u && u.estado === 'ACTIVO';
+        var u = _usuariosTotal.find(function (x) { return x.id === id; });
+        var esActivo = u && u.estado === 'ACTIVO';
         mostrarConfirmacion(
             esActivo ? 'Desactivar usuario' : 'Activar usuario',
             esActivo
@@ -2767,19 +2828,19 @@
     // ════════════════════════════════════════════════════════
 
     let _formatosAdminTotal = []; // cache completo de LISTAS_FORMATOS
-    let _fmtEditando        = null; // { id, empresa } del formato en edición, null = nuevo
+    let _fmtEditando = null; // { id, empresa } del formato en edición, null = nuevo
 
     function cargarFormatosAdmin() {
         var loader = '<div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">' +
-                     '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
-                     '<span>Cargando formatos...</span></div>';
+            '<div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>' +
+            '<span>Cargando formatos...</span></div>';
         var tbody = document.getElementById('fmt-tabla-body');
         var movil = document.getElementById('fmt-lista-mobile');
         if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="py-10 text-center">' + loader + '</td></tr>';
         if (movil) movil.innerHTML = loader;
 
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 if (res.status === 'success') {
                     _formatosAdminTotal = res.data || [];
                     _poblarFiltroEmpresasFormatos();
@@ -2788,7 +2849,7 @@
                     mostrarNotificacion('❌ ' + res.message, 'error');
                 }
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 mostrarNotificacion('❌ Error de conexión: ' + err.toString(), 'error');
             })
             .obtenerFormatosAdmin();
@@ -2800,9 +2861,9 @@
         var sel = document.getElementById('fmt-filtro-empresa');
         if (!sel) return;
         var empresas = {};
-        _formatosAdminTotal.forEach(function(f) { if (f.empresa) empresas[f.empresa] = true; });
+        _formatosAdminTotal.forEach(function (f) { if (f.empresa) empresas[f.empresa] = true; });
         sel.innerHTML = '<option value="" style="background:#1a242f;">Todas las empresas</option>';
-        Object.keys(empresas).sort().forEach(function(e) {
+        Object.keys(empresas).sort().forEach(function (e) {
             var opt = document.createElement('option');
             opt.value = e; opt.textContent = e; opt.style.background = '#1a242f';
             sel.appendChild(opt);
@@ -2812,14 +2873,14 @@
     }
 
     function filtrarFormatos() {
-        var q       = ((document.getElementById('fmt-filtro-texto')   || {}).value || '').trim().toLowerCase();
-        var empresa = ((document.getElementById('fmt-filtro-empresa')  || {}).value || '').trim();
-        var tipo    = ((document.getElementById('fmt-filtro-tipo')     || {}).value || '').trim();
+        var q = ((document.getElementById('fmt-filtro-texto') || {}).value || '').trim().toLowerCase();
+        var empresa = ((document.getElementById('fmt-filtro-empresa') || {}).value || '').trim();
+        var tipo = ((document.getElementById('fmt-filtro-tipo') || {}).value || '').trim();
 
-        var filtrados = _formatosAdminTotal.filter(function(f) {
-            var coincideTexto   = !q       || f.id.toLowerCase().includes(q) || f.descripcion.toLowerCase().includes(q);
+        var filtrados = _formatosAdminTotal.filter(function (f) {
+            var coincideTexto = !q || f.id.toLowerCase().includes(q) || f.descripcion.toLowerCase().includes(q);
             var coincideEmpresa = !empresa || f.empresa === empresa;
-            var coincideTipo    = !tipo    || f.tipo === tipo;
+            var coincideTipo = !tipo || f.tipo === tipo;
             return coincideTexto && coincideEmpresa && coincideTipo;
         });
 
@@ -2829,13 +2890,13 @@
     }
 
     function _actualizarStatsFormatos(registros) {
-        var empresas     = {};
-        var permisos     = 0;
+        var empresas = {};
+        var permisos = 0;
         var inspecciones = 0;
-        registros.forEach(function(f) {
+        registros.forEach(function (f) {
             if (f.empresa) empresas[f.empresa] = true;
-            if (f.tipo === 'Permiso')     permisos++;
-            if (f.tipo === 'Inspeccion')  inspecciones++;
+            if (f.tipo === 'Permiso') permisos++;
+            if (f.tipo === 'Inspeccion') inspecciones++;
         });
         var elTot = document.getElementById('fmt-stat-total');
         var elEmp = document.getElementById('fmt-stat-empresas');
@@ -2849,16 +2910,16 @@
 
     // Colores por tipo de documento
     var _TIPO_BADGE = {
-        'Registro':   { bg: 'bg-green-500/15',  text: 'text-green-400',  border: 'border-green-500/30'  },
-        'Permiso':    { bg: 'bg-amber-500/15',   text: 'text-amber-400',  border: 'border-amber-500/30'  },
-        'Inspeccion': { bg: 'bg-blue-500/15',    text: 'text-blue-400',   border: 'border-blue-500/30'   },
-        'Ejecucion':  { bg: 'bg-purple-500/15',  text: 'text-purple-400', border: 'border-purple-500/30' }
+        'Registro': { bg: 'bg-green-500/15', text: 'text-green-400', border: 'border-green-500/30' },
+        'Permiso': { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30' },
+        'Inspeccion': { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30' },
+        'Ejecucion': { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30' }
     };
 
     function _tipoBadge(tipo) {
         var c = _TIPO_BADGE[tipo] || { bg: 'bg-white/10', text: 'text-slate-400', border: 'border-white/20' };
         return '<span class="inline-flex text-[9px] font-black px-2 py-0.5 rounded-lg border ' +
-               c.bg + ' ' + c.text + ' ' + c.border + '">' + _esc(tipo || '-') + '</span>';
+            c.bg + ' ' + c.text + ' ' + c.border + '">' + _esc(tipo || '-') + '</span>';
     }
 
     function _renderTablaFormatos(registros) {
@@ -2871,7 +2932,7 @@
                 '<span>Sin formatos para mostrar</span></div></td></tr>';
             return;
         }
-        tbody.innerHTML = registros.map(function(f) {
+        tbody.innerHTML = registros.map(function (f) {
             var idEscaped = encodeURIComponent(f.id);
             var empEscaped = encodeURIComponent(f.empresa);
             return '<tr class="border-b border-white/5 hover:bg-white/5 transition-colors">' +
@@ -2899,8 +2960,8 @@
                 '<span class="material-symbols-outlined text-3xl">search_off</span><span>Sin formatos para mostrar</span></div>';
             return;
         }
-        cont.innerHTML = registros.map(function(f) {
-            var idEscaped  = encodeURIComponent(f.id);
+        cont.innerHTML = registros.map(function (f) {
+            var idEscaped = encodeURIComponent(f.id);
             var empEscaped = encodeURIComponent(f.empresa);
             return '<div class="bg-white/5 rounded-xl border border-white/10 p-3 space-y-2">' +
                 '<div class="flex items-start justify-between">' +
@@ -2921,51 +2982,51 @@
     // ── Modal crear / editar ──────────────────────────────────────────
 
     function abrirModalFormato(idEnc, empresaEnc) {
-        var modal  = document.getElementById('fmt-modal');
+        var modal = document.getElementById('fmt-modal');
         var titulo = document.getElementById('fmt-modal-titulo');
-        var sub    = document.getElementById('fmt-modal-sub');
-        var inpId  = document.getElementById('fmt-inp-id');
-        var nota   = document.getElementById('fmt-nota-id');
+        var sub = document.getElementById('fmt-modal-sub');
+        var inpId = document.getElementById('fmt-inp-id');
+        var nota = document.getElementById('fmt-nota-id');
 
         // Poblar el select de empresas desde _clientesParaModal (cache compartido con usuarios)
         _poblarSelectEmpresasFormatos();
 
-        var selEmp     = document.getElementById('fmt-inp-empresa');
+        var selEmp = document.getElementById('fmt-inp-empresa');
         var empDisplay = document.getElementById('fmt-empresa-display');
-        var empTexto   = document.getElementById('fmt-empresa-texto');
+        var empTexto = document.getElementById('fmt-empresa-texto');
 
         if (!idEnc) {
             // CREAR
             _fmtEditando = null;
             titulo.textContent = 'Nuevo Formato';
-            sub.textContent    = 'Se vinculará a la empresa seleccionada';
-            inpId.value        = '';
-            inpId.readOnly     = false;
+            sub.textContent = 'Se vinculará a la empresa seleccionada';
+            inpId.value = '';
+            inpId.readOnly = false;
             inpId.style.opacity = '1';
             if (nota) nota.classList.add('hidden');
             document.getElementById('fmt-inp-descripcion').value = '';
-            document.getElementById('fmt-inp-tipo').value        = '';
+            document.getElementById('fmt-inp-tipo').value = '';
             if (selEmp) { selEmp.value = ''; selEmp.style.display = ''; }
             if (empDisplay) empDisplay.style.display = 'none';
         } else {
             // EDITAR
-            var id      = decodeURIComponent(idEnc);
+            var id = decodeURIComponent(idEnc);
             var empresa = decodeURIComponent(empresaEnc);
-            var f = _formatosAdminTotal.find(function(x) { return x.id === id && x.empresa === empresa; });
+            var f = _formatosAdminTotal.find(function (x) { return x.id === id && x.empresa === empresa; });
             if (!f) return;
             _fmtEditando = { id: f.id, empresa: f.empresa };
             titulo.textContent = 'Editar Formato';
-            sub.textContent    = f.id + ' · ' + f.empresa;
-            inpId.value        = f.id;
-            inpId.readOnly     = false;
+            sub.textContent = f.id + ' · ' + f.empresa;
+            inpId.value = f.id;
+            inpId.readOnly = false;
             inpId.style.opacity = '1';
             if (nota) { nota.classList.remove('hidden'); }
             document.getElementById('fmt-inp-descripcion').value = f.descripcion;
-            document.getElementById('fmt-inp-tipo').value        = f.tipo;
+            document.getElementById('fmt-inp-tipo').value = f.tipo;
             // Empresa fija: ocultar select, mostrar display
-            if (selEmp)     selEmp.style.display     = 'none';
-            if (empDisplay) empDisplay.style.display  = 'block';
-            if (empTexto)   empTexto.textContent      = f.empresa;
+            if (selEmp) selEmp.style.display = 'none';
+            if (empDisplay) empDisplay.style.display = 'block';
+            if (empTexto) empTexto.textContent = f.empresa;
         }
         // Posicionar modal dinámicamente sobre el viewport visible del iframe GAS
         _fmtAbrirModalGAS(modal);
@@ -2974,14 +3035,14 @@
     /** Abre el modal posicionado exactamente sobre la ventana visible (compatible GAS iframe) */
     function _fmtAbrirModalGAS(modal) {
         var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
-        var viewH   = window.innerHeight || document.documentElement.clientHeight || 600;
-        var viewW   = window.innerWidth  || document.documentElement.clientWidth  || 400;
+        var viewH = window.innerHeight || document.documentElement.clientHeight || 600;
+        var viewW = window.innerWidth || document.documentElement.clientWidth || 400;
 
         // El overlay cubre exactamente el viewport visible
-        modal.style.top       = scrollY + 'px';
-        modal.style.width     = viewW + 'px';
-        modal.style.height    = viewH + 'px';
-        modal.style.display   = 'flex';
+        modal.style.top = scrollY + 'px';
+        modal.style.width = viewW + 'px';
+        modal.style.height = viewH + 'px';
+        modal.style.display = 'flex';
         modal.style.alignItems = 'center';
         modal.style.justifyContent = 'center';
 
@@ -2999,9 +3060,9 @@
         var modal = document.getElementById('fmt-modal');
         if (modal) modal.style.display = 'none';
         document.body.style.overflow = '';
-        var selEmp     = document.getElementById('fmt-inp-empresa');
+        var selEmp = document.getElementById('fmt-inp-empresa');
         var empDisplay = document.getElementById('fmt-empresa-display');
-        if (selEmp)     { selEmp.style.display = ''; selEmp.disabled = false; }
+        if (selEmp) { selEmp.style.display = ''; selEmp.disabled = false; }
         if (empDisplay) empDisplay.style.display = 'none';
         _fmtEditando = null;
     }
@@ -3018,7 +3079,7 @@
         } else {
             // Cargar clientes y luego poblar
             google.script.run
-                .withSuccessHandler(function(res) {
+                .withSuccessHandler(function (res) {
                     if (res && res.status === 'success') {
                         _clientesParaModal = res.data || [];
                         _llenarSelectEmpresasFormatos(sel);
@@ -3034,7 +3095,7 @@
 
     function _llenarSelectEmpresasFormatos(sel) {
         sel.innerHTML = '<option value="" style="background:#1a242f;">Seleccione la empresa...</option>';
-        _clientesParaModal.forEach(function(c) {
+        _clientesParaModal.forEach(function (c) {
             var opt = document.createElement('option');
             opt.value = c.nombre; opt.textContent = c.nombre; opt.style.background = '#1a242f';
             sel.appendChild(opt);
@@ -3042,24 +3103,24 @@
     }
 
     function guardarFormato() {
-        var id          = ((document.getElementById('fmt-inp-id')          || {}).value || '').trim().toUpperCase();
+        var id = ((document.getElementById('fmt-inp-id') || {}).value || '').trim().toUpperCase();
         var descripcion = ((document.getElementById('fmt-inp-descripcion') || {}).value || '').trim();
-        var tipo        = ((document.getElementById('fmt-inp-tipo')        || {}).value || '').trim();
-        var empresa     = _fmtEditando ? _fmtEditando.empresa
-                        : ((document.getElementById('fmt-inp-empresa') || {}).value || '').trim();
+        var tipo = ((document.getElementById('fmt-inp-tipo') || {}).value || '').trim();
+        var empresa = _fmtEditando ? _fmtEditando.empresa
+            : ((document.getElementById('fmt-inp-empresa') || {}).value || '').trim();
 
-        if (!id)          { mostrarNotificacion('⚠️ El código del formato es obligatorio.', 'warning'); return; }
-        if (!descripcion) { mostrarNotificacion('⚠️ La descripción es obligatoria.',        'warning'); return; }
-        if (!tipo)        { mostrarNotificacion('⚠️ Seleccione el tipo de documento.',      'warning'); return; }
-        if (!empresa)     { mostrarNotificacion('⚠️ Seleccione la empresa contratista.',    'warning'); return; }
+        if (!id) { mostrarNotificacion('⚠️ El código del formato es obligatorio.', 'warning'); return; }
+        if (!descripcion) { mostrarNotificacion('⚠️ La descripción es obligatoria.', 'warning'); return; }
+        if (!tipo) { mostrarNotificacion('⚠️ Seleccione el tipo de documento.', 'warning'); return; }
+        if (!empresa) { mostrarNotificacion('⚠️ Seleccione la empresa contratista.', 'warning'); return; }
 
-        var btn     = document.getElementById('fmt-btn-guardar');
+        var btn = document.getElementById('fmt-btn-guardar');
         var spinner = document.getElementById('fmt-spinner-guardar');
-        if (btn)     btn.disabled = true;
+        if (btn) btn.disabled = true;
         if (spinner) spinner.classList.remove('hidden');
 
-        var fnExito = function(res) {
-            if (btn)     btn.disabled = false;
+        var fnExito = function (res) {
+            if (btn) btn.disabled = false;
             if (spinner) spinner.classList.add('hidden');
             if (res.status === 'success') {
                 mostrarNotificacion('✅ ' + res.message, 'success');
@@ -3069,15 +3130,15 @@
                 mostrarNotificacion('❌ ' + res.message, 'error');
             }
         };
-        var fnError = function(err) {
-            if (btn)     btn.disabled = false;
+        var fnError = function (err) {
+            if (btn) btn.disabled = false;
             if (spinner) spinner.classList.add('hidden');
             mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
         };
 
         var datos = { id: id, descripcion: descripcion, tipo: tipo, empresa: empresa };
         if (_fmtEditando) {
-            datos.empresa    = _fmtEditando.empresa; // empresa original como clave (no cambia)
+            datos.empresa = _fmtEditando.empresa; // empresa original como clave (no cambia)
             datos.idOriginal = _fmtEditando.id;      // ID original para encontrar la fila
             google.script.run.withSuccessHandler(fnExito).withFailureHandler(fnError).actualizarFormato(datos);
         } else {
@@ -3086,7 +3147,7 @@
     }
 
     function eliminarFormato(idEnc, empresaEnc) {
-        var id      = decodeURIComponent(idEnc);
+        var id = decodeURIComponent(idEnc);
         var empresa = decodeURIComponent(empresaEnc);
         mostrarConfirmacion(
             'Eliminar formato',
@@ -3137,16 +3198,16 @@
      */
     function cargarSupervisorSTT() {
         // Mostrar loader, ocultar contenido y error
-        var loader  = document.getElementById('sst-loader');
+        var loader = document.getElementById('sst-loader');
         var content = document.getElementById('sst-content');
-        var errBox  = document.getElementById('sst-error');
-        if (loader)  { loader.classList.remove('hidden'); loader.style.display = 'flex'; }
+        var errBox = document.getElementById('sst-error');
+        if (loader) { loader.classList.remove('hidden'); loader.style.display = 'flex'; }
         if (content) content.classList.add('hidden');
-        if (errBox)  { errBox.classList.add('hidden'); errBox.style.display = 'none'; }
+        if (errBox) { errBox.classList.add('hidden'); errBox.style.display = 'none'; }
 
         google.script.run
-            .withSuccessHandler(function(res) {
-                if (loader)  { loader.classList.add('hidden'); loader.style.display = 'none'; }
+            .withSuccessHandler(function (res) {
+                if (loader) { loader.classList.add('hidden'); loader.style.display = 'none'; }
                 if (res.status !== 'success') {
                     _sstMostrarError(res.message || 'Error desconocido.');
                     return;
@@ -3159,7 +3220,7 @@
                 if (content) content.classList.remove('hidden');
                 _sstPoblarSelectoresEval();
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 if (loader) { loader.classList.add('hidden'); loader.style.display = 'none'; }
                 _sstMostrarError(err.message || err.toString());
             })
@@ -3176,13 +3237,13 @@
 
     /** Rellena los selectores de filtro con los datos cargados. */
     function _sstPoblarFiltros(supervisores, empresas) {
-        var selSup  = document.getElementById('sst-filtro-supervisor');
+        var selSup = document.getElementById('sst-filtro-supervisor');
         var selObra = document.getElementById('sst-filtro-obra');
         if (!selSup || !selObra) return;
 
         // Opciones de supervisor: todos los SUP-SST activos del sistema
         var opcionesSup = '<option value="" style="background:#1a242f;">Todos los supervisores</option>';
-        supervisores.forEach(function(s) {
+        supervisores.forEach(function (s) {
             opcionesSup += '<option value="' + s.email + '" style="background:#1a242f;">' + s.nombre + '</option>';
         });
         selSup.innerHTML = opcionesSup;
@@ -3190,12 +3251,12 @@
         // Opciones de empresa: primero las de DB_CLIENTES activas,
         // luego añadir cualquier obra presente en la actividad que no esté ya en la lista
         var empSet = {};
-        (empresas || []).forEach(function(e) { if (e) empSet[e] = true; });
-        supervisores.forEach(function(s) {
-            (s.obras || []).forEach(function(o) { if (o) empSet[o] = true; });
+        (empresas || []).forEach(function (e) { if (e) empSet[e] = true; });
+        supervisores.forEach(function (s) {
+            (s.obras || []).forEach(function (o) { if (o) empSet[o] = true; });
         });
         var opcionesObra = '<option value="" style="background:#1a242f;">Todas las empresas</option>';
-        Object.keys(empSet).sort().forEach(function(o) {
+        Object.keys(empSet).sort().forEach(function (o) {
             opcionesObra += '<option value="' + o + '" style="background:#1a242f;">' + o + '</option>';
         });
         selObra.innerHTML = opcionesObra;
@@ -3203,37 +3264,37 @@
 
     /** Renderiza las 4 tarjetas KPI globales. */
     function _sstRenderKpis(kpis) {
-        var set = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
-        set('sst-kpi-supervisores',  kpis.totalSupervisores);
+        var set = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
+        set('sst-kpi-supervisores', kpis.totalSupervisores);
         set('sst-kpi-formatos-pend', kpis.formatosPendientes);
-        set('sst-kpi-hallazgos-ab',  kpis.hallazgosAbiertos);
-        set('sst-kpi-tasa',          kpis.tasaGlobal + '%');
+        set('sst-kpi-hallazgos-ab', kpis.hallazgosAbiertos);
+        set('sst-kpi-tasa', kpis.tasaGlobal + '%');
     }
 
     /** Renderiza las secciones de alertas críticas. */
     function _sstRenderAlertas(supervisores) {
-        var alertasBox   = document.getElementById('sst-alertas-box');
+        var alertasBox = document.getElementById('sst-alertas-box');
         var wrapFormatos = document.getElementById('sst-alertas-formatos-wrap');
-        var wrapHallazg  = document.getElementById('sst-alertas-hallazgos-wrap');
-        var badgeFmt     = document.getElementById('sst-badge-formatos');
-        var badgeHall    = document.getElementById('sst-badge-hallazgos');
-        var listFmt      = document.querySelector('#sst-alertas-formatos-list > div');
-        var listHall     = document.querySelector('#sst-alertas-hallazgos-list > div');
+        var wrapHallazg = document.getElementById('sst-alertas-hallazgos-wrap');
+        var badgeFmt = document.getElementById('sst-badge-formatos');
+        var badgeHall = document.getElementById('sst-badge-hallazgos');
+        var listFmt = document.querySelector('#sst-alertas-formatos-list > div');
+        var listHall = document.querySelector('#sst-alertas-hallazgos-list > div');
         if (!alertasBox) return;
 
         // Recopilar todas las alertas
-        var todasAlerFmt  = [];
+        var todasAlerFmt = [];
         var todasAlerHall = [];
-        supervisores.forEach(function(s) {
-            (s.alertasFormatos || []).forEach(function(a) {
+        supervisores.forEach(function (s) {
+            (s.alertasFormatos || []).forEach(function (a) {
                 todasAlerFmt.push({ supervisor: s.nombre, item: a });
             });
-            (s.alertasHallazgos || []).forEach(function(a) {
+            (s.alertasHallazgos || []).forEach(function (a) {
                 todasAlerHall.push({ supervisor: s.nombre, item: a });
             });
         });
-        todasAlerFmt.sort(function(a, b)  { return b.item.dias - a.item.dias; });
-        todasAlerHall.sort(function(a, b) { return b.item.dias - a.item.dias; });
+        todasAlerFmt.sort(function (a, b) { return b.item.dias - a.item.dias; });
+        todasAlerHall.sort(function (a, b) { return b.item.dias - a.item.dias; });
 
         var hayAlertas = todasAlerFmt.length > 0 || todasAlerHall.length > 0;
         alertasBox.classList.toggle('hidden', !hayAlertas);
@@ -3242,7 +3303,7 @@
         if (wrapFormatos) wrapFormatos.classList.toggle('hidden', todasAlerFmt.length === 0);
         if (badgeFmt) badgeFmt.textContent = todasAlerFmt.length;
         if (listFmt) {
-            listFmt.innerHTML = todasAlerFmt.map(function(entry) {
+            listFmt.innerHTML = todasAlerFmt.map(function (entry) {
                 var a = entry.item;
                 var color = a.dias > 7 ? 'text-red-400' : a.dias > 3 ? 'text-amber-400' : 'text-slate-300';
                 return '<div class="flex items-start justify-between gap-2 py-1.5 border-b border-amber-500/10 last:border-0">' +
@@ -3259,7 +3320,7 @@
         if (wrapHallazg) wrapHallazg.classList.toggle('hidden', todasAlerHall.length === 0);
         if (badgeHall) badgeHall.textContent = todasAlerHall.length;
         if (listHall) {
-            listHall.innerHTML = todasAlerHall.map(function(entry) {
+            listHall.innerHTML = todasAlerHall.map(function (entry) {
                 var a = entry.item;
                 var color = a.dias > 7 ? 'text-red-400' : a.dias > 3 ? 'text-amber-400' : 'text-slate-300';
                 return '<div class="flex items-start justify-between gap-2 py-1.5 border-b border-red-500/10 last:border-0">' +
@@ -3279,13 +3340,13 @@
      */
     function filtrarSupervisorSTT() {
         if (!_sstCache) return;
-        var texto = (document.getElementById('sst-filtro-texto')      || {}).value || '';
-        var supV  = (document.getElementById('sst-filtro-supervisor') || {}).value || '';
-        var obraV = (document.getElementById('sst-filtro-obra')       || {}).value || '';
+        var texto = (document.getElementById('sst-filtro-texto') || {}).value || '';
+        var supV = (document.getElementById('sst-filtro-supervisor') || {}).value || '';
+        var obraV = (document.getElementById('sst-filtro-obra') || {}).value || '';
         var q = texto.toLowerCase().trim();
 
-        var filtrados = _sstCache.supervisores.filter(function(s) {
-            if (supV  && s.email !== supV) return false;
+        var filtrados = _sstCache.supervisores.filter(function (s) {
+            if (supV && s.email !== supV) return false;
             if (obraV && !(s.obras || []).includes(obraV)) return false;
             if (q && !(s.nombre.toLowerCase().includes(q) || (s.obras || []).join(' ').toLowerCase().includes(q))) return false;
             return true;
@@ -3312,7 +3373,7 @@
 
         if (fmts.length > 0) {
             msg += '📋 *FORMATOS SIN FIRMA (' + fmts.length + '):*\n';
-            fmts.forEach(function(a) {
+            fmts.forEach(function (a) {
                 msg += '  • ' + a.consecutivo + ' — ' + a.descripcion + '\n';
                 msg += '    📍 ' + a.empresa + '  |  ⏰ ' + a.dias + ' día(s) pendiente\n';
             });
@@ -3321,7 +3382,7 @@
 
         if (halls.length > 0) {
             msg += '⚠️ *HALLAZGOS ABIERTOS (' + halls.length + '):*\n';
-            halls.forEach(function(a) {
+            halls.forEach(function (a) {
                 msg += '  • ' + a.id + ' — ' + a.descripcion + '\n';
                 msg += '    📍 ' + a.empresa + '  |  ⏰ ' + a.dias + ' día(s) abierto\n';
             });
@@ -3339,7 +3400,7 @@
     /** Helper: retorna la clase de color según el número de pendientes. */
     function _sstColorPend(n) {
         if (n === 0) return 'text-green-400';
-        if (n <= 2)  return 'text-amber-400';
+        if (n <= 2) return 'text-amber-400';
         return 'text-red-400';
     }
 
@@ -3352,9 +3413,9 @@
 
     /** Construye y actualiza la tabla desktop + cards mobile. */
     function _sstRenderTabla(supervisores) {
-        var tbody   = document.getElementById('sst-tabla-body');
-        var mobile  = document.getElementById('sst-lista-mobile');
-        var sinRes  = document.getElementById('sst-sin-resultados');
+        var tbody = document.getElementById('sst-tabla-body');
+        var mobile = document.getElementById('sst-lista-mobile');
+        var sinRes = document.getElementById('sst-sin-resultados');
 
         if (sinRes) {
             sinRes.classList.toggle('hidden', supervisores.length > 0);
@@ -3362,44 +3423,44 @@
         }
 
         if (supervisores.length === 0) {
-            if (tbody)  tbody.innerHTML  = '<tr><td colspan="6" class="py-8 text-center text-slate-500 text-xs italic">Sin resultados</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-slate-500 text-xs italic">Sin resultados</td></tr>';
             if (mobile) mobile.innerHTML = '';
             return;
         }
 
         // ── Tabla desktop ───────────────────────────────────────────
         if (tbody) {
-            tbody.innerHTML = supervisores.map(function(s) {
+            tbody.innerHTML = supervisores.map(function (s) {
                 var obras = (s.obras || []).join(', ') || '—';
                 var wa = s.celular
                     ? '<a href="https://wa.me/' + s.celular.replace(/\D/g, '') + '?text=' + encodeURIComponent(_sstMensajeWA(s)) + '" target="_blank" rel="noopener" ' +
-                      'class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-[10px] font-bold hover:bg-green-500/20 transition-all active:scale-95">' +
-                      '<span class="material-symbols-outlined text-sm">chat</span>' +
-                      '<span class="hidden sm:inline">WhatsApp</span></a>'
+                    'class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-[10px] font-bold hover:bg-green-500/20 transition-all active:scale-95">' +
+                    '<span class="material-symbols-outlined text-sm">chat</span>' +
+                    '<span class="hidden sm:inline">WhatsApp</span></a>'
                     : '<span class="text-slate-600 text-[10px]">—</span>';
 
                 return '<tr class="border-b border-white/5 hover:bg-white/3 transition-colors">' +
                     '<td class="px-3 py-3">' +
-                        '<p class="text-xs font-bold text-white">' + s.nombre + '</p>' +
-                        '<p class="text-[10px] text-slate-500">' + s.email + '</p>' +
+                    '<p class="text-xs font-bold text-white">' + s.nombre + '</p>' +
+                    '<p class="text-[10px] text-slate-500">' + s.email + '</p>' +
                     '</td>' +
                     '<td class="px-3 py-3"><p class="text-[10px] text-slate-400 max-w-[140px] leading-tight">' + obras + '</p></td>' +
                     '<td class="px-3 py-3 text-center">' +
-                        '<span class="text-xs font-bold text-slate-400">' + s.formatos.total + '</span>' +
-                        '<span class="text-slate-600 mx-1">/</span>' +
-                        '<span class="text-xs font-black ' + _sstColorPend(s.formatos.pendiente) + '">' + s.formatos.pendiente + '</span>' +
-                        '<span class="text-slate-600 mx-1">/</span>' +
-                        '<span class="text-xs font-bold text-green-400">' + s.formatos.cerrado + '</span>' +
+                    '<span class="text-xs font-bold text-slate-400">' + s.formatos.total + '</span>' +
+                    '<span class="text-slate-600 mx-1">/</span>' +
+                    '<span class="text-xs font-black ' + _sstColorPend(s.formatos.pendiente) + '">' + s.formatos.pendiente + '</span>' +
+                    '<span class="text-slate-600 mx-1">/</span>' +
+                    '<span class="text-xs font-bold text-green-400">' + s.formatos.cerrado + '</span>' +
                     '</td>' +
                     '<td class="px-3 py-3 text-center">' +
-                        '<span class="text-xs font-bold text-slate-400">' + s.hallazgos.total + '</span>' +
-                        '<span class="text-slate-600 mx-1">/</span>' +
-                        '<span class="text-xs font-black ' + _sstColorPend(s.hallazgos.abiertos) + '">' + s.hallazgos.abiertos + '</span>' +
-                        '<span class="text-slate-600 mx-1">/</span>' +
-                        '<span class="text-xs font-bold text-green-400">' + s.hallazgos.cerrados + '</span>' +
+                    '<span class="text-xs font-bold text-slate-400">' + s.hallazgos.total + '</span>' +
+                    '<span class="text-slate-600 mx-1">/</span>' +
+                    '<span class="text-xs font-black ' + _sstColorPend(s.hallazgos.abiertos) + '">' + s.hallazgos.abiertos + '</span>' +
+                    '<span class="text-slate-600 mx-1">/</span>' +
+                    '<span class="text-xs font-bold text-green-400">' + s.hallazgos.cerrados + '</span>' +
                     '</td>' +
                     '<td class="px-3 py-3 text-center">' +
-                        '<span class="text-sm font-black ' + _sstColorTasa(s.formatos.tasa) + '">' + s.formatos.tasa + '%</span>' +
+                    '<span class="text-sm font-black ' + _sstColorTasa(s.formatos.tasa) + '">' + s.formatos.tasa + '%</span>' +
                     '</td>' +
                     '<td class="px-3 py-3 text-right">' + wa + '</td>' +
                     '</tr>';
@@ -3408,40 +3469,40 @@
 
         // ── Cards mobile ────────────────────────────────────────────
         if (mobile) {
-            mobile.innerHTML = supervisores.map(function(s) {
+            mobile.innerHTML = supervisores.map(function (s) {
                 var obras = (s.obras || []).join(', ') || '—';
                 var tasaColor = _sstColorTasa(s.formatos.tasa);
-                var pendFmtColor  = _sstColorPend(s.formatos.pendiente);
+                var pendFmtColor = _sstColorPend(s.formatos.pendiente);
                 var pendHallColor = _sstColorPend(s.hallazgos.abiertos);
                 var waBtn = s.celular
                     ? '<a href="https://wa.me/' + s.celular.replace(/\D/g, '') + '?text=' + encodeURIComponent(_sstMensajeWA(s)) + '" target="_blank" rel="noopener" ' +
-                      'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-[10px] font-black hover:bg-green-500/20 transition-all active:scale-95">' +
-                      '<span class="material-symbols-outlined text-base">chat</span>WhatsApp</a>'
+                    'class="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-[10px] font-black hover:bg-green-500/20 transition-all active:scale-95">' +
+                    '<span class="material-symbols-outlined text-base">chat</span>WhatsApp</a>'
                     : '';
 
                 return '<div class="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">' +
                     // Header
                     '<div class="flex items-start justify-between gap-2">' +
-                        '<div>' +
-                            '<p class="text-sm font-black text-white">' + s.nombre + '</p>' +
-                            '<p class="text-[10px] text-slate-500 mt-0.5">' + obras + '</p>' +
-                        '</div>' +
-                        '<span class="text-lg font-black ' + tasaColor + '">' + s.formatos.tasa + '%</span>' +
+                    '<div>' +
+                    '<p class="text-sm font-black text-white">' + s.nombre + '</p>' +
+                    '<p class="text-[10px] text-slate-500 mt-0.5">' + obras + '</p>' +
+                    '</div>' +
+                    '<span class="text-lg font-black ' + tasaColor + '">' + s.formatos.tasa + '%</span>' +
                     '</div>' +
                     // Stats
                     '<div class="grid grid-cols-3 gap-2">' +
-                        '<div class="bg-white/3 rounded-xl p-2 text-center">' +
-                            '<p class="text-base font-black ' + pendFmtColor + '">' + s.formatos.pendiente + '</p>' +
-                            '<p class="text-[9px] text-slate-500 uppercase tracking-widest">Sin Firma</p>' +
-                        '</div>' +
-                        '<div class="bg-white/3 rounded-xl p-2 text-center">' +
-                            '<p class="text-base font-black ' + pendHallColor + '">' + s.hallazgos.abiertos + '</p>' +
-                            '<p class="text-[9px] text-slate-500 uppercase tracking-widest">Sin Cierre</p>' +
-                        '</div>' +
-                        '<div class="bg-white/3 rounded-xl p-2 text-center">' +
-                            '<p class="text-base font-black text-slate-300">' + s.formatos.total + '</p>' +
-                            '<p class="text-[9px] text-slate-500 uppercase tracking-widest">Formatos</p>' +
-                        '</div>' +
+                    '<div class="bg-white/3 rounded-xl p-2 text-center">' +
+                    '<p class="text-base font-black ' + pendFmtColor + '">' + s.formatos.pendiente + '</p>' +
+                    '<p class="text-[9px] text-slate-500 uppercase tracking-widest">Sin Firma</p>' +
+                    '</div>' +
+                    '<div class="bg-white/3 rounded-xl p-2 text-center">' +
+                    '<p class="text-base font-black ' + pendHallColor + '">' + s.hallazgos.abiertos + '</p>' +
+                    '<p class="text-[9px] text-slate-500 uppercase tracking-widest">Sin Cierre</p>' +
+                    '</div>' +
+                    '<div class="bg-white/3 rounded-xl p-2 text-center">' +
+                    '<p class="text-base font-black text-slate-300">' + s.formatos.total + '</p>' +
+                    '<p class="text-[9px] text-slate-500 uppercase tracking-widest">Formatos</p>' +
+                    '</div>' +
                     '</div>' +
                     // Actions
                     (waBtn ? '<div class="flex gap-2">' + waBtn + '</div>' : '') +
@@ -3455,8 +3516,8 @@
      * @param {string} tipo 'formatos' | 'hallazgos'
      */
     function _sstToggleAlertas(tipo) {
-        var listEl  = document.getElementById('sst-alertas-' + tipo + '-list');
-        var iconEl  = document.getElementById('sst-toggle-icon-' + tipo);
+        var listEl = document.getElementById('sst-alertas-' + tipo + '-list');
+        var iconEl = document.getElementById('sst-toggle-icon-' + tipo);
         if (!listEl) return;
         var abierto = listEl.style.maxHeight && listEl.style.maxHeight !== '0px';
         if (abierto) {
@@ -3477,12 +3538,12 @@
             return;
         }
         var headers = ['Nombre', 'Email', 'Celular', 'Obras', 'Formatos Total', 'Formatos Pendiente', 'Formatos Cerrado', '% Cumplimiento', 'Hallazgos Total', 'Hallazgos Abiertos', 'Hallazgos Cerrados'];
-        var filas = _sstCache.supervisores.map(function(s) {
+        var filas = _sstCache.supervisores.map(function (s) {
             return [
-                '"' + (s.nombre  || '').replace(/"/g, '""') + '"',
-                '"' + (s.email   || '') + '"',
+                '"' + (s.nombre || '').replace(/"/g, '""') + '"',
+                '"' + (s.email || '') + '"',
                 '"' + (s.celular || '') + '"',
-                '"' + (s.obras   || []).join(' | ').replace(/"/g, '""') + '"',
+                '"' + (s.obras || []).join(' | ').replace(/"/g, '""') + '"',
                 s.formatos.total,
                 s.formatos.pendiente,
                 s.formatos.cerrado,
@@ -3494,9 +3555,9 @@
         });
         var csv = [headers.join(',')].concat(filas).join('\n');
         var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-        var url  = URL.createObjectURL(blob);
-        var a    = document.createElement('a');
-        a.href     = url;
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
         a.download = 'supervisores_sst_' + new Date().toISOString().slice(0, 10) + '.csv';
         document.body.appendChild(a);
         a.click();
@@ -3509,8 +3570,8 @@
 
     /** Colapsa / expande el panel de evaluación de desempeño. */
     function _sstTogglePanelEval() {
-        var panel  = document.getElementById('sst-eval-panel');
-        var icon   = document.getElementById('sst-eval-toggle-icon');
+        var panel = document.getElementById('sst-eval-panel');
+        var icon = document.getElementById('sst-eval-toggle-icon');
         if (!panel) return;
         var isOpen = panel.style.maxHeight && panel.style.maxHeight !== '0px';
         if (isOpen) {
@@ -3524,7 +3585,7 @@
 
     /** Establece las fechas desde/hasta según el preset seleccionado. */
     function _sstSetPeriodo(tipo) {
-        var hoy   = new Date();
+        var hoy = new Date();
         var desde = new Date();
         var hasta = new Date(hoy);
 
@@ -3557,7 +3618,7 @@
         }
 
         // Resaltar botón activo
-        document.querySelectorAll('.sst-preset-btn').forEach(function(btn) {
+        document.querySelectorAll('.sst-preset-btn').forEach(function (btn) {
             btn.classList.remove('border-amber-500/40', 'text-amber-400');
             btn.classList.add('border-white/10', 'text-slate-400');
         });
@@ -3571,13 +3632,13 @@
     /** Llena los selects del panel de evaluación con datos del cache. */
     function _sstPoblarSelectoresEval() {
         if (!_sstCache) return;
-        var selSup  = document.getElementById('sst-eval-supervisor');
-        var selEmp  = document.getElementById('sst-eval-empresa');
+        var selSup = document.getElementById('sst-eval-supervisor');
+        var selEmp = document.getElementById('sst-eval-empresa');
         if (!selSup || !selEmp) return;
 
         // Supervisor
         selSup.innerHTML = '<option value="">— Seleccionar supervisor —</option>';
-        (_sstCache.supervisores || []).forEach(function(s) {
+        (_sstCache.supervisores || []).forEach(function (s) {
             var opt = document.createElement('option');
             opt.value = s.email;
             opt.textContent = s.nombre;
@@ -3587,7 +3648,7 @@
 
         // Empresa
         selEmp.innerHTML = '<option value="">Todas las empresas</option>';
-        (_sstCache.empresas || []).forEach(function(e) {
+        (_sstCache.empresas || []).forEach(function (e) {
             var opt = document.createElement('option');
             opt.value = e;
             opt.textContent = e;
@@ -3599,18 +3660,18 @@
     /** Genera el informe individual en PDF (nueva ventana → imprimir). */
     function generarInformeIndividual() {
         var emailSup = (document.getElementById('sst-eval-supervisor') || {}).value || '';
-        var desde    = (document.getElementById('sst-eval-desde') || {}).value || '';
-        var hasta    = (document.getElementById('sst-eval-hasta') || {}).value || '';
-        var empresa  = (document.getElementById('sst-eval-empresa') || {}).value || '';
+        var desde = (document.getElementById('sst-eval-desde') || {}).value || '';
+        var hasta = (document.getElementById('sst-eval-hasta') || {}).value || '';
+        var empresa = (document.getElementById('sst-eval-empresa') || {}).value || '';
 
         if (!emailSup) { mostrarNotificacion('Selecciona un supervisor para el informe.', 'error'); return; }
         if (!desde || !hasta) { mostrarNotificacion('Define el período (Desde / Hasta).', 'error'); return; }
-        if (desde > hasta)    { mostrarNotificacion('La fecha "Desde" debe ser anterior a "Hasta".', 'error'); return; }
+        if (desde > hasta) { mostrarNotificacion('La fecha "Desde" debe ser anterior a "Hasta".', 'error'); return; }
 
         mostrarNotificacion('Generando informe...', 'info');
 
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 if (res.status !== 'success') {
                     mostrarNotificacion(res.message || 'Error al generar el informe.', 'error');
                     return;
@@ -3624,7 +3685,7 @@
                 win.document.write(html);
                 win.document.close();
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 mostrarNotificacion('Error: ' + (err.message || err.toString()), 'error');
             })
             .obtenerReporteDesempenoSTT({ fechaInicio: desde, fechaFin: hasta, emailSupervisor: emailSup, empresa: empresa });
@@ -3632,20 +3693,20 @@
 
     /** Genera y muestra el ranking del período en el modal. */
     function generarRankingPeriodo() {
-        var desde   = (document.getElementById('sst-eval-desde') || {}).value || '';
-        var hasta   = (document.getElementById('sst-eval-hasta') || {}).value || '';
+        var desde = (document.getElementById('sst-eval-desde') || {}).value || '';
+        var hasta = (document.getElementById('sst-eval-hasta') || {}).value || '';
         var empresa = (document.getElementById('sst-eval-empresa') || {}).value || '';
 
         if (!desde || !hasta) { mostrarNotificacion('Define el período (Desde / Hasta).', 'error'); return; }
-        if (desde > hasta)    { mostrarNotificacion('La fecha "Desde" debe ser anterior a "Hasta".', 'error'); return; }
+        if (desde > hasta) { mostrarNotificacion('La fecha "Desde" debe ser anterior a "Hasta".', 'error'); return; }
 
         var modal = document.getElementById('sst-ranking-modal');
-        var body  = document.getElementById('sst-ranking-body');
+        var body = document.getElementById('sst-ranking-body');
         if (body) body.innerHTML = '<div class="flex flex-col items-center gap-3 py-10 text-slate-500"><div class="animate-spin h-7 w-7 border-2 border-indigo-400 border-t-transparent rounded-full"></div><p class="text-xs font-bold uppercase tracking-widest">Calculando ranking...</p></div>';
         if (modal) modal.classList.remove('hidden');
 
         google.script.run
-            .withSuccessHandler(function(res) {
+            .withSuccessHandler(function (res) {
                 if (res.status !== 'success') {
                     if (body) body.innerHTML = '<p class="text-center text-red-400 text-xs py-8">' + (res.message || 'Error al cargar el ranking.') + '</p>';
                     return;
@@ -3656,7 +3717,7 @@
                 if (sub) sub.textContent = res.data.periodo.inicio + ' al ' + res.data.periodo.fin + (res.data.empresa ? ' · ' + res.data.empresa : '');
                 _sstRenderRanking(res.data, body);
             })
-            .withFailureHandler(function(err) {
+            .withFailureHandler(function (err) {
                 if (body) body.innerHTML = '<p class="text-center text-red-400 text-xs py-8">Error: ' + (err.message || err.toString()) + '</p>';
             })
             .obtenerReporteDesempenoSTT({ fechaInicio: desde, fechaFin: hasta, emailSupervisor: '', empresa: empresa });
@@ -3674,20 +3735,20 @@
      * @return {string} HTML completo de la ventana de impresión
      */
     function _sstBuildReportHTML(data) {
-        var sup     = data.supervisor || {};
-        var met     = data.metricas  || {};
-        var per     = data.periodo   || {};
-        var logoUrl = (data.logoUrl  || '').toString().trim();
-        var msg     = _sstMsgMotivacional(met.tasa || 0);
-        var fmts    = met.detFormatos  || [];
-        var halls   = met.detHallazgos || [];
-        var tasa    = met.tasa || 0;
+        var sup = data.supervisor || {};
+        var met = data.metricas || {};
+        var per = data.periodo || {};
+        var logoUrl = (data.logoUrl || '').toString().trim();
+        var msg = _sstMsgMotivacional(met.tasa || 0);
+        var fmts = met.detFormatos || [];
+        var halls = met.detHallazgos || [];
+        var tasa = met.tasa || 0;
         var tasaColor = tasa >= 80 ? '#22c55e' : tasa >= 50 ? '#f59e0b' : '#ef4444';
-        var hoy     = new Date().toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' });
+        var hoy = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
 
         var rowsFmts = fmts.length === 0
             ? '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:12px;font-style:italic;">Sin formatos en el período</td></tr>'
-            : fmts.map(function(f, idx) {
+            : fmts.map(function (f, idx) {
                 var esC = f.estado === 'CERRADO CON FIRMA';
                 return '<tr style="background:' + (idx % 2 === 0 ? '#f8fafc' : '#f1f5f9') + '">'
                     + '<td style="padding:6px 8px;color:#475569;">' + (f.consecutivo || '') + '</td>'
@@ -3696,11 +3757,11 @@
                     + '<td style="padding:6px 8px;color:#475569;">' + (f.fecha || '') + '</td>'
                     + '<td style="padding:6px 8px;text-align:center;"><span style="background:' + (esC ? '#dcfce7' : '#fef3c7') + ';color:' + (esC ? '#166534' : '#92400e') + ';padding:2px 8px;border-radius:9999px;font-size:10px;font-weight:700;">' + (f.estado || '') + '</span></td>'
                     + '</tr>';
-              }).join('');
+            }).join('');
 
         var rowsHalls = halls.length === 0
             ? '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:12px;font-style:italic;">Sin hallazgos en el período</td></tr>'
-            : halls.map(function(h, idx) {
+            : halls.map(function (h, idx) {
                 var esC = h.estado === 'CERRADO';
                 return '<tr style="background:' + (idx % 2 === 0 ? '#f8fafc' : '#f1f5f9') + '">'
                     + '<td style="padding:6px 8px;color:#475569;font-size:10px;">' + (h.id || '') + '</td>'
@@ -3709,7 +3770,7 @@
                     + '<td style="padding:6px 8px;color:#475569;">' + (h.fecha || '') + '</td>'
                     + '<td style="padding:6px 8px;text-align:center;"><span style="background:' + (esC ? '#dcfce7' : '#fee2e2') + ';color:' + (esC ? '#166534' : '#991b1b') + ';padding:2px 8px;border-radius:9999px;font-size:10px;font-weight:700;">' + (h.estado || '') + '</span></td>'
                     + '</tr>';
-              }).join('');
+            }).join('');
 
         return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
             + '<title>Informe Desempeño SST - ' + (sup.nombre || '') + '</title>'
@@ -3855,11 +3916,11 @@
         // Top 3 tarjetas
         var top3 = ranking.slice(0, 3);
         html += '<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">';
-        top3.forEach(function(s, idx) {
-            var bg  = podiumColors[idx]  || 'rgba(255,255,255,0.05)';
-            var bc  = podiumBorders[idx] || 'rgba(255,255,255,0.10)';
-            var tc  = podiumTextC[idx]   || '#94a3b8';
-            var pos = podiumEmojis[idx]  || (idx + 1) + 'º';
+        top3.forEach(function (s, idx) {
+            var bg = podiumColors[idx] || 'rgba(255,255,255,0.05)';
+            var bc = podiumBorders[idx] || 'rgba(255,255,255,0.10)';
+            var tc = podiumTextC[idx] || '#94a3b8';
+            var pos = podiumEmojis[idx] || (idx + 1) + 'º';
             var tasaC = s.tasa >= 80 ? '#22c55e' : s.tasa >= 50 ? '#f59e0b' : '#ef4444';
             html += '<div style="background:' + bg + ';border:1.5px solid ' + bc + ';" class="rounded-2xl p-3 text-center">'
                 + '<div class="text-2xl mb-1">' + pos + '</div>'
@@ -3883,7 +3944,7 @@
             + '<th class="px-3 py-2.5 text-[9px] font-black text-green-500/70 uppercase tracking-widest text-center">% Cumpl.</th>'
             + '</tr></thead><tbody>';
 
-        ranking.forEach(function(s, idx) {
+        ranking.forEach(function (s, idx) {
             var tasaC = s.tasa >= 80 ? '#22c55e' : s.tasa >= 50 ? '#f59e0b' : '#ef4444';
             var bgRow = idx % 2 === 0 ? '' : 'style="background:rgba(255,255,255,0.02)"';
             html += '<tr ' + bgRow + ' class="border-b border-white/5 hover:bg-white/3 transition-colors">'

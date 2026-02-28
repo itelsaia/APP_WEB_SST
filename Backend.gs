@@ -60,15 +60,17 @@ function guardarRegistroFormato(data) {
     const idRegistro = _generarProximoIdRegistro(data.idFormato, ss);
     const fechaHora  = new Date();
 
-    // 2. Guardar foto inicial en Drive → ROOT/[Empresa]/Evidencia_Formatos/
+    // 2. Guardar foto inicial en Drive → ROOT/BD_CLIENTES/[Empresa]/FORMATOS/
     let urlFoto = "Sin foto";
     if (data.archivoBase64) {
       try {
         const params        = getParametros().data || {};
         const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
-        const nombreArchivo = 'Formato_' + _sanitizeName(idRegistro) + '_' + _sanitizeName(nombreEmpresa) + '_' + _fechaParaNombre() + '.png';
+        // Nombre: cliente_fechayhora_resumen de lombre del formato
+        const timeStr = Utilities.formatDate(fechaHora, Session.getScriptTimeZone(), "HHmm");
+        const nombreArchivo = _sanitizeName(nombreEmpresa) + '_' + _fechaParaNombre() + '_' + timeStr + '_' + _sanitizeName(data.descripcionRegistro || idRegistro) + '.png';
         urlFoto = guardarImagenEnDrive(
-          data.archivoBase64, nombreArchivo, nombreEmpresa, idCarpetaRaiz, 'Evidencia_Formatos'
+          data.archivoBase64, nombreArchivo, nombreEmpresa, idCarpetaRaiz, 'FORMATOS'
         );
       } catch (eDrive) {
         Logger.log('Advertencia: no se pudo guardar foto inicial: ' + eDrive.toString());
@@ -209,10 +211,11 @@ function cerrarRegistroFormato(idRegistro, archivoBase64) {
           try {
             const params        = getParametros().data || {};
             const idCarpetaRaiz = params.DRIVE_ROOT_FOLDER_ID;
-            const nombreArchivo = 'Firma_' + _sanitizeName(idRegistro) + '_' + _sanitizeName(empresa) + '_' + _fechaParaNombre() + '.png';
+            const timeStr       = Utilities.formatDate(fechaCierre, Session.getScriptTimeZone(), "HHmm");
+            const nombreArchivo = _sanitizeName(empresa) + '_' + _fechaParaNombre() + '_' + timeStr + '_Firma_' + _sanitizeName(idRegistro) + '.png';
 
             urlFirma = guardarImagenEnDrive(
-              archivoBase64, nombreArchivo, empresa, idCarpetaRaiz, 'Evidencia_Formatos'
+              archivoBase64, nombreArchivo, empresa, idCarpetaRaiz, 'FORMATOS'
             );
           } catch (eDrive) {
             Logger.log('Advertencia: no se pudo guardar foto de firma: ' + eDrive.toString());
@@ -385,14 +388,14 @@ function _sanitizeName(str) {
 /**
  * Guarda una imagen Base64 en Drive.
  * Estructura de carpetas:
- *   - Con empresa: ROOT / [Empresa] / [subCarpeta] / archivo
- *   - Sin empresa (null/vacío): ROOT / [subCarpeta] / archivo
+ *   - Asistencia: ROOT / CONTROL_ASISTENCIAS / archivo
+ *   - Formatos/Hallazgos: ROOT / BD_CLIENTES / [Empresa] / [subCarpeta] / archivo
  *
  * @param {string} base64Data   Datos base64 (data:image/...;base64,...).
  * @param {string} nombreArchivo Nombre del archivo a crear.
- * @param {string} nombreEmpresa Nombre de la empresa (null para carpeta raíz directa).
- * @param {string} idCarpetaRaiz ID o URL de la carpeta raíz en Drive.
- * @param {string} [subCarpeta]  Subcarpeta (ej: 'Evidencia_Formatos').
+ * @param {string} nombreEmpresa Nombre de la empresa (null/vacío si es Asistencia).
+ * @param {string} idCarpetaRaiz ID o URL de la carpeta raíz (desde PARAM_SISTEMA).
+ * @param {string} [subCarpeta]  Subcarpeta ('DE HALLAZGOS', 'FORMATOS', o 'CONTROL_ASISTENCIAS').
  * @return {string} URL pública del archivo creado.
  */
 function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpetaRaiz, subCarpeta) {
@@ -413,23 +416,29 @@ function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpet
     carpetaRaiz = iterador.hasNext() ? iterador.next() : DriveApp.createFolder("SST_RESPALDO_EV");
   }
 
-  // 3. Determinar carpeta base: con empresa → ROOT/[Empresa], sin empresa → ROOT
-  var carpetaBase = carpetaRaiz;
-  var empSanitized = nombreEmpresa ? _sanitizeName(nombreEmpresa) : '';
-  if (empSanitized) {
-    var iterCliente = carpetaRaiz.getFoldersByName(empSanitized);
-    carpetaBase = iterCliente.hasNext()
-      ? iterCliente.next()
-      : carpetaRaiz.createFolder(empSanitized);
-  }
+  var carpetaDestino = carpetaRaiz;
 
-  // 4. Subcarpeta adicional si se especificó (ej: Evidencia_Formatos)
-  var carpetaDestino = carpetaBase;
-  if (subCarpeta) {
-    var iterSub = carpetaBase.getFoldersByName(subCarpeta);
-    carpetaDestino = iterSub.hasNext()
-      ? iterSub.next()
-      : carpetaBase.createFolder(subCarpeta);
+  // 3. Determinar la rama principal (CONTROL_ASISTENCIAS o BD_CLIENTES)
+  if (subCarpeta === 'CONTROL_ASISTENCIAS') {
+    var iterCtrl = carpetaRaiz.getFoldersByName('CONTROL_ASISTENCIAS');
+    carpetaDestino = iterCtrl.hasNext() ? iterCtrl.next() : carpetaRaiz.createFolder('CONTROL_ASISTENCIAS');
+  } else {
+    // Si no es asistencia, va dentro de BD_CLIENTES
+    var iterBD = carpetaRaiz.getFoldersByName('BD_CLIENTES');
+    var carpetaBD = iterBD.hasNext() ? iterBD.next() : carpetaRaiz.createFolder('BD_CLIENTES');
+    carpetaDestino = carpetaBD;
+
+    // Subcarpeta del cliente
+    var empSanitized = nombreEmpresa ? _sanitizeName(nombreEmpresa) : 'Cliente_General';
+    var iterCliente = carpetaBD.getFoldersByName(empSanitized);
+    var carpetaCliente = iterCliente.hasNext() ? iterCliente.next() : carpetaBD.createFolder(empSanitized);
+    carpetaDestino = carpetaCliente;
+
+    // Subcarpeta final (DE HALLAZGOS o FORMATOS)
+    if (subCarpeta) {
+      var iterSub = carpetaCliente.getFoldersByName(subCarpeta);
+      carpetaDestino = iterSub.hasNext() ? iterSub.next() : carpetaCliente.createFolder(subCarpeta);
+    }
   }
 
   // 5. Crear archivo y dar permisos de lectura
@@ -1316,14 +1325,14 @@ function registrarIngreso(data) {
     const idAsistencia = 'ASIS-' + fechaActual.getTime();
     const tipoDia      = getTipoDia(fechaActual);
 
-    // Guardar Foto en Drive → ROOT/Evidencia_Asistencias/
+    // Guardar Foto en Drive → ROOT/CONTROL_ASISTENCIAS/
     let urlFoto = 'Sin foto';
     if (data.archivoBase64) {
       try {
         const params     = getParametros().data || {};
-        const obraNombre = data.obra || 'General';
-        const nombreArchivo = 'Ingreso_' + _sanitizeName(user.nombre) + '_' + _sanitizeName(obraNombre) + '_' + _fechaParaNombre() + '.png';
-        urlFoto = guardarImagenEnDrive(data.archivoBase64, nombreArchivo, null, params.DRIVE_ROOT_FOLDER_ID, 'Evidencia_Asistencias');
+        const timeStr    = Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), "HHmm");
+        const nombreArchivo = _sanitizeName(user.nombre) + '_' + _fechaParaNombre(fechaActual) + '_' + timeStr + '_ENTRADA.png';
+        urlFoto = guardarImagenEnDrive(data.archivoBase64, nombreArchivo, null, params.DRIVE_ROOT_FOLDER_ID, 'CONTROL_ASISTENCIAS');
       } catch (eDrive) {
         Logger.log('registrarIngreso Drive: ' + eDrive.toString());
       }
@@ -1383,9 +1392,9 @@ function registrarSalida(data) {
       try {
         const params     = getParametros().data || {};
         const nombreUser = (datos[filaIndex - 1][2] || email).toString().trim();
-        const obraNombre = (datos[filaIndex - 1][7] || 'General').toString().trim();
-        const nombreArchivo = 'Salida_' + _sanitizeName(nombreUser) + '_' + _sanitizeName(obraNombre) + '_' + _fechaParaNombre() + '.png';
-        urlFoto = guardarImagenEnDrive(data.archivoBase64, nombreArchivo, null, params.DRIVE_ROOT_FOLDER_ID, 'Evidencia_Asistencias');
+        const timeStr    = Utilities.formatDate(fechaActual, Session.getScriptTimeZone(), "HHmm");
+        const nombreArchivo = _sanitizeName(nombreUser) + '_' + _fechaParaNombre(fechaActual) + '_' + timeStr + '_SALIDA.png';
+        urlFoto = guardarImagenEnDrive(data.archivoBase64, nombreArchivo, null, params.DRIVE_ROOT_FOLDER_ID, 'CONTROL_ASISTENCIAS');
       } catch (eDrive) {
         Logger.log('registrarSalida Drive: ' + eDrive.toString());
       }
@@ -1654,19 +1663,21 @@ function guardarHallazgo(data) {
     const descSlug    = _slugify_((data.descripcion || '').split(' ').slice(0, 3).join(' '), 30);
     const idHallazgo  = 'RH-' + consecutivo + '-' + empSlug + '-' + descSlug;
 
-    // Guardar foto de evidencia en Drive → ROOT/[Empresa]/Evidencia_Hallazgos/
+    // Guardar foto de evidencia en Drive → ROOT/BD_CLIENTES/[Empresa]/DE HALLAZGOS/
     let urlFoto = 'Sin foto';
     if (data.fotoBase64) {
       try {
         const params = getParametros().data || {};
         const empNombre = (data.empresaContratista || '').toString().trim();
-        const nombreArchivo = 'Hallazgo_' + _sanitizeName(idHallazgo) + '_' + _sanitizeName(empNombre) + '_' + _fechaParaNombre() + '.png';
+        const timeStr   = Utilities.formatDate(ahora, tz, "HHmm");
+        // nombre de cliente_fechayhora_resumen de lombre del formato o tipo de hallazgo
+        const nombreArchivo = _sanitizeName(empNombre) + '_' + _fechaParaNombre() + '_' + timeStr + '_' + _sanitizeName((data.descripcion || 'Hallazgo').split(' ').slice(0,4).join('_')) + '.png';
         urlFoto = guardarImagenEnDrive(
           data.fotoBase64,
           nombreArchivo,
           empNombre,
           params.DRIVE_ROOT_FOLDER_ID,
-          'Evidencia_Hallazgos'
+          'DE HALLAZGOS'
         );
       } catch (eDrive) {
         Logger.log('guardarHallazgo Drive: ' + eDrive.toString());
@@ -1728,18 +1739,19 @@ function cerrarHallazgo(data) {
         const tz      = Session.getScriptTimeZone();
         const ahora   = new Date();
 
-        // Guardar foto de cierre en Drive → ROOT/[Empresa]/Evidencia_Hallazgos/
+        // Guardar foto de cierre en Drive → ROOT/BD_CLIENTES/[Empresa]/DE HALLAZGOS/
         let urlFotoCierre = 'Sin foto cierre';
         if (data.fotoBase64) {
           try {
             const params = getParametros().data || {};
-            const nombreArchivo = 'Hallazgo_Cierre_' + _sanitizeName(idBusca) + '_' + _sanitizeName(empresa) + '_' + _fechaParaNombre() + '.png';
+            const timeStr = Utilities.formatDate(ahora, tz, "HHmm");
+            const nombreArchivo = _sanitizeName(empresa) + '_' + _fechaParaNombre() + '_' + timeStr + '_Cierre_' + _sanitizeName(idBusca) + '.png';
             urlFotoCierre = guardarImagenEnDrive(
               data.fotoBase64,
               nombreArchivo,
               empresa,
               params.DRIVE_ROOT_FOLDER_ID,
-              'Evidencia_Hallazgos'
+              'DE HALLAZGOS'
             );
           } catch (eDrive) {
             Logger.log('cerrarHallazgo Drive: ' + eDrive.toString());
