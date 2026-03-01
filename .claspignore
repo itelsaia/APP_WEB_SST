@@ -1,4 +1,6 @@
 _cliente/**
+_clientes/**
 .git/**
 node_modules/**
 *.md
+*.sh

@@ -1,0 +1,224 @@
+<!-- FormInspeccion.html — v2.0 -->
+<div id="form-container" class="space-y-5">
+
+    <!-- ── CABECERA ─────────────────────────────────────── -->
+    <div class="border-b border-white/10 pb-4">
+        <h3 class="text-lg font-bold leading-6 text-white tracking-tight">Nueva Inspección de Seguridad</h3>
+        <p class="mt-0.5 text-xs text-slate-400 font-medium">Complete los detalles del hallazgo encontrado en campo.</p>
+    </div>
+
+    <!-- ── FORMULARIO PRINCIPAL ──────────────────────────── -->
+    <form id="sst-form" class="space-y-4">
+
+        <!-- Empresa / Proyecto (bloqueado por JS cuando hay jornada activa) -->
+        <div>
+            <div class="flex justify-between items-center mb-2">
+                <label for="idCliente"
+                    class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest">Empresa / Proyecto</label>
+            </div>
+            <select id="idCliente" name="idCliente" required
+                style="background-color:#1a242f; color:#f8fafc; color-scheme: dark;"
+                class="block w-full rounded-xl border border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary text-sm p-3 text-white outline-none appearance-none transition-all">
+                <option value="" style="background:#1a242f; color:#f8fafc;">Cargando...</option>
+            </select>
+        </div>
+
+        <!-- Formato SST -->
+        <div>
+            <label for="idFormato"
+                class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-2">Seleccione el
+                Formato</label>
+            <select id="idFormato" name="idFormato" required onchange="onCambioFormato(this)"
+                style="background-color:#1a242f; color:#f8fafc; color-scheme: dark;"
+                class="block w-full rounded-xl border border-white/10 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary text-sm p-3 text-white outline-none appearance-none transition-all">
+                <option value="" style="background:#1a242f; color:#f8fafc;">Seleccione un formato...</option>
+            </select>
+        </div>
+
+        <!-- Descripción auto-rellenada -->
+        <div id="formato-descripcion-container" class="hidden animate-fade-in">
+            <div class="bg-primary/5 border border-primary/20 rounded-xl p-3">
+                <p class="text-[9px] text-primary font-bold uppercase tracking-widest mb-1 flex items-center">
+                    <span class="material-symbols-outlined text-[11px] mr-1">info</span> Descripción del Formato
+                </p>
+                <p id="formato-descripcion-text" class="text-xs text-slate-300 leading-relaxed italic"></p>
+            </div>
+        </div>
+
+        <!-- Captura de foto del formato físico -->
+        <div>
+            <label class="block text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-2">Capturar Formato
+                Físico</label>
+            <div class="flex items-center space-x-3">
+                <label
+                    class="flex-1 cursor-pointer bg-white/5 py-4 px-4 border border-white/10 border-dashed rounded-xl text-xs font-black text-slate-300 hover:bg-white/10 flex items-center justify-center space-x-2 transition-all group hover:border-primary/50">
+                    <span
+                        class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">qr_code_scanner</span>
+                    <span>TOMAR FOTO O ESCANEAR</span>
+                    <input type="file" id="fotoEvidencia" name="fotoEvidencia" accept="image/*" capture="camera"
+                        class="hidden" required onchange="previewImagen(this)">
+                </label>
+                <div id="preview-container"
+                    class="hidden h-14 w-14 rounded-xl overflow-hidden border-2 border-primary shadow-lg shadow-primary/20 shrink-0">
+                    <img id="img-preview" src="" class="h-full w-full object-cover">
+                </div>
+            </div>
+        </div>
+
+        <!-- Botones de acción: Pendiente | Con Firma -->
+        <div class="pt-2 grid grid-cols-2 gap-2">
+
+            <!-- Registrar como Pendiente por firma -->
+            <button type="button" id="btn-pendiente"
+                onclick="enviarInspeccion('pendiente')"
+                style="background:rgba(197,160,72,0.1); border:1.5px solid rgba(197,160,72,0.4);"
+                class="flex justify-center items-center gap-1.5 py-3.5 rounded-xl text-[11px] font-black text-primary hover:opacity-80 transition-all active:scale-95 disabled:opacity-40 uppercase tracking-widest">
+                <span id="spinner-pendiente"
+                    class="hidden animate-spin h-3.5 w-3.5 border-2 border-primary border-t-transparent rounded-full shrink-0"></span>
+                <span class="material-symbols-outlined text-base shrink-0">assignment_add</span>
+                PENDIENTE
+            </button>
+
+            <!-- Registrar + capturar firma al instante -->
+            <button type="button" id="btn-con-firma"
+                onclick="enviarInspeccion('firma')"
+                style="background:var(--color-primario); box-shadow:0 6px 20px rgba(197,160,72,0.25);"
+                class="flex justify-center items-center gap-1.5 py-3.5 rounded-xl text-[11px] font-black text-black hover:opacity-90 transition-all active:scale-95 disabled:opacity-40 uppercase tracking-widest">
+                <span id="spinner-firma"
+                    class="hidden animate-spin h-3.5 w-3.5 border-2 border-black border-t-transparent rounded-full shrink-0"></span>
+                <span class="material-symbols-outlined text-base shrink-0">verified</span>
+                CON FIRMA
+            </button>
+
+        </div>
+    </form>
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- LISTADO DE REGISTROS PENDIENTES DE FIRMA                  -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div id="pendientes-container" class="mt-6 pt-5 border-t border-white/10 hidden animate-slide-up">
+
+        <!-- Cabecera + contador -->
+        <div class="flex items-center justify-between mb-3">
+            <div>
+                <h4 class="text-sm font-black text-white uppercase tracking-tight">Formatos Pendientes</h4>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Esperando firma de jefe
+                    de obra</p>
+            </div>
+            <span id="badge-pendientes"
+                class="bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-wider"></span>
+        </div>
+
+        <!-- Barra de búsqueda -->
+        <div class="relative mb-3">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base pointer-events-none">search</span>
+            <input type="text" id="filtro-pendientes" placeholder="Buscar por ID o descripción..."
+                oninput="filtrarPendientes(this.value)"
+                style="background:#1a242f; color:#f8fafc; color-scheme:dark;"
+                class="w-full pl-9 pr-3 py-2.5 text-xs font-medium border border-white/10 rounded-xl outline-none focus:border-primary/50 transition-all placeholder-slate-600">
+        </div>
+
+        <!-- Lista de tarjetas -->
+        <div id="lista-pendientes" class="space-y-2.5"></div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MODAL: CAPTURAR FIRMA (fixed — cubre toda la pantalla)   -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- ── MODAL FIRMA — Bottom Sheet (sube desde abajo, no se corta) ── -->
+<div id="firma-modal"
+    style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:9000;
+           background:rgba(0,0,0,0.82); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+           align-items:center; justify-content:center;"
+    onclick="if(event.target===this) cerrarModalFirma()">
+
+    <!-- Modal centrado — height:auto se adapta al contenido, max-height limita -->
+    <div id="firma-modal-box"
+        style="width:94%; max-width:420px; max-height:85vh; background:#101922; border-radius:20px;
+               border:1px solid rgba(255,255,255,0.10); overflow:hidden;
+               display:flex; flex-direction:column; box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+
+        <!-- Handle de arrastre (indicador visual móvil) -->
+        <div style="display:flex; justify-content:center; padding:10px 0 4px;">
+            <div style="width:40px; height:4px; background:rgba(255,255,255,0.18); border-radius:9px;"></div>
+        </div>
+
+        <!-- Cabecera -->
+        <div style="padding:12px 20px 12px; border-bottom:1px solid rgba(255,255,255,0.08); flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:40px; height:40px; background:rgba(34,197,94,0.10); border-radius:12px;
+                            display:flex; align-items:center; justify-content:center;
+                            border:1px solid rgba(34,197,94,0.20); flex-shrink:0;">
+                    <span class="material-symbols-outlined" style="font-size:22px; color:#4ade80;">verified</span>
+                </div>
+                <div>
+                    <p style="font-size:15px; font-weight:900; color:#fff; letter-spacing:-0.02em; margin:0;">Capturar Firma</p>
+                    <p id="firma-modal-id" style="font-size:9px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin:2px 0 0;"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cuerpo scrollable -->
+        <div style="padding:16px 20px; overflow-y:auto; flex:1; min-height:0; display:flex; flex-direction:column; gap:14px;">
+
+            <p style="font-size:12px; color:#94a3b8; margin:0; line-height:1.55;">
+                Fotografíe el formato físico <strong style="color:#fff;">ya firmado</strong>
+                por el jefe de obra para cerrar el registro.
+            </p>
+
+            <!-- Preview foto firma -->
+            <div id="firma-preview-container" class="hidden"
+                style="border-radius:12px; overflow:hidden; border:2px solid rgba(34,197,94,0.30);
+                       max-height:140px; position:relative;">
+                <img id="firma-img-preview" src="" alt="Firma"
+                    style="width:100%; height:140px; object-fit:cover; display:block;">
+                <div style="position:absolute; bottom:8px; right:8px; background:#22c55e; color:#fff;
+                            font-size:9px; font-weight:900; padding:2px 8px; border-radius:99px;
+                            display:flex; align-items:center; gap:2px; text-transform:uppercase; letter-spacing:0.05em;">
+                    <span class="material-symbols-outlined" style="font-size:10px;">check_circle</span>Lista
+                </div>
+            </div>
+
+            <!-- Botón captura -->
+            <label for="firma-foto" id="firma-foto-label"
+                style="display:flex; flex-direction:column; align-items:center; cursor:pointer;
+                       border:2px dashed rgba(255,255,255,0.12); border-radius:14px;
+                       padding:22px 16px; gap:6px; transition:all .2s;">
+                <div style="background:rgba(34,197,94,0.10); padding:10px; border-radius:50%;
+                            border:1px solid rgba(34,197,94,0.25);">
+                    <span class="material-symbols-outlined" style="font-size:26px; color:#4ade80;">add_a_photo</span>
+                </div>
+                <span style="font-size:11px; font-weight:700; color:#94a3b8; text-align:center;">
+                    Toque para fotografiar el formato firmado
+                </span>
+                <input type="file" id="firma-foto" accept="image/*" capture="camera" style="display:none;"
+                    onchange="previewFirma(this)">
+            </label>
+        </div>
+
+        <!-- Botones de acción — SIEMPRE VISIBLES, fuera del scroll -->
+        <div style="padding:12px 20px 20px; flex-shrink:0; display:flex; gap:10px;
+                    border-top:1px solid rgba(255,255,255,0.06);">
+            <button onclick="cerrarModalFirma()"
+                style="flex:1; padding:14px; background:rgba(255,255,255,0.04);
+                       border:1px solid rgba(255,255,255,0.10); border-radius:14px;
+                       color:#cbd5e1; font-size:13px; font-weight:700; cursor:pointer;">
+                Cancelar
+            </button>
+            <button onclick="submitFirma()" id="btn-submit-firma"
+                style="flex:1; padding:14px; background:#16a34a; border:none; border-radius:14px;
+                       color:#fff; font-size:12px; font-weight:900; cursor:pointer;
+                       text-transform:uppercase; letter-spacing:0.08em;
+                       display:flex; align-items:center; justify-content:center; gap:6px;
+                       box-shadow:0 4px 20px rgba(22,163,74,0.30);">
+                <span id="firma-spinner"
+                    style="display:none; width:16px; height:16px; border:2px solid rgba(255,255,255,0.3);
+                           border-top-color:#fff; border-radius:50%;
+                           animation:sst-spin 0.8s linear infinite; flex-shrink:0;"></span>
+                <span class="material-symbols-outlined" style="font-size:16px;">verified</span>
+                Confirmar Firma
+            </button>
+        </div>
+    </div>
+</div>

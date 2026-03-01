@@ -1,0 +1,19 @@
+{
+  "timeZone": "America/Bogota",
+  "dependencies": {
+    "libraries": [
+      {
+        "userSymbol": "SST_CORE_MASTER",
+        "version": "9",
+        "libraryId": "1OSJxzs28piv1fpPmbZRXik9iRN1eDE0baUUggp-H5QIAiEjYfLGyhyey",
+        "developmentMode": false
+      }
+    ]
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "webapp": {
+    "executeAs": "USER_DEPLOYING",
+    "access": "ANYONE"
+  }
+}
