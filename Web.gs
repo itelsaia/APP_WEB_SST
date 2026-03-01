@@ -74,10 +74,13 @@ function include(filename) {
   }
 }
 /**
- * Retorna la URL limpia de la Web App para redirecciones.
+ * Retorna la URL pública de la Web App, accesible para cualquier usuario.
+ * ScriptApp.getService().getUrl() puede devolver /u/N/s/... que es
+ * cuenta-específica y falla en incógnito o con otras cuentas.
+ * Se elimina el segmento /u/N/ para obtener la URL pública universal.
  */
 function getScriptUrl() {
-  const url = ScriptApp.getService().getUrl();
-  // Limpiar cualquier parámetro que Google pueda inyectar en ciertos entornos
-  return url.split('?')[0];
+  const url = ScriptApp.getService().getUrl().split('?')[0];
+  // /macros/u/1/s/ → /macros/s/  (elimina el índice de cuenta)
+  return url.replace(/\/macros\/u\/\d+\/s\//, '/macros/s/');
 }
