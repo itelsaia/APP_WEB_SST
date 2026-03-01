@@ -817,10 +817,14 @@ function obtenerClientesParaUsuarios() {
 
 /**
  * Devuelve todos los formatos de LISTAS_FORMATOS para el panel de administración.
+ * También devuelve los registros de DB_INSPECCIONES para la galería (en data.galeria).
  */
 function obtenerFormatosAdmin() {
   try {
     const ss   = _getSpreadsheet();
+    const tz   = Session.getScriptTimeZone();
+    
+    // ── 1. Catálogo de formatos ──────────────────────────────
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: 'error', message: 'Hoja LISTAS_FORMATOS no encontrada.' };
 
@@ -831,12 +835,80 @@ function obtenerFormatosAdmin() {
       if (!id) continue;
       formatos.push({
         id:          id,
-        descripcion: (datos[i][1] || '').toString().trim(), // B: Descripcion_Formato
-        tipo:        (datos[i][2] || '').toString().trim(), // C: Tipo_Documento
-        empresa:     (datos[i][3] || '').toString().trim()  // D: Empresa_Contratista
+        descripcion: (datos[i][1] || '').toString().trim(),
+        tipo:        (datos[i][2] || '').toString().trim(),
+        empresa:     (datos[i][3] || '').toString().trim()
       });
     }
-    return { status: 'success', data: formatos };
+
+    // ── 2. Galería de registros (DB_INSPECCIONES) ────────────
+    var galeria = { registros: [], kpis: { total: 0, pendientes: 0, cerrados: 0 } };
+    try {
+      // Mapa código → nombre supervisor
+      var hojaUsr = ss.getSheetByName('DB_USUARIOS');
+      var datosUsr = hojaUsr ? hojaUsr.getDataRange().getValues() : [];
+      var supMap = {};
+      for (var u = 1; u < datosUsr.length; u++) {
+        var cod = (datosUsr[u][4] || '').toString().trim();
+        if (cod) supMap[cod] = (datosUsr[u][1] || '').toString().trim();
+      }
+
+      var hojaInsp = ss.getSheetByName('DB_INSPECCIONES');
+      if (hojaInsp) {
+        var datosInsp = hojaInsp.getDataRange().getValues();
+        var registros = [];
+        for (var r = 1; r < datosInsp.length; r++) {
+          var fila = datosInsp[r];
+          var consecutivo = (fila[1] || '').toString().trim();
+          if (!consecutivo) continue;
+
+          var fechaHora = fila[3];
+          var fechaStr = '', horaStr = '';
+          if (fechaHora instanceof Date && !isNaN(fechaHora)) {
+            fechaStr = Utilities.formatDate(fechaHora, tz, 'dd/MM/yyyy');
+            horaStr  = Utilities.formatDate(fechaHora, tz, 'HH:mm');
+          } else if (fechaHora) {
+            fechaStr = fechaHora.toString().trim();
+          }
+
+          var fechaCierre = fila[9];
+          var fechaCierreStr = '';
+          if (fechaCierre instanceof Date && !isNaN(fechaCierre)) {
+            fechaCierreStr = Utilities.formatDate(fechaCierre, tz, 'dd/MM/yyyy HH:mm');
+          } else if (fechaCierre) {
+            fechaCierreStr = fechaCierre.toString().trim();
+          }
+
+          var codSup = (fila[6] || '').toString().trim();
+          registros.push({
+            idFormato:    (fila[0] || '').toString().trim(),
+            consecutivo:  consecutivo,
+            descripcion:  (fila[2] || '').toString().trim(),
+            fecha:        fechaStr,
+            hora:         horaStr,
+            empresa:      (fila[4] || '').toString().trim(),
+            fotoUrl:      (fila[5] || '').toString().trim(),
+            codigoSup:    codSup,
+            supervisor:   supMap[codSup] || codSup,
+            estado:       (fila[7] || '').toString().trim(),
+            fotoFirmaUrl: (fila[8] || '').toString().trim(),
+            fechaCierre:  fechaCierreStr
+          });
+        }
+        registros.reverse();
+
+        var pendientes = 0, cerrados = 0;
+        for (var k = 0; k < registros.length; k++) {
+          if (registros[k].estado === 'PENDIENTE') pendientes++;
+          else if (registros[k].estado === 'CERRADO CON FIRMA') cerrados++;
+        }
+        galeria = { registros: registros, kpis: { total: registros.length, pendientes: pendientes, cerrados: cerrados } };
+      }
+    } catch (eGal) {
+      Logger.log('obtenerFormatosAdmin galería: ' + eGal.toString());
+    }
+
+    return { status: 'success', data: formatos, galeria: galeria };
   } catch (e) {
     Logger.log('Error en obtenerFormatosAdmin: ' + e.toString());
     return { status: 'error', message: e.toString() };
@@ -943,6 +1015,100 @@ function eliminarFormato(idFormato, empresa) {
     return { status: 'error', message: 'Formato no encontrado.' };
   } catch (e) {
     Logger.log('Error en eliminarFormato: ' + e.toString());
+    return { status: 'error', message: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// GALERÍA DE FORMATOS / INSPECCIONES (ADMIN)
+// ══════════════════════════════════════════════════════════
+
+/**
+ * Devuelve todos los registros de DB_INSPECCIONES para la galería del admin.
+ * Resuelve el nombre del supervisor desde DB_USUARIOS usando el código (col G).
+ * @return {Object} { status, data: { registros:[], kpis:{total,pendientes,cerrados} } }
+ */
+function obtenerGaleriaFormatos() {
+  try {
+    const ss = _getSpreadsheet();
+    const tz = Session.getScriptTimeZone();
+
+    // 1. Mapa código → nombre supervisor
+    var hojaUsr = ss.getSheetByName('DB_USUARIOS');
+    var datosUsr = hojaUsr ? hojaUsr.getDataRange().getValues() : [];
+    var supMap = {};
+    for (var i = 1; i < datosUsr.length; i++) {
+      var cod = (datosUsr[i][4] || '').toString().trim();
+      if (cod) supMap[cod] = (datosUsr[i][1] || '').toString().trim();
+    }
+
+    // 2. Leer DB_INSPECCIONES
+    var hoja = ss.getSheetByName('DB_INSPECCIONES');
+    if (!hoja) return { status: 'success', data: { registros: [], kpis: { total: 0, pendientes: 0, cerrados: 0 } } };
+
+    var datos = hoja.getDataRange().getValues();
+    var registros = [];
+
+    for (var r = 1; r < datos.length; r++) {
+      var fila = datos[r];
+      var consecutivo = (fila[1] || '').toString().trim();
+      if (!consecutivo) continue;
+
+      var fechaHora = fila[3];
+      var fechaStr = '';
+      var horaStr = '';
+      if (fechaHora instanceof Date && !isNaN(fechaHora)) {
+        fechaStr = Utilities.formatDate(fechaHora, tz, 'dd/MM/yyyy');
+        horaStr  = Utilities.formatDate(fechaHora, tz, 'HH:mm');
+      } else if (fechaHora) {
+        fechaStr = fechaHora.toString().trim();
+      }
+
+      var fechaCierre = fila[9];
+      var fechaCierreStr = '';
+      if (fechaCierre instanceof Date && !isNaN(fechaCierre)) {
+        fechaCierreStr = Utilities.formatDate(fechaCierre, tz, 'dd/MM/yyyy HH:mm');
+      } else if (fechaCierre) {
+        fechaCierreStr = fechaCierre.toString().trim();
+      }
+
+      var codSup = (fila[6] || '').toString().trim();
+
+      registros.push({
+        idFormato:     (fila[0] || '').toString().trim(),
+        consecutivo:   consecutivo,
+        descripcion:   (fila[2] || '').toString().trim(),
+        fecha:         fechaStr,
+        hora:          horaStr,
+        empresa:       (fila[4] || '').toString().trim(),
+        fotoUrl:       (fila[5] || '').toString().trim(),
+        codigoSup:     codSup,
+        supervisor:    supMap[codSup] || codSup,
+        estado:        (fila[7] || '').toString().trim(),
+        fotoFirmaUrl:  (fila[8] || '').toString().trim(),
+        fechaCierre:   fechaCierreStr
+      });
+    }
+
+    // 3. Orden cronológico inverso (más recientes primero)
+    registros.reverse();
+
+    // 4. KPIs
+    var pendientes = 0, cerrados = 0;
+    for (var k = 0; k < registros.length; k++) {
+      if (registros[k].estado === 'PENDIENTE') pendientes++;
+      else if (registros[k].estado === 'CERRADO CON FIRMA') cerrados++;
+    }
+
+    return {
+      status: 'success',
+      data: {
+        registros: registros,
+        kpis: { total: registros.length, pendientes: pendientes, cerrados: cerrados }
+      }
+    };
+  } catch (e) {
+    Logger.log('Error en obtenerGaleriaFormatos: ' + e.toString());
     return { status: 'error', message: e.toString() };
   }
 }
@@ -1372,13 +1538,17 @@ function registrarSalida(data) {
 
     const ss    = _getSpreadsheet();
     const hoja  = ss.getSheetByName('DB_ASISTENCIA');
-    const email = data.userEmail;
+    // Normalizar email: siempre comparar en minúsculas para evitar mismatch
+    // (registrarIngreso almacena desde getUserDataFromApp, registrarSalida recibe desde currentUser)
+    const emailNorm = (data.userEmail || '').toString().trim().toLowerCase();
 
     const datos = hoja.getDataRange().getValues();
     let filaIndex = -1;
 
     for (let i = datos.length - 1; i >= 1; i--) {
-      if (datos[i][1] === email && datos[i][10] === 'ACTIVO') {
+      const rowEmail  = (datos[i][1]  || '').toString().trim().toLowerCase();
+      const rowEstado = (datos[i][10] || '').toString().trim().toUpperCase();
+      if (rowEmail === emailNorm && rowEstado === 'ACTIVO') {
         filaIndex = i + 1;
         break;
       }
@@ -1828,77 +1998,7 @@ function obtenerHallazgo(idHallazgo) {
   }
 }
 
-/**
- * Obtiene todos los hallazgos para la galería administrativa.
- * Cruza el código del supervisor con DB_USUARIOS para obtener el nombre completo.
- *
- * @return {Object} { status, data: [ { id, fecha, hora, ubicacion, descripcion,
- *                    urlFoto, urlFotoCierre, empresa, supervisor, reportadoA,
- *                    gestionRealizada, estado, fechaCierre, horaCierre } ] }
- */
-function obtenerGaleriaHallazgosAdmin() {
-  try {
-    const ss    = _getSpreadsheet();
-    const hojaH = ss.getSheetByName('DB_HALLAZGOS');
-    const hojaU = ss.getSheetByName('DB_USUARIOS');
-    if (!hojaH) return { status: 'error', message: 'Hoja DB_HALLAZGOS no encontrada.' };
-
-    const filasH = hojaH.getDataRange().getValues();
-    const tz     = Session.getScriptTimeZone();
-
-    // Mapa código supervisor → nombre completo
-    const mapaSuper = {};
-    if (hojaU) {
-      const filasU = hojaU.getDataRange().getValues();
-      for (let i = 1; i < filasU.length; i++) {
-        const codigo = (filasU[i][4] || '').toString().trim(); // col E: ID_Cliente_Asociado
-        const nombre = (filasU[i][1] || '').toString().trim(); // col B: Nombre_Completo
-        if (codigo) mapaSuper[codigo] = nombre;
-      }
-    }
-
-    function _fmt_(val, fmt) {
-      if (!val && val !== 0) return '';
-      if (val instanceof Date) {
-        try { return Utilities.formatDate(val, tz, fmt); } catch (_) {}
-      }
-      return val.toString().trim();
-    }
-
-    const hallazgos = [];
-    for (let i = 1; i < filasH.length; i++) {
-      const f = filasH[i];
-      const id = (f[0] || '').toString().trim();
-      if (!id) continue;
-
-      const codigoSup = (f[7] || '').toString().trim();
-      hallazgos.push({
-        id:               id,
-        fecha:            _fmt_(f[1],  'dd/MM/yyyy'),
-        hora:             _fmt_(f[2],  'HH:mm'),
-        ubicacion:        (f[3]  || '').toString().trim(),
-        descripcion:      (f[4]  || '').toString().trim(),
-        urlFoto:          (f[5]  || '').toString().trim(),
-        empresa:          (f[6]  || '').toString().trim(),
-        supervisor:       mapaSuper[codigoSup] || codigoSup,
-        reportadoA:       (f[8]  || '').toString().trim(),
-        gestionRealizada: (f[10] || '').toString().trim(),
-        estado:           (f[11] || 'ABIERTO').toString().trim().toUpperCase(),
-        fechaCierre:      _fmt_(f[12], 'dd/MM/yyyy'),
-        horaCierre:       _fmt_(f[13], 'HH:mm'),
-        urlFotoCierre:    (f[14] || '').toString().trim()
-      });
-    }
-
-    // Más recientes primero (appendRow los agrega al final)
-    hallazgos.reverse();
-
-    return { status: 'success', data: hallazgos };
-  } catch (e) {
-    Logger.log('Error en obtenerGaleriaHallazgosAdmin: ' + e.toString());
-    return { status: 'error', message: e.toString() };
-  }
-}
+// (Versión consolidada de obtenerGaleriaHallazgosAdmin más abajo)
 
 /**
  * Obtiene métricas de gestión para todos los supervisores SUP-SST.
@@ -2252,7 +2352,7 @@ function obtenerReporteDesempenoSTT(params) {
  */
 function obtenerGaleriaHallazgosAdmin() {
   try {
-    var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var ss = _getSpreadsheet(); // multi-tenant: usa el spreadsheet del cliente
     var tz = Session.getScriptTimeZone();
 
     // 1. Mapa código de supervisor → nombre completo (desde DB_USUARIOS)

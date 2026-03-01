@@ -130,19 +130,34 @@
 
         if (currentUser && currentUser.rol === 'SUP-SST') {
             configurarAsistencia();
-            // ── LLAMADA BATCH: clientes + estado asistencia en 1 sola RPC ──
-            // Antes eran 2 llamadas separadas (~2-4s extra). Ahora es 1 (~1-2s).
+            // ── Cargar lista de clientes/obras de forma INDEPENDIENTE ──
+            // Garantiza que el select siempre se llene, sin depender del batch.
+            cargarOtrasOpciones();
+            // ── LLAMADA BATCH: solo determina estado de asistencia ──
+            // _uiMostrada: true cuando la UI ya fue mostrada (timeout o respuesta real).
+            var _uiMostrada = false;
+            var _panelTimeout = setTimeout(function () {
+                if (_uiMostrada) return;
+                _uiMostrada = true;
+                console.warn('[SST] obtenerDatosPanelSupervisor sin respuesta (timeout 10s) — mostrando asistencia');
+                switchModule('asistencia');
+                ocultarLoader();
+            }, 10000);
+
             google.script.run
                 .withSuccessHandler(function (res) {
+                    clearTimeout(_panelTimeout);
+
                     if (res.status !== 'success') {
                         console.error('[SST] Error en batch panel:', res.message);
-                        switchModule('asistencia');
-                        ocultarLoader();
+                        if (!_uiMostrada) { switchModule('asistencia'); ocultarLoader(); }
+                        _uiMostrada = true;
                         return;
                     }
                     var d = res.data;
 
                     // 1. Poblar clientes en ambos selectores (obra e inspección)
+                    //    Se ejecuta SIEMPRE, incluso si el timeout ya mostró la UI.
                     llenarClientes({ status: 'success', data: d.clientes });
                     var selectObra = document.getElementById('idObraAsistencia');
                     if (selectObra) {
@@ -173,12 +188,14 @@
                         if (exitSection) exitSection.classList.add('hidden');
                     }
 
-                    ocultarLoader();
+                    if (!_uiMostrada) ocultarLoader();
+                    _uiMostrada = true;
                 })
                 .withFailureHandler(function (err) {
+                    clearTimeout(_panelTimeout);
                     console.error('[SST] Error crítico en batch panel:', err);
-                    switchModule('asistencia');
-                    ocultarLoader();
+                    if (!_uiMostrada) { switchModule('asistencia'); ocultarLoader(); }
+                    _uiMostrada = true;
                 })
                 .obtenerDatosPanelSupervisor(currentUser.email);
 
@@ -322,8 +339,8 @@
     function _irAlLogin(urlBase) {
         var url = urlBase.split('?')[0] + '?page=login';
         console.log("[SST] Navegando al Login:", url);
-        try { window.top.location.href = url; return; } catch(e) {}
-        try { window.open(url, '_top'); return; } catch(e) {}
+        try { window.top.location.href = url; return; } catch (e) { }
+        try { window.open(url, '_top'); return; } catch (e) { }
         var a = document.createElement('a');
         a.href = url;
         a.target = '_top';
@@ -502,7 +519,7 @@
 
         overlay.innerHTML = [
             '<div style="display:flex;flex-direction:column;align-items:center;gap:20px;',
-                'padding:0 28px;text-align:center;max-width:340px;">',
+            'padding:0 28px;text-align:center;max-width:340px;">',
             '  <div style="width:76px;height:76px;border-radius:50%;',
             '       background:rgba(34,197,94,0.12);border:2px solid rgba(34,197,94,0.35);',
             '       display:flex;align-items:center;justify-content:center;">',
@@ -521,7 +538,8 @@
             '</div>'
         ].join('');
 
-        // Navegar después de 3s — usa window.location (iframe propio, sin restricción de sandbox)
+        // Navegar después de 3s — usa window.location.href (iframe propio) porque el sandbox
+        // de GAS bloquea window.top.location.href desde setTimeout (sin gesto de usuario).
         setTimeout(function () {
             if (loginUrl) {
                 window.location.href = loginUrl;
@@ -1694,6 +1712,7 @@
             if (workspace) workspace.classList.remove('hidden');
             actualizarModuloHeader('Gestor de Formatos');
             cargarFormatosAdmin();
+            cargarGaleriaFormatos(); // carga en background; tab activo es Configuración
         } else if (modulo === 'supervisor-stt') {
             const workspace = document.getElementById('admin-workspace-supervisor-stt');
             if (workspace) workspace.classList.remove('hidden');
@@ -2845,6 +2864,10 @@
                     _formatosAdminTotal = res.data || [];
                     _poblarFiltroEmpresasFormatos();
                     filtrarFormatos();
+                    // También poblar la galería si viene en la respuesta
+                    if (res.galeria) {
+                        _gfProcesarDatosGaleria(res.galeria);
+                    }
                 } else {
                     mostrarNotificacion('❌ ' + res.message, 'error');
                 }
@@ -3963,7 +3986,335 @@
     // ── FIN MÓDULO GESTIÓN SUPERVISOR STT ─────────────────────────────
     // Las funciones del Módulo 6 (Gestión Hallazgos) están en AdminHallazgos.js.html
 
+    // ════════════════════════════════════════════════════════════════════
+    // MÓDULO 7 — GALERÍA DE FORMATOS / INSPECCIONES
+    // ════════════════════════════════════════════════════════════════════
 
+    var _gfCache = [];   // todos los registros en memoria
+    var _gfFiltroEst = 'todos'; // estado activo del pill
+
+    /* ── Alterna entre tab Configuración y tab Galería ──────────────── */
+    function _gfSwitchTab(tab) {
+        var configView = document.getElementById('fmt-config-view');
+        var galeriaView = document.getElementById('gf-galeria-view');
+        var btnConfig = document.getElementById('fmt-tab-config');
+        var btnGaleria = document.getElementById('fmt-tab-galeria');
+        var btnNuevo = document.getElementById('fmt-btn-nuevo');
+        var btnRecConf = document.getElementById('fmt-btn-recargar-config');
+        var btnRecGal = document.getElementById('fmt-btn-recargar-galeria');
+
+        if (tab === 'galeria') {
+            if (configView) configView.classList.add('hidden');
+            if (galeriaView) galeriaView.classList.remove('hidden');
+            if (btnConfig) btnConfig.classList.remove('active');
+            if (btnGaleria) btnGaleria.classList.add('active');
+            if (btnNuevo) btnNuevo.classList.add('hidden');
+            if (btnRecConf) btnRecConf.classList.add('hidden');
+            if (btnRecGal) btnRecGal.classList.remove('hidden');
+        } else {
+            if (galeriaView) galeriaView.classList.add('hidden');
+            if (configView) configView.classList.remove('hidden');
+            if (btnGaleria) btnGaleria.classList.remove('active');
+            if (btnConfig) btnConfig.classList.add('active');
+            if (btnNuevo) btnNuevo.classList.remove('hidden');
+            if (btnRecConf) btnRecConf.classList.remove('hidden');
+            if (btnRecGal) btnRecGal.classList.add('hidden');
+        }
+    }
+
+    /* ── Carga datos desde el backend (reusa obtenerFormatosAdmin) ──── */
+    function cargarGaleriaFormatos() {
+        var loader = document.getElementById('gf-loader');
+        var content = document.getElementById('gf-content');
+        var err = document.getElementById('gf-error');
+
+        if (loader) { loader.classList.remove('hidden'); loader.style.display = ''; }
+        if (content) content.classList.add('hidden');
+        if (err) err.classList.add('hidden');
+
+        google.script.run
+            .withSuccessHandler(function (res) {
+                if (loader) loader.classList.add('hidden');
+                if (res.status !== 'success') {
+                    var msg = document.getElementById('gf-error-msg');
+                    if (msg) msg.textContent = res.message || 'Error al cargar registros.';
+                    if (err) { err.classList.remove('hidden'); err.style.display = 'flex'; }
+                    return;
+                }
+                // Actualizar catálogo también si trae data
+                if (res.data) {
+                    _formatosAdminTotal = res.data;
+                    _poblarFiltroEmpresasFormatos();
+                    filtrarFormatos();
+                }
+                // Procesar galería
+                _gfProcesarDatosGaleria(res.galeria || {});
+            })
+            .withFailureHandler(function (e) {
+                if (loader) loader.classList.add('hidden');
+                var msg = document.getElementById('gf-error-msg');
+                if (msg) msg.textContent = 'Error de conexión: ' + e.toString();
+                if (err) { err.classList.remove('hidden'); err.style.display = 'flex'; }
+            })
+            .obtenerFormatosAdmin();
+    }
+
+    /* ── Procesa los datos de galería recibidos del backend ───────── */
+    function _gfProcesarDatosGaleria(galeriaData) {
+        var content = document.getElementById('gf-content');
+        var loader = document.getElementById('gf-loader');
+
+        if (loader) loader.classList.add('hidden');
+
+        _gfCache = (galeriaData && galeriaData.registros) || [];
+        if (content) content.classList.remove('hidden');
+        _gfActualizarKpis(galeriaData.kpis || {});
+        _gfPoblarSelectores();
+        _gfFiltrar();
+        // Actualizar badge en el tab
+        var badge = document.getElementById('gf-tab-badge');
+        if (badge && _gfCache.length) {
+            badge.textContent = _gfCache.length;
+            badge.classList.remove('hidden');
+        }
+    }
+
+    /* ── Actualiza KPIs ─────────────────────────────────────────────── */
+    function _gfActualizarKpis(kpis) {
+        var s = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+        s('gf-kpi-total', kpis.total || 0);
+        s('gf-kpi-pend', kpis.pendientes || 0);
+        s('gf-kpi-cerr', kpis.cerrados || 0);
+    }
+
+    /* ── Puebla los selects de empresa y supervisor ──────────────────── */
+    function _gfPoblarSelectores() {
+        var empresas = {};
+        var supervisores = {};
+        _gfCache.forEach(function (r) {
+            if (r.empresa) empresas[r.empresa] = true;
+            if (r.supervisor) supervisores[r.supervisor] = true;
+        });
+
+        var selEmp = document.getElementById('gf-filtro-empresa');
+        var selSup = document.getElementById('gf-filtro-supervisor');
+        var bg = 'style="background:#1a242f;"';
+
+        if (selEmp) {
+            var valEmp = selEmp.value;
+            selEmp.innerHTML = '<option value="" ' + bg + '>Todas las empresas</option>';
+            Object.keys(empresas).sort().forEach(function (e) {
+                selEmp.innerHTML += '<option value="' + _esc(e) + '" ' + bg + '>' + _esc(e) + '</option>';
+            });
+            selEmp.value = valEmp;
+        }
+        if (selSup) {
+            var valSup = selSup.value;
+            selSup.innerHTML = '<option value="" ' + bg + '>Todos los supervisores</option>';
+            Object.keys(supervisores).sort().forEach(function (s) {
+                selSup.innerHTML += '<option value="' + _esc(s) + '" ' + bg + '>' + _esc(s) + '</option>';
+            });
+            selSup.value = valSup;
+        }
+    }
+
+    /* ── Activa pill de estado y filtra ─────────────────────────────── */
+    function _gfSetFiltroEstado(estado, btn) {
+        _gfFiltroEst = estado;
+        document.querySelectorAll('.gf-pill').forEach(function (p) { p.className = 'gf-pill'; });
+        if (btn) {
+            if (estado === 'todos') btn.classList.add('active-todos');
+            if (estado === 'PENDIENTE') btn.classList.add('active-pend');
+            if (estado === 'CERRADO CON FIRMA') btn.classList.add('active-cerrado');
+        }
+        _gfFiltrar();
+    }
+
+    /* ── Filtra el cache en memoria y re-renderiza ──────────────────── */
+    function _gfFiltrar() {
+        var texto = ((document.getElementById('gf-filtro-texto') || {}).value || '').toLowerCase().trim();
+        var emp = ((document.getElementById('gf-filtro-empresa') || {}).value || '');
+        var sup = ((document.getElementById('gf-filtro-supervisor') || {}).value || '');
+
+        var lista = _gfCache.filter(function (r) {
+            if (_gfFiltroEst !== 'todos' && r.estado !== _gfFiltroEst) return false;
+            if (emp && r.empresa !== emp) return false;
+            if (sup && r.supervisor !== sup) return false;
+            if (texto) {
+                var hay = [r.consecutivo, r.descripcion, r.empresa, r.supervisor, r.idFormato]
+                    .join(' ').toLowerCase();
+                if (hay.indexOf(texto) === -1) return false;
+            }
+            return true;
+        });
+        _gfRenderGrid(lista);
+    }
+
+    /* ── Renderiza el grid de cards ─────────────────────────────────── */
+    function _gfRenderGrid(lista) {
+        var grid = document.getElementById('gf-grid');
+        var empty = document.getElementById('gf-empty');
+        if (!grid) return;
+
+        if (lista.length === 0) {
+            grid.innerHTML = '';
+            if (empty) { empty.classList.remove('hidden'); empty.style.display = 'flex'; }
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+
+        grid.innerHTML = lista.map(function (r) {
+            var idx = _gfCache.indexOf(r);
+            var esCerrado = r.estado === 'CERRADO CON FIRMA';
+            var imgUrl = _urlDriveToImg(r.fotoUrl);
+            var imgFirma = esCerrado ? _urlDriveToImg(r.fotoFirmaUrl) : null;
+
+            /* Zona de foto */
+            var fotoInner = imgUrl
+                ? '<img class="gf-foto" src="' + imgUrl + '" alt="Evidencia"'
+                + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+                + '<div class="gf-foto-placeholder" style="display:none;">'
+                + '<span class="material-symbols-outlined" style="font-size:36px;">hide_image</span>'
+                + '<span style="font-size:10px;font-weight:700;">Sin foto</span></div>'
+                : '<div class="gf-foto-placeholder">'
+                + '<span class="material-symbols-outlined" style="font-size:36px;">hide_image</span>'
+                + '<span style="font-size:10px;font-weight:700;">Sin evidencia</span></div>';
+
+            /* Badge */
+            var badge = esCerrado
+                ? '<span class="gf-badge gf-badge-cerrado">✓ Firmado</span>'
+                : '<span class="gf-badge gf-badge-pendiente">⏳ Pendiente</span>';
+
+            /* Mini-tabs Evidencia/Firmado */
+            var tabs = (esCerrado && imgFirma)
+                ? '<div class="gf-tabs-wrap">'
+                + '<button class="gf-tab-btn active" id="gf-tab-ev-' + idx + '"'
+                + ' onclick="event.stopPropagation();_gfSwitchCardTab(' + idx + ',\'ev\')">'
+                + 'Evidencia</button>'
+                + '<button class="gf-tab-btn" id="gf-tab-fi-' + idx + '"'
+                + ' onclick="event.stopPropagation();_gfSwitchCardTab(' + idx + ',\'fi\')">'
+                + 'Firmado</button>'
+                + '</div>'
+                : '';
+
+            /* Info */
+            var info = '<div class="gf-info">'
+                + '<p class="gf-consecutivo">' + _esc(r.consecutivo) + '</p>'
+                + '<p class="gf-desc">' + _esc(r.descripcion || 'Sin descripción') + '</p>'
+                + '<div class="gf-meta-row">'
+                + '<span class="material-symbols-outlined gf-meta-icon">badge</span>'
+                + '<span class="gf-meta-val">' + _esc(r.supervisor || r.codigoSup || '—') + '</span>'
+                + '</div>'
+                + '<div class="gf-meta-row">'
+                + '<span class="material-symbols-outlined gf-meta-icon">location_city</span>'
+                + '<span class="gf-meta-val">' + _esc(r.empresa || '—') + '</span>'
+                + '</div>'
+                + '<p class="gf-footer-row">' + _esc(r.fecha) + (r.hora ? ' · ' + _esc(r.hora) : '') + '</p>'
+                + '<div class="gf-ver-btn">'
+                + '<span class="material-symbols-outlined" style="font-size:14px;">open_in_full</span>'
+                + 'Ver detalle</div>'
+                + '</div>';
+
+            return '<div class="gf-card animate-fade-in"'
+                + ' onclick="abrirDetalleFormato(' + idx + ')"'
+                + ' data-idx="' + idx + '"'
+                + ' data-url-ev="' + _esc(imgUrl || '') + '"'
+                + ' data-url-fi="' + _esc(imgFirma || '') + '">'
+                + '<div class="gf-foto-wrap" id="gf-foto-wrap-' + idx + '">'
+                + fotoInner + badge + tabs
+                + '</div>'
+                + info
+                + '</div>';
+        }).join('');
+    }
+
+    /* ── Switch tabs Evidencia/Firmado dentro de la card ────────────── */
+    function _gfSwitchCardTab(idx, tab) {
+        var card = document.querySelector('[data-idx="' + idx + '"]');
+        if (!card) return;
+        var url = tab === 'fi' ? card.getAttribute('data-url-fi') : card.getAttribute('data-url-ev');
+        var wrap = document.getElementById('gf-foto-wrap-' + idx);
+        if (wrap && url) {
+            var img = wrap.querySelector('img.gf-foto');
+            if (img) { img.style.display = ''; img.src = url; }
+        }
+        var tabEv = document.getElementById('gf-tab-ev-' + idx);
+        var tabFi = document.getElementById('gf-tab-fi-' + idx);
+        if (tabEv) tabEv.className = 'gf-tab-btn' + (tab === 'ev' ? ' active' : '');
+        if (tabFi) tabFi.className = 'gf-tab-btn' + (tab === 'fi' ? ' active' : '');
+    }
+
+    /* ── Abre modal de detalle ───────────────────────────────────────── */
+    function abrirDetalleFormato(idx) {
+        var r = _gfCache[idx];
+        if (!r) return;
+        var modal = document.getElementById('gf-modal-detalle');
+        if (!modal) return;
+
+        var esCerrado = r.estado === 'CERRADO CON FIRMA';
+        var s = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v || '—'; };
+
+        s('gf-modal-consecutivo', r.consecutivo);
+        s('gf-modal-empresa-hdr', r.empresa);
+        s('gf-modal-empresa-det', r.empresa);
+        s('gf-modal-tipo', r.idFormato);
+        s('gf-modal-descripcion', r.descripcion);
+        s('gf-modal-fecha', r.fecha + (r.hora ? ' · ' + r.hora : ''));
+        s('gf-modal-supervisor', 'Por: ' + (r.supervisor || r.codigoSup || '—'));
+
+        /* Badge */
+        var badge = document.getElementById('gf-modal-badge');
+        if (badge) {
+            badge.textContent = esCerrado ? '✓ Cerrado con Firma' : '⏳ Pendiente';
+            badge.className = 'text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider '
+                + (esCerrado
+                    ? 'bg-green-500/20 border border-green-500/30 text-green-400'
+                    : 'bg-amber-500/20 border border-amber-500/30 text-amber-400');
+        }
+
+        /* Fotos */
+        var urlEv = _urlDriveToImg(r.fotoUrl);
+        var urlFi = _urlDriveToImg(r.fotoFirmaUrl);
+        var simple = document.getElementById('gf-modal-foto-simple');
+        var doble = document.getElementById('gf-modal-foto-doble');
+
+        if (esCerrado) {
+            if (simple) simple.classList.add('hidden');
+            if (doble) doble.classList.remove('hidden');
+            var imgEv = document.getElementById('gf-modal-img-ev');
+            var imgFi = document.getElementById('gf-modal-img-firma');
+            if (imgEv) { imgEv.style.display = ''; imgEv.src = urlEv || ''; }
+            if (imgFi) { imgFi.style.display = ''; imgFi.src = urlFi || ''; }
+        } else {
+            if (doble) doble.classList.add('hidden');
+            if (simple) simple.classList.remove('hidden');
+            var imgSi = document.getElementById('gf-modal-img-evidencia');
+            var ph = document.getElementById('gf-modal-img-ev-ph');
+            if (imgSi) { imgSi.style.display = ''; imgSi.src = urlEv || ''; }
+            if (ph) ph.style.display = urlEv ? 'none' : 'flex';
+        }
+
+        /* Línea de tiempo cierre */
+        var tCierre = document.getElementById('gf-modal-timeline-cierre');
+        if (esCerrado && r.fechaCierre) {
+            if (tCierre) tCierre.style.display = 'flex';
+            s('gf-modal-fecha-cierre', r.fechaCierre);
+        } else {
+            if (tCierre) tCierre.style.display = 'none';
+        }
+
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    /* ── Cierra modal de detalle ─────────────────────────────────────── */
+    function cerrarDetalleFormato() {
+        var modal = document.getElementById('gf-modal-detalle');
+        if (modal) modal.classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    // ── FIN MÓDULO 7 — GALERÍA DE FORMATOS ────────────────────────────
 
     function onError(message) {
         mostrarNotificacion('❌ Error: ' + message, 'error');
