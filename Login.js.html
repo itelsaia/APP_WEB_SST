@@ -81,8 +81,9 @@
                     // Efecto de salida
                     document.getElementById('login-container').classList.add('scale-95', 'opacity-0', 'transition-all', 'duration-500');
 
-                    // Redirección directa
-                    window.top.location.href = destination;
+                    // Redirección — window.location en lugar de window.top
+                    // (Chrome 120+ bloquea window.top desde callbacks async en iframe sandboxed)
+                    window.location.href = destination;
                 } else {
                     showLoginError(response.message || 'Credenciales incorrectas');
                     resetButton();

@@ -162,9 +162,15 @@ function obtenerFormatosPorEmpresa(nombreEmpresa) {
     const hoja = ss.getSheetByName('LISTAS_FORMATOS');
     if (!hoja) return { status: "success", data: [] };
 
+    const empresaBuscar = (nombreEmpresa || '').toString().trim().toLowerCase();
+
+    // Auto-crear formato RH si no existe para esta empresa
+    if (empresaBuscar) {
+      _autoCrearFormatoRH(ss, (nombreEmpresa || '').toString().trim());
+    }
+
     const data     = hoja.getDataRange().getValues();
     const formatos = [];
-    const empresaBuscar = (nombreEmpresa || '').toString().trim().toLowerCase();
 
     for (let i = 1; i < data.length; i++) {
       const idFormato   = (data[i][0] || '').toString().trim();
@@ -1213,6 +1219,13 @@ function guardarCliente(data) {
 
       hoja.appendRow(fila);
       SpreadsheetApp.flush();
+
+      // Auto-crear formato RH (Reporte de Hallazgo) para el nuevo cliente
+      var nombreEmpresa = (data.nombre || '').toString().trim();
+      if (nombreEmpresa) {
+        _autoCrearFormatoRH(ss, nombreEmpresa);
+      }
+
       return {
         status: 'success',
         message: 'Empresa creada con ID: ' + nuevoId + (carpetaUrl ? '. Carpeta Drive generada.' : ''),
@@ -1222,6 +1235,32 @@ function guardarCliente(data) {
   } catch (e) {
     Logger.log('Error en guardarCliente: ' + e.toString());
     return { status: 'error', message: e.toString() };
+  }
+}
+
+/**
+ * Crea automáticamente el formato RH en LISTAS_FORMATOS para un cliente nuevo.
+ * Solo lo crea si no existe ya una fila RH + misma empresa.
+ */
+function _autoCrearFormatoRH(ss, nombreEmpresa) {
+  try {
+    var hojaFmt = ss.getSheetByName('LISTAS_FORMATOS');
+    if (!hojaFmt) return;
+
+    var filas = hojaFmt.getDataRange().getValues();
+    var empLower = nombreEmpresa.toLowerCase();
+    for (var i = 1; i < filas.length; i++) {
+      if ((filas[i][0] || '').toString().trim().toUpperCase() === 'RH' &&
+          (filas[i][3] || '').toString().trim().toLowerCase() === empLower) {
+        return; // Ya existe RH para esta empresa
+      }
+    }
+
+    hojaFmt.appendRow(['RH', 'Reporte de Hallazgo', 'Registro', nombreEmpresa]);
+    SpreadsheetApp.flush();
+    Logger.log('_autoCrearFormatoRH: formato RH creado para ' + nombreEmpresa);
+  } catch (e) {
+    Logger.log('_autoCrearFormatoRH error: ' + e.toString());
   }
 }
 

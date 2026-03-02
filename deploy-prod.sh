@@ -13,7 +13,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLASP_JSON="$SCRIPT_DIR/.clasp.json"
-DEV_ID="1Ac_RObbEOak_qE-lcQGUFCIO71Pjh4LEXhj5Xxcmqiuc475wdhiL5l_5"
+DEV_ID="1C5U_eycIS06y4nR2b-GuLWMLuTTOG4gHg7lVZXa6tD845kIXI6VeXk7U"
 PROD_ID="1OSJxzs28piv1fpPmbZRXik9iRN1eDE0baUUggp-H5QIAiEjYfLGyhyey"
 
 echo ""
