@@ -444,7 +444,7 @@ function guardarImagenEnDrive(base64Data, nombreArchivo, nombreEmpresa, idCarpet
   // 5. Crear archivo y dar permisos de lectura
   var archivo = carpetaDestino.createFile(blob);
   archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return archivo.getUrl();
+  return 'https://lh3.googleusercontent.com/d/' + archivo.getId();
 }
 
 /**
@@ -1855,7 +1855,13 @@ function guardarHallazgo(data) {
     }
 
     // URL pública de cierre para el jefe de obra
-    const urlCierre = getScriptUrl() + '?page=hallazgo&id=' + encodeURIComponent(idHallazgo);
+    // Prioridad: scriptUrl enviado desde el frontend (SERVER_URL, ya es URL pública)
+    // Fallback: getScriptUrl() con regex que limpia /u/N/s/ → /s/
+    const _rawUrl = (data.scriptUrl && data.scriptUrl.trim())
+        ? data.scriptUrl.trim()
+        : getScriptUrl();
+    const _baseUrl = _rawUrl.replace(/\/macros\/u\/\d+\/s\//, '/macros/s/').split('?')[0];
+    const urlCierre = _baseUrl + '?page=hallazgo&id=' + encodeURIComponent(idHallazgo);
 
     hoja.appendRow([
       idHallazgo,                                            // A: Id_hallazgo

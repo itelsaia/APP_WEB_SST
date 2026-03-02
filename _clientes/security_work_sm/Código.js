@@ -71,6 +71,8 @@ function guardarGestionFormato(datos) { _injectSS_(); return SST_CORE_MASTER.gua
 function cerrarFormato(datos) { _injectSS_(); return SST_CORE_MASTER.cerrarFormato(datos); }
 
 function guardarHallazgo(datos) { _injectSS_(); return SST_CORE_MASTER.guardarHallazgo(datos); }
+function obtenerHallazgo(idHallazgo) { _injectSS_(); return SST_CORE_MASTER.obtenerHallazgo(idHallazgo); }
+function cerrarHallazgo(datos) { _injectSS_(); return SST_CORE_MASTER.cerrarHallazgo(datos); }
 function obtenerGaleriaHallazgosAdmin() { _injectSS_(); return SST_CORE_MASTER.obtenerGaleriaHallazgosAdmin(); }
 function obtenerGaleriaFormatos() { _injectSS_(); return SST_CORE_MASTER.obtenerGaleriaFormatos(); }
 

@@ -275,12 +275,18 @@
                 document.getElementById('h-descripcion').textContent = h.descripcion || '—';
                 document.getElementById('h-reportado-por').textContent = h.reportadoPor || '—';
 
-                // Foto de evidencia
+                // Foto de evidencia — convertir cualquier URL de Drive a lh3 (funciona sin login)
                 if (h.fotoUrl && h.fotoUrl !== 'Sin foto') {
                     var fotoCont = document.getElementById('h-foto-container');
                     var fotoImg  = document.getElementById('h-foto');
+                    var fotoSrc  = h.fotoUrl;
+                    // Extraer fileId de cualquier formato Drive y usar lh3
+                    var driveMatch = fotoSrc.match(/[-\w]{25,}/);
+                    if (driveMatch && fotoSrc.indexOf('drive.google.com') !== -1) {
+                        fotoSrc = 'https://lh3.googleusercontent.com/d/' + driveMatch[0];
+                    }
                     if (fotoCont) fotoCont.classList.remove('hidden');
-                    if (fotoImg)  fotoImg.src = h.fotoUrl;
+                    if (fotoImg)  fotoImg.src = fotoSrc;
                 }
 
                 // Mostrar panel principal

@@ -1210,7 +1210,8 @@
                 reportadoPor: currentUser ? (currentUser.codigo || currentUser.nombre) : '',
                 reportadoA: reportadoA.trim(),
                 numeroContacto: telefono.trim(),
-                fotoBase64: _rhArchivoBase64
+                fotoBase64: _rhArchivoBase64,
+                scriptUrl: (typeof SERVER_URL !== 'undefined' && SERVER_URL) ? SERVER_URL : ''
             });
     }
 

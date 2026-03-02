@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════
-#  deploy-prod.sh  —  Despliegue completo a producción
+#  deploy-prod.sh  —  Despliegue completo a producción (automático)
 #  Uso: bash deploy-prod.sh
 #
-#  Lo que hace este script automáticamente:
-#   1. Push del código core → SST_CORE_MASTER (PROD)
-#   2. Push del Código.gs → cada carpeta en _clientes/*/
-#   3. Muestra recordatorio de pasos manuales en GAS
+#  Flujo automático:
+#   1. Push código → SST_CORE_MASTER (PROD)
+#   2. Publica nueva versión de SST_CORE_MASTER (clasp version)
+#   3. Actualiza appsscript.json de cada cliente con la nueva versión
+#   4. Push código → cada cliente en _clientes/*/
+#   5. Actualiza todos los deployments del cliente (clasp deploy -i ID)
 # ═══════════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -20,60 +22,75 @@ echo "║       DESPLIEGUE A PRODUCCIÓN — SST ITELSA IA        ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
-# ── PASO 1: Push SST_CORE_MASTER (PROD) ───────────────────────────
-echo "▶ [1/2] Pusheando SST_CORE_MASTER (PROD)..."
+# ── PASO 1: Push código → SST_CORE_MASTER ─────────────────────────
+echo "▶ [1/3] Pusheando código → SST_CORE_MASTER (PROD)..."
 
-node -e "
-  var fs = require('fs');
-  var j = JSON.parse(fs.readFileSync('$CLASP_JSON'));
-  j.scriptId = '$PROD_ID';
-  fs.writeFileSync('$CLASP_JSON', JSON.stringify(j, null, 2));
-"
-
+sed -i "s/$DEV_ID/$PROD_ID/" "$CLASP_JSON"
 cd "$SCRIPT_DIR"
 clasp push --force
-echo "   ✓ SST_CORE_MASTER actualizado"
+echo "   ✓ Código actualizado en SST_CORE_MASTER"
 
-node -e "
-  var fs = require('fs');
-  var j = JSON.parse(fs.readFileSync('$CLASP_JSON'));
-  j.scriptId = '$DEV_ID';
-  fs.writeFileSync('$CLASP_JSON', JSON.stringify(j, null, 2));
-"
+# ── PASO 2: Publicar nueva versión de SST_CORE_MASTER ─────────────
+echo ""
+echo "▶ [2/3] Publicando nueva versión de SST_CORE_MASTER..."
+VERSION_OUTPUT=$(clasp version "Deploy $(date '+%Y-%m-%d')" 2>&1)
+SST_VERSION=$(echo "$VERSION_OUTPUT" | grep -oE '[0-9]+' | tail -1)
+
+sed -i "s/$PROD_ID/$DEV_ID/" "$CLASP_JSON"
 echo "   ✓ .clasp.json restaurado a DEV"
 
-# ── PASO 2: Push a cada carpeta de cliente en _clientes/ ──────────
+if [ -z "$SST_VERSION" ]; then
+  echo "   ⚠ No se pudo detectar versión automáticamente."
+  read -p "   Ingresa el número de versión de SST_CORE_MASTER: " SST_VERSION
+fi
+echo "   ✓ Nueva versión de SST_CORE_MASTER: v$SST_VERSION"
+
+# ── PASO 3: Actualizar y desplegar cada cliente ────────────────────
 echo ""
-echo "▶ [2/2] Pusheando a clientes..."
+echo "▶ [3/3] Desplegando clientes..."
 
 CLIENTES_DIR="$SCRIPT_DIR/_clientes"
 if [ -d "$CLIENTES_DIR" ]; then
   for CLIENT_DIR in "$CLIENTES_DIR"/*/; do
     if [ -f "$CLIENT_DIR/.clasp.json" ]; then
       CLIENT_NAME=$(basename "$CLIENT_DIR")
-      echo "   → Pusheando cliente: $CLIENT_NAME"
+      echo ""
+      echo "   ── $CLIENT_NAME ──"
+
+      # Actualizar versión de SST_CORE_MASTER en appsscript.json
+      if [ -f "$CLIENT_DIR/appsscript.json" ]; then
+        sed -i "s/\"version\": \"[0-9]*\"/\"version\": \"$SST_VERSION\"/" "$CLIENT_DIR/appsscript.json"
+        echo "   ✓ appsscript.json → versión $SST_VERSION"
+      fi
+
+      # Push código del cliente
       cd "$CLIENT_DIR"
       clasp push --force
-      echo "   ✓ $CLIENT_NAME actualizado"
+      echo "   ✓ Código pusheado"
+
+      # Auto-actualizar deployments del cliente sin pasos manuales en GAS
+      if [ -f "deployments.conf" ]; then
+        echo "   → Actualizando deployments..."
+        while IFS= read -r DEPLOY_ID; do
+          [[ -z "$DEPLOY_ID" || "$DEPLOY_ID" == \#* ]] && continue
+          clasp deploy -i "$DEPLOY_ID" -d "v$SST_VERSION $(date '+%Y-%m-%d')" > /dev/null 2>&1 \
+            && echo "      ✓ ${DEPLOY_ID:0:40}..." \
+            || echo "      ⚠ Error: ${DEPLOY_ID:0:40}..."
+        done < "deployments.conf"
+      else
+        echo "   ℹ Sin deployments.conf — actualiza los deployments en GAS manualmente"
+      fi
+
       cd "$SCRIPT_DIR"
+      echo "   ✓ $CLIENT_NAME completo"
     fi
   done
 else
   echo "   ⚠ Carpeta _clientes/ no encontrada"
 fi
 
-# ── PASO 3: Recordatorio pasos manuales ───────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  ✅ PUSH COMPLETO — Pasos manuales restantes en GAS:         ║"
-echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║                                                              ║"
-echo "║  1. SST_CORE_MASTER:                                         ║"
-echo "║     Implementar → Administrar → editar → Nueva versión       ║"
-echo "║                                                              ║"
-echo "║  2. Por cada cliente (ej: APP_WEB_SECURITY_WORK_S&M):        ║"
-echo "║     a) Bibliotecas → SST_CORE_MASTER → versión nueva         ║"
-echo "║     b) Implementar → Administrar → editar → Nueva versión    ║"
-echo "║                                                              ║"
+echo "║  ✅ DESPLIEGUE COMPLETO — Sin pasos manuales en GAS          ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""

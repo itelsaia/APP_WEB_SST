@@ -40,7 +40,7 @@ function doGet(e) {
     // 4. Inyectar datos como JSON seguro (sin usar config.PROPIEDAD directamente en HTML)
     template.configJSON = JSON.stringify(config);
     template.config = config;
-    template.scriptUrl = ScriptApp.getService().getUrl();
+    template.scriptUrl = getScriptUrl();
     
     // 5. Evaluar
     return template.evaluate()
