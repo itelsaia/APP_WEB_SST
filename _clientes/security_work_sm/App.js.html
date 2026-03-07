@@ -8,7 +8,6 @@
 
     let currentUser = null;
     let archivoBase64 = null;
-    let nombreArchivo = '';
     let _obraSeleccionada = ''; // Obra elegida en el formulario de jornada
     let _clientesCargados = false; // Flag: ¿ya se cargó el select de clientes?
     let _formatosDisponibles = []; // Cache de formatos del cliente seleccionado
@@ -130,19 +129,34 @@
 
         if (currentUser && currentUser.rol === 'SUP-SST') {
             configurarAsistencia();
-            // ── LLAMADA BATCH: clientes + estado asistencia en 1 sola RPC ──
-            // Antes eran 2 llamadas separadas (~2-4s extra). Ahora es 1 (~1-2s).
+            // ── Cargar lista de clientes/obras de forma INDEPENDIENTE ──
+            // Garantiza que el select siempre se llene, sin depender del batch.
+            cargarOtrasOpciones();
+            // ── LLAMADA BATCH: solo determina estado de asistencia ──
+            // _uiMostrada: true cuando la UI ya fue mostrada (timeout o respuesta real).
+            var _uiMostrada = false;
+            var _panelTimeout = setTimeout(function () {
+                if (_uiMostrada) return;
+                _uiMostrada = true;
+                console.warn('[SST] obtenerDatosPanelSupervisor sin respuesta (timeout 10s) — mostrando asistencia');
+                switchModule('asistencia');
+                ocultarLoader();
+            }, 10000);
+
             google.script.run
                 .withSuccessHandler(function (res) {
+                    clearTimeout(_panelTimeout);
+
                     if (res.status !== 'success') {
                         console.error('[SST] Error en batch panel:', res.message);
-                        switchModule('asistencia');
-                        ocultarLoader();
+                        if (!_uiMostrada) { switchModule('asistencia'); ocultarLoader(); }
+                        _uiMostrada = true;
                         return;
                     }
                     var d = res.data;
 
                     // 1. Poblar clientes en ambos selectores (obra e inspección)
+                    //    Se ejecuta SIEMPRE, incluso si el timeout ya mostró la UI.
                     llenarClientes({ status: 'success', data: d.clientes });
                     var selectObra = document.getElementById('idObraAsistencia');
                     if (selectObra) {
@@ -173,12 +187,14 @@
                         if (exitSection) exitSection.classList.add('hidden');
                     }
 
-                    ocultarLoader();
+                    if (!_uiMostrada) ocultarLoader();
+                    _uiMostrada = true;
                 })
                 .withFailureHandler(function (err) {
+                    clearTimeout(_panelTimeout);
                     console.error('[SST] Error crítico en batch panel:', err);
-                    switchModule('asistencia');
-                    ocultarLoader();
+                    if (!_uiMostrada) { switchModule('asistencia'); ocultarLoader(); }
+                    _uiMostrada = true;
                 })
                 .obtenerDatosPanelSupervisor(currentUser.email);
 
@@ -521,14 +537,17 @@
             '</div>'
         ].join('');
 
-        // Navegar después de 5s — usa window.location (iframe propio, sin restricción de sandbox)
+        // Navegar después de 5s — usa _irAlLogin que intenta window.top, window.open(_top)
+        // y anchor click como fallbacks para el sandbox de GAS.
         setTimeout(function () {
             if (loginUrl) {
-                window.location.href = loginUrl;
+                _irAlLogin(loginUrl);
+            } else if (typeof SERVER_URL !== 'undefined' && SERVER_URL) {
+                _irAlLogin(SERVER_URL);
             } else {
                 google.script.run
                     .withSuccessHandler(function (url) {
-                        window.location.href = url.split('?')[0] + '?page=login';
+                        _irAlLogin(url);
                     })
                     .withFailureHandler(function () {
                         desbloquearPantalla();
@@ -895,9 +914,6 @@
      *  - idCliente (módulo inspección)
      * Antes se hacían dos llamadas RPC independientes; ahora es solo una.
      */
-    function cargarObrasAsistencia() {
-        // No-op: la carga real ocurre en cargarOtrasOpciones() para evitar el doble RPC.
-    }
 
     function cargarOtrasOpciones() {
         google.script.run
@@ -926,16 +942,11 @@
                 if (selectObra) selectObra.innerHTML = '<option value="">Error al cargar obras</option>';
             })
             .obtenerClientesRegistrados();
-        configurarFormulario();
     }
 
     // ================================================================
     // MÓDULO: INSPECCIÓN
     // ================================================================
-
-    function cargarClientes() {
-        google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
-    }
 
     function llenarClientes(response) {
         const select = document.getElementById('idCliente');
@@ -1192,7 +1203,8 @@
                 reportadoPor: currentUser ? (currentUser.codigo || currentUser.nombre) : '',
                 reportadoA: reportadoA.trim(),
                 numeroContacto: telefono.trim(),
-                fotoBase64: _rhArchivoBase64
+                fotoBase64: _rhArchivoBase64,
+                scriptUrl: (typeof SERVER_URL !== 'undefined' && SERVER_URL) ? SERVER_URL : ''
             });
     }
 
@@ -1382,10 +1394,6 @@
         });
     }
 
-    function configurarFormulario() {
-        // Los botones de acción llaman directamente a enviarInspeccion(modo)
-        // mediante onclick — no se usa el evento submit del form.
-    }
 
     /**
      * Envía el formulario de inspección.
@@ -1652,11 +1660,6 @@
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
             .cerrarRegistroFormato(_firmaIdRegistro, _firmaBase64);
-    }
-
-    /** @deprecated — reemplazado por abrirModalFirma */
-    function confirmarCierrePendiente(id) {
-        abrirModalFirma(id);
     }
 
     // ================================================================
@@ -2515,7 +2518,6 @@
                 '<span class="text-slate-500">Rol:</span><span class="text-primary font-bold">' + _esc(u.rol) + '</span>' +
                 '<span class="text-slate-500">Cédula:</span><span class="text-slate-300">' + _esc(u.cedula || '-') + '</span>' +
                 '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
-                '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '</div>' +
                 '<div class="grid grid-cols-2 gap-2 border-t border-white/5 pt-2">' +
                 '<button onclick="abrirModalUsuario(\'' + _esc(u.id) + '\')" ' +
@@ -3037,33 +3039,23 @@
         _fmtAbrirModalGAS(modal);
     }
 
-    /** Abre el modal posicionado exactamente sobre la ventana visible (compatible GAS iframe) */
+    /**
+     * Abre el modal — lo mueve a document.body para escapar del
+     * transform de .animate-slide-up que rompe position:fixed.
+     */
     function _fmtAbrirModalGAS(modal) {
-        var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
-        var viewH = window.innerHeight || document.documentElement.clientHeight || 600;
-        var viewW = window.innerWidth || document.documentElement.clientWidth || 400;
-
-        // El overlay cubre exactamente el viewport visible
-        modal.style.top = scrollY + 'px';
-        modal.style.width = viewW + 'px';
-        modal.style.height = viewH + 'px';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-
-        // Ajustar max-height del contenedor del modal
-        var box = document.getElementById('fmt-modal-box');
-        if (box) {
-            box.style.maxHeight = Math.max(viewH - 40, 300) + 'px';
-        }
-
-        // Bloquear scroll del body mientras el modal está abierto
+        document.body.appendChild(modal);
+        modal.classList.add('open');
         document.body.style.overflow = 'hidden';
     }
 
     function cerrarModalFormato() {
         var modal = document.getElementById('fmt-modal');
-        if (modal) modal.style.display = 'none';
+        if (modal) {
+            modal.classList.remove('open');
+            var workspace = document.getElementById('admin-workspace-formatos');
+            if (workspace) workspace.appendChild(modal);
+        }
         document.body.style.overflow = '';
         var selEmp = document.getElementById('fmt-inp-empresa');
         var empDisplay = document.getElementById('fmt-empresa-display');
@@ -3174,22 +3166,6 @@
             },
             { tipo: 'danger', btnConfirmar: 'Eliminar' }
         );
-    }
-
-    function onExito(response) {
-        mostrarNotificacion('✅ ' + response.message, 'success');
-        archivoBase64 = null;
-        const form = document.getElementById('sst-form');
-        if (form) form.reset();
-        const prev = document.getElementById('preview-container');
-        if (prev) prev.classList.add('hidden');
-        _intentarBloqueoEmpresa();
-        const descCont = document.getElementById('formato-descripcion-container');
-        if (descCont) descCont.classList.add('hidden');
-    }
-
-    function onError(message) {
-        mostrarNotificacion('❌ Error: ' + message, 'error');
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -4297,8 +4273,4 @@
     }
 
     // ── FIN MÓDULO 7 — GALERÍA DE FORMATOS ────────────────────────────
-
-    function onError(message) {
-        mostrarNotificacion('❌ Error: ' + message, 'error');
-    }
 </script>

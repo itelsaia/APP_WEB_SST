@@ -1,4 +1,154 @@
 <!-- AdminAsistencia.html — Módulo Control de Asistencia (Personal / Supervisores) -->
+<style>
+    /* ── Galería Asistencia — Estilos ─────────────────────────────── */
+    .ag-card {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+    }
+    .ag-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(197,160,72,0.35);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .ag-foto-wrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 4/3;
+        background: rgba(0,0,0,0.3);
+        overflow: hidden;
+    }
+    .ag-foto {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .ag-foto-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: rgba(148,163,184,0.5);
+        gap: 4px;
+    }
+    .ag-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 8px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 3px 8px;
+        border-radius: 8px;
+        backdrop-filter: blur(8px);
+    }
+    .ag-badge-activa {
+        background: rgba(245,158,11,0.25);
+        border: 1px solid rgba(245,158,11,0.5);
+        color: #FBBF24;
+    }
+    .ag-badge-cerrada {
+        background: rgba(34,197,94,0.2);
+        border: 1px solid rgba(34,197,94,0.4);
+        color: #4ADE80;
+    }
+    .ag-tabs-wrap {
+        position: absolute;
+        bottom: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 2px;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(6px);
+        border-radius: 8px;
+        padding: 2px;
+    }
+    .ag-tab-btn {
+        font-size: 9px;
+        font-weight: 800;
+        padding: 3px 10px;
+        border-radius: 6px;
+        color: rgba(255,255,255,0.5);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition: all 0.15s;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .ag-tab-btn.active {
+        background: rgba(197,160,72,0.3);
+        color: #C5A048;
+    }
+    .ag-info {
+        padding: 10px 12px 12px;
+    }
+    .ag-nombre {
+        font-size: 11px;
+        font-weight: 900;
+        color: #f8fafc;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .ag-meta-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 3px;
+    }
+    .ag-meta-icon {
+        font-size: 12px;
+        color: rgba(148,163,184,0.5);
+    }
+    .ag-meta-val {
+        font-size: 10px;
+        color: rgba(203,213,225,0.8);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .ag-footer-row {
+        font-size: 9px;
+        color: rgba(148,163,184,0.5);
+        font-weight: 700;
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    /* Toggle Vista activo */
+    .ag-view-btn.active {
+        background: rgba(197,160,72,0.2) !important;
+        border-color: rgba(197,160,72,0.5) !important;
+        color: #C5A048 !important;
+    }
+    /* ── Lightbox ─────────────────────────────────────────────────── */
+    #ag-lightbox {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        z-index: 70;
+        background: rgba(0,0,0,0.92);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+    }
+    #ag-lightbox.open {
+        display: flex;
+    }
+</style>
+
 <div class="space-y-5 animate-fade-in">
 
     <!-- ── CABECERA ───────────────────────────────────────────────── -->
@@ -11,16 +161,33 @@
             </button>
             <div>
                 <h3 class="text-sm font-black text-white uppercase tracking-tight">Control de Asistencia</h3>
-                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Personal · Supervisores SST · Solo lectura</p>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Personal &middot; Supervisores SST &middot; Solo lectura</p>
             </div>
         </div>
-        <button onclick="exportarCSVAsistencia()"
-            style="background:rgba(34,197,94,0.12); border:1.5px solid rgba(34,197,94,0.35);"
-            class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-green-400 font-black text-[10px] uppercase tracking-widest hover:opacity-80 transition-all active:scale-95 shrink-0">
-            <span class="material-symbols-outlined text-base">download</span>
-            <span class="hidden sm:inline">Exportar CSV</span>
-            <span class="sm:hidden">CSV</span>
-        </button>
+        <div class="flex items-center gap-2">
+            <!-- Toggle vista: Lista / Galería -->
+            <div class="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl p-0.5">
+                <button id="ag-btn-lista" onclick="_agSwitchVista('lista')"
+                    class="ag-view-btn active flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                    style="border:1px solid transparent; color:rgba(148,163,184,0.7);">
+                    <span class="material-symbols-outlined text-sm">view_list</span>
+                    <span class="hidden sm:inline">Lista</span>
+                </button>
+                <button id="ag-btn-galeria" onclick="_agSwitchVista('galeria')"
+                    class="ag-view-btn flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                    style="border:1px solid transparent; color:rgba(148,163,184,0.7);">
+                    <span class="material-symbols-outlined text-sm">grid_view</span>
+                    <span class="hidden sm:inline">Fotos</span>
+                </button>
+            </div>
+            <button onclick="exportarCSVAsistencia()"
+                style="background:rgba(34,197,94,0.12); border:1.5px solid rgba(34,197,94,0.35);"
+                class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-green-400 font-black text-[10px] uppercase tracking-widest hover:opacity-80 transition-all active:scale-95 shrink-0">
+                <span class="material-symbols-outlined text-base">download</span>
+                <span class="hidden sm:inline">Exportar CSV</span>
+                <span class="sm:hidden">CSV</span>
+            </button>
+        </div>
     </div>
 
     <!-- ── TARJETAS DE ESTADÍSTICAS ──────────────────────────────── -->
@@ -83,38 +250,117 @@
         </div>
     </div>
 
-    <!-- ── VISTA MÓVIL: TARJETAS ─────────────────────────────────── -->
-    <div id="asis-lista-mobile" class="sm:hidden space-y-3">
-        <div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">
-            <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>
-            <span>Cargando asistencia...</span>
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- VISTA 1: LISTA (tabla + tarjetas móvil) — vista por defecto  -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div id="ag-vista-lista">
+        <!-- ── VISTA MÓVIL: TARJETAS ─────────────────────────────────── -->
+        <div id="asis-lista-mobile" class="sm:hidden space-y-3">
+            <div class="flex flex-col items-center gap-2 py-8 text-slate-500 text-xs italic">
+                <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>
+                <span>Cargando asistencia...</span>
+            </div>
+        </div>
+
+        <!-- ── VISTA ESCRITORIO: TABLA ───────────────────────────────── -->
+        <div class="hidden sm:block overflow-x-auto rounded-xl border border-white/10 shadow-xl">
+            <table class="w-full min-w-[960px] text-left">
+                <thead>
+                    <tr style="background:rgba(255,255,255,0.04);" class="border-b border-white/10">
+                        <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Supervisor</th>
+                        <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Fecha</th>
+                        <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Hora Entrada</th>
+                        <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Hora Salida</th>
+                        <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Tipo Día</th>
+                        <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Cliente / Empresa</th>
+                        <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Estado</th>
+                    </tr>
+                </thead>
+                <tbody id="asis-tabla-body">
+                    <tr>
+                        <td colspan="7" class="text-center py-10 text-slate-500 text-xs italic">
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>
+                                <span>Cargando asistencia...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <!-- ── VISTA ESCRITORIO: TABLA ───────────────────────────────── -->
-    <div class="hidden sm:block overflow-x-auto rounded-xl border border-white/10 shadow-xl">
-        <table class="w-full min-w-[960px] text-left">
-            <thead>
-                <tr style="background:rgba(255,255,255,0.04);" class="border-b border-white/10">
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Supervisor</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Fecha</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Hora Entrada</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Hora Salida</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Tipo Día</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Cliente / Empresa</th>
-                    <th class="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Estado</th>
-                </tr>
-            </thead>
-            <tbody id="asis-tabla-body">
-                <tr>
-                    <td colspan="7" class="text-center py-10 text-slate-500 text-xs italic">
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full"></div>
-                            <span>Cargando asistencia...</span>
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- VISTA 2: GALERÍA DE FOTOS — grid de imágenes entrada/salida  -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div id="ag-vista-galeria" class="hidden">
+        <!-- Grid de cards con fotos -->
+        <div id="ag-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+        <!-- Estado vacío -->
+        <div id="ag-grid-empty" class="hidden flex-col items-center gap-3 py-12 text-slate-500">
+            <span class="material-symbols-outlined text-4xl" style="opacity:0.4;">photo_library</span>
+            <p class="text-xs font-bold">No hay registros con fotos para mostrar</p>
+        </div>
     </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- LIGHTBOX — Modal para ver foto en grande con navegación       -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div id="ag-lightbox" onclick="if(event.target===this)_agCerrarLightbox()">
+    <!-- Botón cerrar -->
+    <button onclick="_agCerrarLightbox()"
+        style="position:absolute;top:12px;right:12px;z-index:5;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;"
+        onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+        <span class="material-symbols-outlined" style="color:#fff;font-size:20px;">close</span>
+    </button>
+
+    <!-- Flecha izquierda (registro anterior) -->
+    <button id="ag-lb-prev" onclick="_agLbNavegar(-1)"
+        style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;"
+        onmouseover="this.style.background='rgba(255,255,255,0.18)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">
+        <span class="material-symbols-outlined" style="color:#fff;font-size:22px;">chevron_left</span>
+    </button>
+
+    <!-- Flecha derecha (registro siguiente) -->
+    <button id="ag-lb-next" onclick="_agLbNavegar(1)"
+        style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;"
+        onmouseover="this.style.background='rgba(255,255,255,0.18)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">
+        <span class="material-symbols-outlined" style="color:#fff;font-size:22px;">chevron_right</span>
+    </button>
+
+    <!-- Indicador de posición -->
+    <p id="ag-lb-counter" style="position:absolute;top:14px;left:50%;transform:translateX(-50%);color:rgba(148,163,184,0.5);font-size:10px;font-weight:800;letter-spacing:0.1em;"></p>
+
+    <!-- Info supervisor -->
+    <div style="text-align:center;margin-bottom:12px;">
+        <p id="ag-lb-nombre" style="color:#f8fafc;font-size:13px;font-weight:900;letter-spacing:0.03em;"></p>
+        <p id="ag-lb-fecha" style="color:rgba(148,163,184,0.6);font-size:10px;font-weight:700;margin-top:2px;"></p>
+    </div>
+
+    <!-- Tabs Entrada / Salida -->
+    <div style="display:flex;gap:3px;background:rgba(255,255,255,0.08);border-radius:10px;padding:3px;margin-bottom:14px;">
+        <button id="ag-lb-tab-entrada" onclick="_agLbSwitchTab('entrada')"
+            style="font-size:10px;font-weight:800;padding:6px 18px;border-radius:8px;border:none;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;transition:all 0.15s;background:rgba(197,160,72,0.3);color:#C5A048;">
+            Entrada
+        </button>
+        <button id="ag-lb-tab-salida" onclick="_agLbSwitchTab('salida')"
+            style="font-size:10px;font-weight:800;padding:6px 18px;border-radius:8px;border:none;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;transition:all 0.15s;background:transparent;color:rgba(255,255,255,0.4);">
+            Salida
+        </button>
+    </div>
+
+    <!-- Imagen (con soporte touch/swipe) -->
+    <div id="ag-lb-img-wrap" style="max-width:90vw;max-height:60vh;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);background:rgba(0,0,0,0.4);touch-action:pan-y;">
+        <img id="ag-lb-img" src="" alt="Foto asistencia"
+            style="max-width:90vw;max-height:60vh;object-fit:contain;display:block;transition:opacity 0.15s;"
+            onerror="this.style.display='none';document.getElementById('ag-lb-no-foto').style.display='flex'">
+        <div id="ag-lb-no-foto" style="display:none;width:280px;height:200px;flex-direction:column;align-items:center;justify-content:center;color:rgba(148,163,184,0.5);gap:6px;">
+            <span class="material-symbols-outlined" style="font-size:48px;">hide_image</span>
+            <span style="font-size:11px;font-weight:700;">Sin foto disponible</span>
+        </div>
+    </div>
+
+    <!-- Hora de la foto -->
+    <p id="ag-lb-hora" style="color:rgba(148,163,184,0.5);font-size:10px;font-weight:700;margin-top:8px;text-transform:uppercase;letter-spacing:0.08em;"></p>
 </div>

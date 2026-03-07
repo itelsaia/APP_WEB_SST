@@ -379,10 +379,11 @@
 <!-- MODAL: CREAR / EDITAR FORMATO                             -->
 <!-- ══════════════════════════════════════════════════════════ -->
 <div id="fmt-modal"
-    style="display:none; position:absolute; z-index:70; left:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);"
+    style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:70; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);"
     onclick="if(event.target===this) cerrarModalFormato()">
     <div id="fmt-modal-box" class="rounded-2xl border border-white/10 shadow-2xl"
-        style="background:#0f1923; display:flex; flex-direction:column; width:92%; max-width:380px; margin:auto;">
+        style="background:#0f1923; display:flex; flex-direction:column; width:92%; max-width:380px; max-height:90vh; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);">
+
         <div class="flex items-center gap-3 px-5 py-4 border-b border-white/8 shrink-0"
             style="background:linear-gradient(135deg,rgba(197,160,72,0.08) 0%,transparent 60%);">
             <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border border-white/10"

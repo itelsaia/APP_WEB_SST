@@ -8,7 +8,6 @@
 
     let currentUser = null;
     let archivoBase64 = null;
-    let nombreArchivo = '';
     let _obraSeleccionada = ''; // Obra elegida en el formulario de jornada
     let _clientesCargados = false; // Flag: ¿ya se cargó el select de clientes?
     let _formatosDisponibles = []; // Cache de formatos del cliente seleccionado
@@ -335,17 +334,29 @@
         }
     }
 
-    // Helper: navega al Login — intenta top.location, luego window.open, luego anchor click
+    // Helper: navega al Login — usa con clicks de usuario (tiene user activation)
     function _irAlLogin(urlBase) {
         var url = urlBase.split('?')[0] + '?page=login';
         console.log("[SST] Navegando al Login:", url);
         try { window.top.location.href = url; return; } catch (e) { }
-        try { window.open(url, '_top'); return; } catch (e) { }
-        var a = document.createElement('a');
-        a.href = url;
-        a.target = '_top';
-        document.body.appendChild(a);
-        a.click();
+        _navegarViaForm(url);
+    }
+
+    // Helper: navega via form submit con target=_top.
+    // Funciona dentro de setTimeout (sin user activation) en el sandbox de GAS.
+    function _navegarViaForm(url) {
+        console.log("[SST] Navegando via form:", url);
+        var f = document.createElement('form');
+        f.method = 'GET';
+        f.action = url.split('?')[0];
+        f.target = '_top';
+        var p = document.createElement('input');
+        p.type = 'hidden';
+        p.name = 'page';
+        p.value = 'login';
+        f.appendChild(p);
+        document.body.appendChild(f);
+        f.submit();
     }
 
     // Botón "Cerrar Sesión" del header
@@ -434,6 +445,57 @@
     // ════════════════════════════════════════════════════════════
 
     /**
+     * Dibuja marca de agua sobre el canvas con info del supervisor.
+     * @param {CanvasRenderingContext2D} ctx  Contexto 2D del canvas.
+     * @param {number} w  Ancho del canvas.
+     * @param {number} h  Alto del canvas.
+     * @param {Object} datos  { nombre, tipo, fecha, hora, obra }
+     */
+    function _agregarMarcaDeAgua(ctx, w, h, datos) {
+        var fontSize = Math.max(Math.round(w * 0.032), 11);
+        var padding = Math.round(fontSize * 0.8);
+        var lineHeight = Math.round(fontSize * 1.4);
+        var alturaBanda = padding + lineHeight * 3 + padding;
+        var y = h - alturaBanda;
+
+        // Franja oscura semi-transparente en la parte inferior
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(0, y, w, alturaBanda);
+
+        // Línea dorada superior de la franja
+        ctx.fillStyle = 'rgba(197,160,72,0.8)';
+        ctx.fillRect(0, y, w, 2);
+
+        // Configurar texto
+        ctx.font = 'bold ' + fontSize + 'px Arial, sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+
+        // Línea 1: Nombre del supervisor
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(datos.nombre || '', padding, y + padding);
+
+        // Línea 2: Tipo + Fecha + Hora
+        ctx.fillStyle = 'rgba(197,160,72,0.95)';
+        ctx.fillText((datos.tipo || '') + '  \u00b7  ' + (datos.fecha || '') + '  ' + (datos.hora || ''), padding, y + padding + lineHeight);
+
+        // Línea 3: Obra / Proyecto
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        var smallFont = Math.max(fontSize - 2, 9);
+        ctx.font = '600 ' + smallFont + 'px Arial, sans-serif';
+        ctx.fillText(datos.obra || '', padding, y + padding + lineHeight * 2);
+
+        // Limpiar sombra
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+    }
+
+    /**
      * Comprime una imagen usando Canvas antes de convertirla a Base64.
      * Redimensiona al máximo de MAX_DIM px y aplica calidad JPEG del 72%.
      * Reduce fotos de ~8MB a ~150-250KB sin pérdida visual apreciable.
@@ -441,9 +503,10 @@
      * @param {File} file  Archivo de imagen seleccionado por el usuario.
      * @param {number} [maxDim=1000] Dimensión máxima en px (ancho o alto).
      * @param {number} [quality=0.72] Calidad JPEG 0.0-1.0.
+     * @param {Object} [watermarkData] Datos para marca de agua (opcional).
      * @return {Promise<string>} Base64 comprimido (data:image/jpeg;base64,...).
      */
-    function comprimirImagen(file, maxDim, quality) {
+    function comprimirImagen(file, maxDim, quality, watermarkData) {
         var MAX = maxDim || 1000;
         var Q = quality || 0.70;
         return new Promise(function (resolve, reject) {
@@ -466,6 +529,10 @@
                     canvas.height = h;
                     var ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, w, h);
+                    // Marca de agua si se proporcionó
+                    if (watermarkData) {
+                        _agregarMarcaDeAgua(ctx, w, h, watermarkData);
+                    }
                     var resultado = canvas.toDataURL('image/jpeg', Q);
                     console.log('[SST] Compresión: ' + Math.round(ev.target.result.length / 1024) + 'KB → ' + Math.round(resultado.length / 1024) + 'KB');
                     resolve(resultado);
@@ -496,9 +563,11 @@
     }
 
     /**
-     * Muestra pantalla de despedida y redirige al login automáticamente.
-     * Usa window.location.href (iframe propio) porque el sandbox de GAS
-     * bloquea top-navigation desde contextos sin gesto de usuario (setTimeout).
+     * Muestra pantalla de despedida con botón para ir al login.
+     * El sandbox de GAS bloquea TODA navegación automática desde código
+     * sin user activation (setTimeout, callbacks async, meta refresh navega
+     * solo el iframe interno dejando la página en blanco).
+     * Única solución confiable: enlace <a target="_top"> que el usuario clickea.
      */
     function _mostrarDespedidaYCerrar() {
         var overlay = document.getElementById('sst-loading-overlay');
@@ -511,7 +580,6 @@
             ? currentUser.nombre.split(' ')[0]
             : 'Supervisor';
 
-        // Obtener URL de login
         var loginUrl = '';
         if (typeof SERVER_URL !== 'undefined' && SERVER_URL) {
             loginUrl = SERVER_URL.split('?')[0] + '?page=login';
@@ -531,30 +599,12 @@
             '    <p style="font-size:12px;font-weight:500;color:#94a3b8;margin:0 0 16px;',
             '         line-height:1.65;">Tu jornada ha sido registrada exitosamente.<br>',
             '       Gracias por tu labor y compromiso<br>con la seguridad de nuestra comunidad.</p>',
-            '    <p style="font-size:9px;font-weight:800;color:#C5A048;',
-            '         letter-spacing:0.14em;text-transform:uppercase;opacity:0.8;">',
-            '       Cerrando sesión automáticamente...</p>',
+            loginUrl
+                ? '    <a href="' + loginUrl + '" target="_top" style="display:inline-block;margin-top:12px;padding:14px 40px;background:linear-gradient(135deg,rgba(197,160,72,0.25),rgba(197,160,72,0.15));border:2px solid rgba(197,160,72,0.6);border-radius:14px;color:#C5A048;font-size:13px;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;box-shadow:0 4px 20px rgba(197,160,72,0.2);">Ir al inicio de sesión</a>'
+                : '    <p style="font-size:9px;font-weight:800;color:#C5A048;letter-spacing:0.14em;text-transform:uppercase;opacity:0.8;">Cierre esta pestaña</p>',
             '  </div>',
             '</div>'
         ].join('');
-
-        // Navegar después de 5s — usa window.location.href (iframe propio) porque el sandbox
-        // de GAS bloquea window.top.location.href desde setTimeout (sin gesto de usuario).
-        setTimeout(function () {
-            if (loginUrl) {
-                window.location.href = loginUrl;
-            } else {
-                google.script.run
-                    .withSuccessHandler(function (url) {
-                        window.location.href = url.split('?')[0] + '?page=login';
-                    })
-                    .withFailureHandler(function () {
-                        desbloquearPantalla();
-                        mostrarNotificacion('Salida registrada. Cierre esta pestaña.', 'warning');
-                    })
-                    .getScriptUrl();
-            }
-        }, 5000);
     }
 
     // ════════════════════════════════════════════════════════════
@@ -564,7 +614,18 @@
     function previewAsistencia(input) {
         if (!input.files || !input.files[0]) return;
         bloquearPantalla('Optimizando foto...');
-        comprimirImagen(input.files[0]).then(function (comprimido) {
+        // Construir datos de marca de agua para ENTRADA
+        var obraSelect = document.getElementById('idObraAsistencia');
+        var obraNombre = (obraSelect && obraSelect.selectedIndex > 0) ? obraSelect.options[obraSelect.selectedIndex].text : '';
+        var ahora = new Date();
+        var wm = {
+            nombre: currentUser ? currentUser.nombre : '',
+            tipo: 'ENTRADA',
+            fecha: ahora.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            hora: ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+            obra: obraNombre || 'Sin asignar'
+        };
+        comprimirImagen(input.files[0], null, null, wm).then(function (comprimido) {
             desbloquearPantalla();
             archivoBase64 = comprimido;
             var prev = document.getElementById('asis-img-preview');
@@ -822,7 +883,16 @@
     function previewSalida(input) {
         if (!input.files || !input.files[0]) return;
         bloquearPantalla('Optimizando foto...');
-        comprimirImagen(input.files[0]).then(function (comprimido) {
+        // Construir datos de marca de agua para SALIDA
+        var ahora = new Date();
+        var wm = {
+            nombre: currentUser ? currentUser.nombre : '',
+            tipo: 'SALIDA',
+            fecha: ahora.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            hora: ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true }),
+            obra: _obraSeleccionada || 'Sin asignar'
+        };
+        comprimirImagen(input.files[0], null, null, wm).then(function (comprimido) {
             desbloquearPantalla();
             archivoBase64 = comprimido;
             var prev = document.getElementById('exit-img-preview');
@@ -913,9 +983,6 @@
      *  - idCliente (módulo inspección)
      * Antes se hacían dos llamadas RPC independientes; ahora es solo una.
      */
-    function cargarObrasAsistencia() {
-        // No-op: la carga real ocurre en cargarOtrasOpciones() para evitar el doble RPC.
-    }
 
     function cargarOtrasOpciones() {
         google.script.run
@@ -944,16 +1011,11 @@
                 if (selectObra) selectObra.innerHTML = '<option value="">Error al cargar obras</option>';
             })
             .obtenerClientesRegistrados();
-        configurarFormulario();
     }
 
     // ================================================================
     // MÓDULO: INSPECCIÓN
     // ================================================================
-
-    function cargarClientes() {
-        google.script.run.withSuccessHandler(llenarClientes).obtenerClientesRegistrados();
-    }
 
     function llenarClientes(response) {
         const select = document.getElementById('idCliente');
@@ -1401,10 +1463,6 @@
         });
     }
 
-    function configurarFormulario() {
-        // Los botones de acción llaman directamente a enviarInspeccion(modo)
-        // mediante onclick — no se usa el evento submit del form.
-    }
 
     /**
      * Envía el formulario de inspección.
@@ -1671,11 +1729,6 @@
                 mostrarNotificacion('❌ Error: ' + err.toString(), 'error');
             })
             .cerrarRegistroFormato(_firmaIdRegistro, _firmaBase64);
-    }
-
-    /** @deprecated — reemplazado por abrirModalFirma */
-    function confirmarCierrePendiente(id) {
-        abrirModalFirma(id);
     }
 
     // ================================================================
@@ -2231,6 +2284,10 @@
         actualizarStatsAsistencia(filtrados);
         _renderTablaAsistencia(filtrados);
         _renderCardsAsistenciaMovil(filtrados);
+        // Si la galería está visible, también re-renderizar el grid
+        if (_agVistaActual === 'galeria') {
+            _agRenderGrid(filtrados);
+        }
     }
 
 
@@ -2374,6 +2431,289 @@
         URL.revokeObjectURL(url);
 
         mostrarNotificacion('✅ CSV exportado con ' + datos.length + ' registros.', 'success');
+    }
+
+    // ================================================================
+    // GALERÍA DE FOTOS — ASISTENCIA (ADMIN)
+    // ================================================================
+
+    var _agVistaActual = 'lista'; // 'lista' | 'galeria'
+    var _agLbData = null;         // Datos del registro en lightbox
+    var _agLbTab = 'entrada';     // Tab activo en lightbox
+    var _agLbListaConFoto = [];   // Lista filtrada con foto (para navegación)
+    var _agLbPosicion = 0;        // Posición actual en la lista
+    var _agTouchStartX = 0;       // Touch swipe tracking
+
+    /**
+     * Alterna entre la vista de lista (tabla) y la galería de fotos.
+     */
+    function _agSwitchVista(vista) {
+        _agVistaActual = vista;
+        var listaView = document.getElementById('ag-vista-lista');
+        var galeriaView = document.getElementById('ag-vista-galeria');
+        var btnLista = document.getElementById('ag-btn-lista');
+        var btnGaleria = document.getElementById('ag-btn-galeria');
+
+        if (vista === 'galeria') {
+            if (listaView) listaView.classList.add('hidden');
+            if (galeriaView) galeriaView.classList.remove('hidden');
+            if (btnLista) btnLista.classList.remove('active');
+            if (btnGaleria) btnGaleria.classList.add('active');
+            _agRenderGrid(_agGetFiltrados());
+        } else {
+            if (galeriaView) galeriaView.classList.add('hidden');
+            if (listaView) listaView.classList.remove('hidden');
+            if (btnGaleria) btnGaleria.classList.remove('active');
+            if (btnLista) btnLista.classList.add('active');
+        }
+    }
+
+    /** Retorna los registros filtrados actualmente. */
+    function _agGetFiltrados() {
+        var emailSel = ((document.getElementById('asis-filtro-nombre') || {}).value || '').trim();
+        var obraSel = ((document.getElementById('asis-filtro-obra') || {}).value || '').trim();
+        var estadoSel = ((document.getElementById('asis-filtro-estado') || {}).value || '').trim();
+        return _asistenciaTotal.filter(function (r) {
+            return (!emailSel || r.email === emailSel)
+                && (!obraSel || (r.obra || '') === obraSel)
+                && (!estadoSel || r.estado === estadoSel);
+        });
+    }
+
+    /** Verifica si un registro tiene al menos una foto válida. */
+    function _agTieneFoto(r) {
+        return (r.fotoEntrada && r.fotoEntrada !== 'Sin foto' && r.fotoEntrada.trim())
+            || (r.fotoSalida && r.fotoSalida !== 'Sin foto' && r.fotoSalida.trim());
+    }
+
+    /**
+     * Renderiza el grid de tarjetas con fotos de asistencia.
+     */
+    function _agRenderGrid(registros) {
+        var grid = document.getElementById('ag-grid');
+        var empty = document.getElementById('ag-grid-empty');
+        if (!grid) return;
+
+        var conFoto = registros.filter(_agTieneFoto);
+
+        if (conFoto.length === 0) {
+            grid.innerHTML = '';
+            if (empty) { empty.classList.remove('hidden'); empty.style.display = 'flex'; }
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+
+        grid.innerHTML = conFoto.map(function (r) {
+            var idx = _asistenciaTotal.indexOf(r);
+            var esActiva = r.estado === 'ACTIVO';
+            var imgEntrada = _urlDriveToImg(r.fotoEntrada);
+            var imgSalida = _urlDriveToImg(r.fotoSalida);
+
+            var fotoInner = imgEntrada
+                ? '<img class="ag-foto" src="' + imgEntrada + '" alt="Foto entrada"'
+                + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+                + '<div class="ag-foto-placeholder" style="display:none;">'
+                + '<span class="material-symbols-outlined" style="font-size:36px;">hide_image</span>'
+                + '<span style="font-size:10px;font-weight:700;">Error al cargar</span></div>'
+                : (imgSalida
+                    ? '<img class="ag-foto" src="' + imgSalida + '" alt="Foto salida"'
+                    + ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+                    + '<div class="ag-foto-placeholder" style="display:none;">'
+                    + '<span class="material-symbols-outlined" style="font-size:36px;">hide_image</span>'
+                    + '<span style="font-size:10px;font-weight:700;">Error al cargar</span></div>'
+                    : '<div class="ag-foto-placeholder">'
+                    + '<span class="material-symbols-outlined" style="font-size:36px;">hide_image</span>'
+                    + '<span style="font-size:10px;font-weight:700;">Sin foto</span></div>');
+
+            var badge = esActiva
+                ? '<span class="ag-badge ag-badge-activa"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#FBBF24;margin-right:3px;"></span>Activa</span>'
+                : '<span class="ag-badge ag-badge-cerrada"><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4ADE80;margin-right:3px;"></span>Cerrada</span>';
+
+            var tabs = (imgEntrada && imgSalida)
+                ? '<div class="ag-tabs-wrap">'
+                + '<button class="ag-tab-btn active" id="ag-tab-en-' + idx + '"'
+                + ' onclick="event.stopPropagation();_agSwitchCardTab(' + idx + ',\'en\')">'
+                + 'Entrada</button>'
+                + '<button class="ag-tab-btn" id="ag-tab-sa-' + idx + '"'
+                + ' onclick="event.stopPropagation();_agSwitchCardTab(' + idx + ',\'sa\')">'
+                + 'Salida</button>'
+                + '</div>'
+                : '';
+
+            var info = '<div class="ag-info">'
+                + '<p class="ag-nombre">' + _esc(r.nombre) + '</p>'
+                + '<div class="ag-meta-row">'
+                + '<span class="material-symbols-outlined ag-meta-icon">location_city</span>'
+                + '<span class="ag-meta-val">' + _esc(r.obra || 'Sin asignar') + '</span>'
+                + '</div>'
+                + '<div class="ag-meta-row">'
+                + '<span class="material-symbols-outlined ag-meta-icon">schedule</span>'
+                + '<span class="ag-meta-val">' + (_esc(r.horaEntrada) || '-') + (r.horaSalida ? ' \u2192 ' + _esc(r.horaSalida) : ' \u2192 En curso') + '</span>'
+                + '</div>'
+                + '<p class="ag-footer-row">'
+                + '<span class="material-symbols-outlined" style="font-size:11px;">calendar_today</span>'
+                + _esc(r.fecha) + ' \u00b7 ' + _esc(r.tipoDia || '-')
+                + '</p>'
+                + '</div>';
+
+            return '<div class="ag-card animate-fade-in"'
+                + ' onclick="_agAbrirLightbox(' + idx + ')"'
+                + ' data-idx="' + idx + '"'
+                + ' data-url-en="' + _esc(imgEntrada || '') + '"'
+                + ' data-url-sa="' + _esc(imgSalida || '') + '">'
+                + '<div class="ag-foto-wrap" id="ag-foto-wrap-' + idx + '">'
+                + fotoInner + badge + tabs
+                + '</div>'
+                + info
+                + '</div>';
+        }).join('');
+    }
+
+    /** Cambia foto Entrada/Salida dentro de una card del grid. */
+    function _agSwitchCardTab(idx, tab) {
+        var card = document.querySelector('[data-idx="' + idx + '"]');
+        if (!card) return;
+        var url = tab === 'sa' ? card.getAttribute('data-url-sa') : card.getAttribute('data-url-en');
+        var wrap = document.getElementById('ag-foto-wrap-' + idx);
+        if (wrap && url) {
+            var img = wrap.querySelector('img.ag-foto');
+            if (img) { img.style.display = ''; img.src = url; }
+        }
+        var tabEn = document.getElementById('ag-tab-en-' + idx);
+        var tabSa = document.getElementById('ag-tab-sa-' + idx);
+        if (tabEn) tabEn.className = 'ag-tab-btn' + (tab === 'en' ? ' active' : '');
+        if (tabSa) tabSa.className = 'ag-tab-btn' + (tab === 'sa' ? ' active' : '');
+    }
+
+    /** Abre el lightbox con la foto de un registro. */
+    function _agAbrirLightbox(idx) {
+        var r = _asistenciaTotal[idx];
+        if (!r) return;
+
+        // Construir lista navegable (registros con foto, filtrados actualmente)
+        _agLbListaConFoto = _agGetFiltrados().filter(_agTieneFoto);
+        _agLbPosicion = _agLbListaConFoto.indexOf(r);
+        if (_agLbPosicion === -1) _agLbPosicion = 0;
+
+        _agLbMostrarRegistro(_agLbPosicion);
+
+        var lb = document.getElementById('ag-lightbox');
+        if (!lb) return;
+
+        // Mover a body para evitar problema de transform
+        document.body.appendChild(lb);
+        lb.classList.add('open');
+        document.body.style.overflow = 'hidden';
+
+        // Inicializar swipe en el contenedor de imagen
+        _agInitSwipe();
+    }
+
+    /** Muestra un registro en el lightbox por posición en _agLbListaConFoto. */
+    function _agLbMostrarRegistro(pos) {
+        if (pos < 0 || pos >= _agLbListaConFoto.length) return;
+        _agLbPosicion = pos;
+        var r = _agLbListaConFoto[pos];
+        _agLbData = r;
+        _agLbTab = 'entrada';
+
+        var elNombre = document.getElementById('ag-lb-nombre');
+        var elFecha = document.getElementById('ag-lb-fecha');
+        var elCounter = document.getElementById('ag-lb-counter');
+        if (elNombre) elNombre.textContent = r.nombre || '\u2014';
+        if (elFecha) elFecha.textContent = (r.fecha || '') + ' \u00b7 ' + (r.obra || 'Sin asignar');
+        if (elCounter) elCounter.textContent = (pos + 1) + ' / ' + _agLbListaConFoto.length;
+
+        // Visibilidad de flechas de navegación
+        var btnPrev = document.getElementById('ag-lb-prev');
+        var btnNext = document.getElementById('ag-lb-next');
+        if (btnPrev) btnPrev.style.display = pos > 0 ? 'flex' : 'none';
+        if (btnNext) btnNext.style.display = pos < _agLbListaConFoto.length - 1 ? 'flex' : 'none';
+
+        _agLbSwitchTab('entrada');
+    }
+
+    /** Navega al registro anterior (-1) o siguiente (+1) en el lightbox. */
+    function _agLbNavegar(dir) {
+        var nueva = _agLbPosicion + dir;
+        if (nueva < 0 || nueva >= _agLbListaConFoto.length) return;
+        _agLbMostrarRegistro(nueva);
+    }
+
+    /** Cambia entre tab Entrada/Salida en el lightbox. */
+    function _agLbSwitchTab(tab) {
+        _agLbTab = tab;
+        if (!_agLbData) return;
+
+        var img = document.getElementById('ag-lb-img');
+        var noFoto = document.getElementById('ag-lb-no-foto');
+        var elHora = document.getElementById('ag-lb-hora');
+        var tabEntrada = document.getElementById('ag-lb-tab-entrada');
+        var tabSalida = document.getElementById('ag-lb-tab-salida');
+
+        var url = tab === 'salida'
+            ? _urlDriveToImg(_agLbData.fotoSalida)
+            : _urlDriveToImg(_agLbData.fotoEntrada);
+
+        var hora = tab === 'salida' ? _agLbData.horaSalida : _agLbData.horaEntrada;
+
+        if (img) {
+            if (url) {
+                img.style.display = '';
+                img.src = url;
+                if (noFoto) noFoto.style.display = 'none';
+            } else {
+                img.style.display = 'none';
+                if (noFoto) noFoto.style.display = 'flex';
+            }
+        }
+        if (elHora) elHora.textContent = (tab === 'salida' ? 'Salida: ' : 'Entrada: ') + (hora || 'Sin registrar');
+
+        if (tabEntrada) {
+            tabEntrada.style.background = tab === 'entrada' ? 'rgba(197,160,72,0.3)' : 'transparent';
+            tabEntrada.style.color = tab === 'entrada' ? '#C5A048' : 'rgba(255,255,255,0.4)';
+        }
+        if (tabSalida) {
+            tabSalida.style.background = tab === 'salida' ? 'rgba(197,160,72,0.3)' : 'transparent';
+            tabSalida.style.color = tab === 'salida' ? '#C5A048' : 'rgba(255,255,255,0.4)';
+        }
+    }
+
+    /** Inicializa listeners de swipe en el lightbox. */
+    function _agInitSwipe() {
+        var wrap = document.getElementById('ag-lb-img-wrap');
+        if (!wrap || wrap._agSwipeInit) return;
+        wrap._agSwipeInit = true;
+
+        wrap.addEventListener('touchstart', function (e) {
+            _agTouchStartX = e.touches[0].clientX;
+        }, { passive: true });
+
+        wrap.addEventListener('touchend', function (e) {
+            var dx = e.changedTouches[0].clientX - _agTouchStartX;
+            if (Math.abs(dx) < 50) return; // umbral mínimo
+            if (dx > 0) {
+                // Swipe derecha → tab anterior o registro anterior
+                if (_agLbTab === 'salida') { _agLbSwitchTab('entrada'); }
+                else { _agLbNavegar(-1); }
+            } else {
+                // Swipe izquierda → tab siguiente o registro siguiente
+                if (_agLbTab === 'entrada' && _urlDriveToImg((_agLbData || {}).fotoSalida)) { _agLbSwitchTab('salida'); }
+                else { _agLbNavegar(1); }
+            }
+        }, { passive: true });
+    }
+
+    /** Cierra el lightbox. */
+    function _agCerrarLightbox() {
+        var lb = document.getElementById('ag-lightbox');
+        if (lb) {
+            lb.classList.remove('open');
+            var workspace = document.getElementById('admin-workspace-asistencia');
+            if (workspace) workspace.appendChild(lb);
+        }
+        document.body.style.overflow = '';
+        _agLbData = null;
     }
 
     // ================================================================
@@ -2533,7 +2873,6 @@
                 '<div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] mb-2.5">' +
                 '<span class="text-slate-500">Rol:</span><span class="text-primary font-bold">' + _esc(u.rol) + '</span>' +
                 '<span class="text-slate-500">Cédula:</span><span class="text-slate-300">' + _esc(u.cedula || '-') + '</span>' +
-                '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '<span class="text-slate-500">Celular:</span><span class="text-slate-300">' + _esc(u.celular || '-') + '</span>' +
                 '</div>' +
                 '<div class="grid grid-cols-2 gap-2 border-t border-white/5 pt-2">' +
@@ -3056,33 +3395,23 @@
         _fmtAbrirModalGAS(modal);
     }
 
-    /** Abre el modal posicionado exactamente sobre la ventana visible (compatible GAS iframe) */
+    /**
+     * Abre el modal — lo mueve a document.body para escapar del
+     * transform de .animate-slide-up que rompe position:fixed.
+     */
     function _fmtAbrirModalGAS(modal) {
-        var scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
-        var viewH = window.innerHeight || document.documentElement.clientHeight || 600;
-        var viewW = window.innerWidth || document.documentElement.clientWidth || 400;
-
-        // El overlay cubre exactamente el viewport visible
-        modal.style.top = scrollY + 'px';
-        modal.style.width = viewW + 'px';
-        modal.style.height = viewH + 'px';
-        modal.style.display = 'flex';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-
-        // Ajustar max-height del contenedor del modal
-        var box = document.getElementById('fmt-modal-box');
-        if (box) {
-            box.style.maxHeight = Math.max(viewH - 40, 300) + 'px';
-        }
-
-        // Bloquear scroll del body mientras el modal está abierto
+        document.body.appendChild(modal);
+        modal.classList.add('open');
         document.body.style.overflow = 'hidden';
     }
 
     function cerrarModalFormato() {
         var modal = document.getElementById('fmt-modal');
-        if (modal) modal.style.display = 'none';
+        if (modal) {
+            modal.classList.remove('open');
+            var workspace = document.getElementById('admin-workspace-formatos');
+            if (workspace) workspace.appendChild(modal);
+        }
         document.body.style.overflow = '';
         var selEmp = document.getElementById('fmt-inp-empresa');
         var empDisplay = document.getElementById('fmt-empresa-display');
@@ -3193,22 +3522,6 @@
             },
             { tipo: 'danger', btnConfirmar: 'Eliminar' }
         );
-    }
-
-    function onExito(response) {
-        mostrarNotificacion('✅ ' + response.message, 'success');
-        archivoBase64 = null;
-        const form = document.getElementById('sst-form');
-        if (form) form.reset();
-        const prev = document.getElementById('preview-container');
-        if (prev) prev.classList.add('hidden');
-        _intentarBloqueoEmpresa();
-        const descCont = document.getElementById('formato-descripcion-container');
-        if (descCont) descCont.classList.add('hidden');
-    }
-
-    function onError(message) {
-        mostrarNotificacion('❌ Error: ' + message, 'error');
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -4316,8 +4629,4 @@
     }
 
     // ── FIN MÓDULO 7 — GALERÍA DE FORMATOS ────────────────────────────
-
-    function onError(message) {
-        mostrarNotificacion('❌ Error: ' + message, 'error');
-    }
 </script>
