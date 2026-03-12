@@ -1531,8 +1531,23 @@
                 if (res.status === 'success') {
                     _resetFormulario();
                     if (modo === 'firma') {
-                        mostrarNotificacion('✅ Formato guardado. Capture la firma del jefe SST.', 'success');
-                        abrirModalFirma(res.data.id);
+                        // El formato ya está firmado — cerrar directamente sin segundo modal
+                        bloquearPantalla('Confirmando firma...');
+                        google.script.run
+                            .withSuccessHandler(function (resCierre) {
+                                desbloquearPantalla();
+                                if (resCierre.status === 'success') {
+                                    mostrarNotificacion('✅ ' + resCierre.message, 'success');
+                                } else {
+                                    mostrarNotificacion('❌ ' + resCierre.message, 'error');
+                                }
+                                cargarPendientes();
+                            })
+                            .withFailureHandler(function (errCierre) {
+                                desbloquearPantalla();
+                                mostrarNotificacion('❌ Error al confirmar: ' + errCierre.toString(), 'error');
+                            })
+                            .cerrarRegistroFormato(res.data.id, formData.archivoBase64);
                     } else {
                         mostrarNotificacion('✅ ' + res.message, 'success');
                         cargarPendientes();
